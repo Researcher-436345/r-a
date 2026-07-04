@@ -13,7 +13,7 @@ import { useI18n } from '../../../shared/i18n/i18n-context';
 import { readerPaper, readerStrings } from '../reader-data';
 import { ReaderPdfCanvasViewer } from './reader-pdf-canvas-viewer';
 
-const DEFAULT_READER_SCALE = 1.3;
+const DEFAULT_READER_SCALE = 1.5;
 const MIN_READER_SCALE = 0.8;
 const MAX_READER_SCALE = 1.8;
 const READER_SCALE_STEP = 0.1;

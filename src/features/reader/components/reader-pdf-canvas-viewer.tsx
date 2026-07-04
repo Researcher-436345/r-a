@@ -187,13 +187,14 @@ function ReaderPdfPage({
   const [shouldRender, setShouldRender] = useState(renderImmediately);
   const [pageSize, setPageSize] = useState<ReaderPdfPageSize | null>(defaultSize);
   const [links, setLinks] = useState<ReaderPdfLink[]>([]);
+  const [hasRenderedPage, setHasRenderedPage] = useState(false);
   const [hasRenderError, setHasRenderError] = useState(false);
 
   useEffect(() => {
-    if (defaultSize) {
+    if (defaultSize && !hasRenderedPage) {
       setPageSize(defaultSize);
     }
-  }, [defaultSize]);
+  }, [defaultSize, hasRenderedPage]);
 
   useEffect(() => {
     if (shouldRender) {
@@ -230,48 +231,36 @@ function ReaderPdfPage({
     let isCancelled = false;
     let renderTask: RenderTask | null = null;
     setHasRenderError(false);
-    setLinks([]);
 
     void pdf.getPage(pageNumber).then((page) => {
       if (isCancelled) {
         return;
       }
 
-      const canvas = canvasRef.current;
-      const canvasContext = canvas?.getContext('2d');
+      const viewport = page.getViewport({ scale });
+      const outputScale = window.devicePixelRatio || 1;
+      const nextCanvas = document.createElement('canvas');
+      const nextCanvasContext = nextCanvas.getContext('2d');
 
-      if (!canvas || !canvasContext) {
+      if (!nextCanvasContext) {
         return;
       }
 
-      const viewport = page.getViewport({ scale });
-      const outputScale = window.devicePixelRatio || 1;
-      setPageSize({
-        width: viewport.width,
-        height: viewport.height,
-      });
+      nextCanvas.width = Math.floor(viewport.width * outputScale);
+      nextCanvas.height = Math.floor(viewport.height * outputScale);
 
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-
-      canvasContext.setTransform(outputScale, 0, 0, outputScale, 0, 0);
-      canvasContext.fillStyle = '#ffffff';
-      canvasContext.fillRect(0, 0, viewport.width, viewport.height);
+      nextCanvasContext.setTransform(outputScale, 0, 0, outputScale, 0, 0);
+      nextCanvasContext.fillStyle = '#ffffff';
+      nextCanvasContext.fillRect(0, 0, viewport.width, viewport.height);
 
       renderTask = page.render({
-        canvasContext,
+        canvasContext: nextCanvasContext,
         viewport,
         background: '#ffffff',
       });
 
-      void page.getAnnotations({ intent: 'display' }).then((annotations) => {
-        if (isCancelled) {
-          return;
-        }
-
-        const nextLinks = (annotations as PdfLinkAnnotation[])
+      const nextLinksPromise = page.getAnnotations({ intent: 'display' }).then((annotations) =>
+        (annotations as PdfLinkAnnotation[])
           .filter((annotation) => annotation.subtype === 'Link' && annotation.rect)
           .map((annotation) => {
             const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(
@@ -293,12 +282,35 @@ function ReaderPdfPage({
               height,
             };
           })
-          .filter((link) => (link.href || link.destination) && link.width > 0 && link.height > 0);
-
-        setLinks(nextLinks);
-      });
+          .filter((link) => (link.href || link.destination) && link.width > 0 && link.height > 0),
+      ).catch(() => []);
 
       renderTask.promise
+        .then(async () => {
+          const canvas = canvasRef.current;
+          const canvasContext = canvas?.getContext('2d');
+          const nextLinks = await nextLinksPromise;
+
+          if (isCancelled || !canvas || !canvasContext) {
+            return;
+          }
+
+          canvas.width = nextCanvas.width;
+          canvas.height = nextCanvas.height;
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
+
+          canvasContext.setTransform(1, 0, 0, 1, 0, 0);
+          canvasContext.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+          canvasContext.drawImage(nextCanvas, 0, 0);
+
+          setPageSize({
+            width: viewport.width,
+            height: viewport.height,
+          });
+          setLinks(nextLinks);
+          setHasRenderedPage(true);
+        })
         .catch(() => {
           if (!isCancelled) {
             setHasRenderError(true);
@@ -321,7 +333,7 @@ function ReaderPdfPage({
         pageSize
           ? {
               width: pageSize.width,
-              minHeight: pageSize.height,
+              height: pageSize.height,
             }
           : undefined
       }
