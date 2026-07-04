@@ -29,7 +29,7 @@ export function AskAiBox() {
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder={t('ask.placeholder')}
-          rows={3}
+          rows={2}
         />
 
         <div className="ask-box__footer">

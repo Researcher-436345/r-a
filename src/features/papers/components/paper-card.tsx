@@ -1,7 +1,8 @@
-import { Bookmark, BookmarkCheck, GitFork, TrendingUp } from 'lucide-react';
+import { Bookmark, BookmarkCheck, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
 import { useI18n, type Locale } from '../../../shared/i18n/i18n-context';
+import { GithubIcon } from '../../../shared/ui/github-icon';
 import type { Paper } from '../types';
 
 interface PaperCardProps {
@@ -22,7 +23,7 @@ function formatDate(value: string, locale: Locale) {
 
 function formatRelativeDate(value: string, locale: Locale) {
   const publishedDate = new Date(value);
-  const now = new Date();
+  const now = new Date('2026-06-14T12:00:00.000Z');
   const diffMs = now.getTime() - publishedDate.getTime();
   const diffDays = Math.max(0, Math.floor(diffMs / 86_400_000));
 
@@ -104,7 +105,7 @@ export function PaperCard({ paper }: PaperCardProps) {
               target="_blank"
               rel="noreferrer"
             >
-              <GitFork aria-hidden="true" size={15} strokeWidth={2} />
+              <GithubIcon aria-hidden="true" width={15} height={15} strokeWidth={2} />
               <span>{formatScore(paper.githubStars ?? 0)}</span>
             </a>
           ) : null}
@@ -125,6 +126,7 @@ export function PaperCard({ paper }: PaperCardProps) {
           <i />
           <i />
           <i />
+          <b />
           <i />
           <i />
           <i />

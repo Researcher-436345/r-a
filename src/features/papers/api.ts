@@ -18,7 +18,7 @@ const mockPapers: Paper[] = [
     title: 'MoE-Lite: Sparse Mixture-of-Experts for On-Device Inference',
     authors: 'Nakamura, Ortega',
     description:
-      'Introduces a lightweight expert-routing scheme that runs 8-expert MoE models on consumer hardware, cutting active parameters by 4x while preserving 97% of dense-model quality across instruction-following tasks.',
+      'Introduces a lightweight expert-routing scheme that runs 8-expert MoE models on consumer hardware, cutting active parameters by 4× while preserving 97% of dense-model quality across instruction-following tasks.',
     publishedAt: '2026-06-13T00:00:00.000Z',
     popularityScore: 671,
     wantToRead: true,
@@ -67,6 +67,6 @@ const delay = (ms: number) =>
   });
 
 export async function fetchTrendingPapers(): Promise<Paper[]> {
-  await delay(650);
+  await delay(900);
   return mockPapers;
 }
