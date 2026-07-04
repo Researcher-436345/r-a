@@ -41,7 +41,7 @@ export const readerStrings: Record<
     cardTitle: 'С чего начать',
     cardSub:
       'Спросите что-нибудь о статье или выделите фрагмент в тексте, чтобы задать точный вопрос.',
-    tryHint: 'Попробуйте спросить: «В чём интуиция за разделом 3.2?»',
+    tryHint: 'Попробуйте спросить: «В чём интуиция за разделом 2?»',
     chatPlaceholder: 'Спросите об этой статье или выделите текст...',
     attach: 'Прикрепить',
     sendHint: 'Alt + Enter',
@@ -58,7 +58,7 @@ export const readerStrings: Record<
     cardTitle: 'Where to start',
     cardSub:
       'Ask anything about the paper, or highlight a passage in the text to ask a precise question.',
-    tryHint: 'Try asking: “What’s the intuition behind section 3.2?”',
+    tryHint: 'Try asking: “What’s the intuition behind section 2?”',
     chatPlaceholder: 'Ask about this paper or highlight text...',
     attach: 'Attach',
     sendHint: 'Alt + Enter',
