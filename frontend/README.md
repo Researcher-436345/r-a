@@ -1,4 +1,4 @@
-# r-a
+# r-a frontend
 
 Frontend stack: React, TypeScript, Vite.  
 Routing: TanStack Router. Data/cache: TanStack Query. PDF rendering: PDF.js.
