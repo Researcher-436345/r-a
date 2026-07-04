@@ -1,9 +1,9 @@
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useLocation } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 import { I18nProvider } from '../../shared/i18n/i18n-context';
 import { SettingsModal } from './settings-modal';
-import { Sidebar } from './sidebar';
+import { readerSidebarProjects, Sidebar } from './sidebar';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -16,6 +16,8 @@ export function AppLayout() {
 }
 
 function AppLayoutContent() {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const isReader = pathname === '/reader';
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -24,13 +26,19 @@ function AppLayoutContent() {
   }, [theme]);
 
   return (
-    <div className="app-shell">
+    <div className={isReader ? 'app-shell app-shell--reader' : 'app-shell'}>
       <Sidebar
         theme={theme}
         onThemeChange={setTheme}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={isReader ? () => undefined : () => setIsSettingsOpen(true)}
+        defaultCollapsed={isReader}
+        defaultProjectsOpen={!isReader}
+        projects={isReader ? readerSidebarProjects : undefined}
       />
-      <main className="main-content" aria-label="Main content">
+      <main
+        className={isReader ? 'main-content main-content--reader' : 'main-content'}
+        aria-label="Main content"
+      >
         <Outlet />
       </main>
       <SettingsModal

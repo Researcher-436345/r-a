@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { Bookmark, BookmarkCheck, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
@@ -75,9 +76,9 @@ export function PaperCard({ paper }: PaperCardProps) {
     <article className="paper-card">
       <div className="paper-card__content">
         <div className="paper-card__main">
-          <a className="paper-card__title" href="#">
+          <Link className="paper-card__title" to="/reader">
             {paper.title}
-          </a>
+          </Link>
           <div className="paper-card__meta">
             <span>{formatDate(paper.publishedAt, locale)}</span>
             <span aria-hidden="true">·</span>

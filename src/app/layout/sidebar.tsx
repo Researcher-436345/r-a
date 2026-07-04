@@ -11,8 +11,9 @@ import {
   PanelLeftOpen,
   Settings,
   Sun,
+  type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../shared/i18n/i18n-context';
 import { LogoMark } from '../../shared/ui/logo-mark';
@@ -22,9 +23,40 @@ interface SidebarProps {
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   onOpenSettings: () => void;
+  defaultCollapsed?: boolean;
+  defaultProjectsOpen?: boolean;
+  projects?: readonly SidebarProject[];
 }
 
-const projects = [
+export interface SidebarProject {
+  id: string;
+  name: string;
+  items: readonly string[];
+}
+
+interface SidebarPrimaryNavProps {
+  isCollapsed: boolean;
+  areProjectsOpen: boolean;
+  projects: readonly SidebarProject[];
+  openProjects: Record<string, boolean>;
+  searchLabel: string;
+  projectsLabel: string;
+  onExpandSidebar: () => void;
+  onToggleProjects: () => void;
+  onToggleProject: (id: string) => void;
+}
+
+interface SidebarFooterProps {
+  isCollapsed: boolean;
+  settingsLabel: string;
+  feedbackLabel: string;
+  themeLabel: string;
+  ThemeIcon: LucideIcon;
+  onOpenSettings: () => void;
+  onToggleTheme: () => void;
+}
+
+const homeSidebarProjects = [
   {
     id: 'multimodal-papers',
     name: 'Multimodal Papers',
@@ -41,16 +73,44 @@ const projects = [
   },
 ] as const;
 
-export function Sidebar({ theme, onThemeChange, onOpenSettings }: SidebarProps) {
+export const readerSidebarProjects = [
+  {
+    id: 'rl',
+    name: 'Reinforcement Learning',
+    items: ['Q-Guided Flow Policies', 'IDQL as Actor-Critic', 'Diffusion Policy'],
+  },
+  {
+    id: 'mm',
+    name: 'Multimodal',
+    items: ['Visual Grounding at Scale', 'CLIP-Beyond'],
+  },
+] as const;
+
+export function Sidebar({
+  theme,
+  onThemeChange,
+  onOpenSettings,
+  defaultCollapsed = false,
+  defaultProjectsOpen = true,
+  projects = homeSidebarProjects,
+}: SidebarProps) {
   const { t } = useI18n();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [areProjectsOpen, setAreProjectsOpen] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const [areProjectsOpen, setAreProjectsOpen] = useState(defaultProjectsOpen);
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({});
 
   const nextTheme = theme === 'light' ? 'dark' : 'light';
   const ThemeIcon = theme === 'light' ? Moon : Sun;
   const CollapseIcon = isCollapsed ? PanelLeftOpen : PanelLeftClose;
   const themeLabel = theme === 'light' ? t('nav.darkMode') : t('nav.lightMode');
+
+  useEffect(() => {
+    setIsCollapsed(defaultCollapsed);
+  }, [defaultCollapsed]);
+
+  useEffect(() => {
+    setAreProjectsOpen(defaultProjectsOpen);
+  }, [defaultProjectsOpen]);
 
   const toggleProject = (id: string) => {
     setOpenProjects((current) => ({
@@ -80,108 +140,172 @@ export function Sidebar({ theme, onThemeChange, onOpenSettings }: SidebarProps) 
         </button>
       </div>
 
-      <nav className="sidebar__nav" aria-label="Primary navigation">
-        <Link
-          to="/"
-          className="sidebar__nav-button sidebar__nav-button--active"
-          title={t('nav.search')}
-          aria-label={t('nav.search')}
-          activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
-        >
-          <Globe aria-hidden="true" size={18} strokeWidth={2} />
-          {!isCollapsed ? <span>{t('nav.search')}</span> : null}
-        </Link>
+      <SidebarPrimaryNav
+        isCollapsed={isCollapsed}
+        areProjectsOpen={areProjectsOpen}
+        projects={projects}
+        openProjects={openProjects}
+        searchLabel={t('nav.search')}
+        projectsLabel={t('nav.projects')}
+        onExpandSidebar={() => setIsCollapsed(false)}
+        onToggleProjects={() => setAreProjectsOpen((value) => !value)}
+        onToggleProject={toggleProject}
+      />
 
-        <div className="sidebar__group">
-          <button
-            className="sidebar__nav-button"
-            type="button"
-            title={t('nav.projects')}
-            aria-expanded={!isCollapsed && areProjectsOpen}
-            onClick={() => {
-              if (isCollapsed) {
-                setIsCollapsed(false);
-                return;
-              }
-
-              setAreProjectsOpen((value) => !value);
-            }}
-          >
-            <Folder aria-hidden="true" size={18} strokeWidth={2} />
-            {!isCollapsed ? (
-              <>
-                <span>{t('nav.projects')}</span>
-                {areProjectsOpen ? (
-                  <ChevronDown className="sidebar__chevron" aria-hidden="true" size={16} />
-                ) : (
-                  <ChevronRight className="sidebar__chevron" aria-hidden="true" size={16} />
-                )}
-              </>
-            ) : null}
-          </button>
-
-          {!isCollapsed && areProjectsOpen ? (
-            <div className="sidebar__project-tree">
-              {projects.map((project) => {
-                const isOpen = !!openProjects[project.id];
-                const ProjectChevron = isOpen ? ChevronDown : ChevronRight;
-
-                return (
-                  <div className="sidebar__project-group" key={project.id}>
-                    <button
-                      className="sidebar__project-button"
-                      type="button"
-                      onClick={() => toggleProject(project.id)}
-                      aria-expanded={isOpen}
-                    >
-                      <ProjectChevron aria-hidden="true" size={14} strokeWidth={2} />
-                      <span>{project.name}</span>
-                      <span className="sidebar__project-count">{project.items.length}</span>
-                    </button>
-                    {isOpen ? (
-                      <div className="sidebar__project-items">
-                        {project.items.map((item) => (
-                          <a className="sidebar__project-item" href="#" key={item}>
-                            <FileText aria-hidden="true" size={13} strokeWidth={2} />
-                            <span>{item}</span>
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      </nav>
-
-      <div className="sidebar__footer">
-        <button
-          className="sidebar__nav-button"
-          type="button"
-          title={t('nav.settings')}
-          onClick={onOpenSettings}
-        >
-          <Settings aria-hidden="true" size={18} strokeWidth={2} />
-          {!isCollapsed ? <span>{t('nav.settings')}</span> : null}
-        </button>
-
-        <button className="sidebar__nav-button" type="button" title={t('nav.feedback')}>
-          <MessageSquare aria-hidden="true" size={18} strokeWidth={2} />
-          {!isCollapsed ? <span>{t('nav.feedback')}</span> : null}
-        </button>
-
-        <button
-          className="sidebar__nav-button"
-          type="button"
-          title={themeLabel}
-          onClick={() => onThemeChange(nextTheme)}
-        >
-          <ThemeIcon aria-hidden="true" size={18} strokeWidth={2} />
-          {!isCollapsed ? <span>{themeLabel}</span> : null}
-        </button>
-      </div>
+      <SidebarFooter
+        isCollapsed={isCollapsed}
+        settingsLabel={t('nav.settings')}
+        feedbackLabel={t('nav.feedback')}
+        themeLabel={themeLabel}
+        ThemeIcon={ThemeIcon}
+        onOpenSettings={onOpenSettings}
+        onToggleTheme={() => onThemeChange(nextTheme)}
+      />
     </aside>
+  );
+}
+
+function SidebarPrimaryNav({
+  isCollapsed,
+  areProjectsOpen,
+  projects,
+  openProjects,
+  searchLabel,
+  projectsLabel,
+  onExpandSidebar,
+  onToggleProjects,
+  onToggleProject,
+}: SidebarPrimaryNavProps) {
+  return (
+    <nav className="sidebar__nav" aria-label="Primary navigation">
+      <Link
+        to="/"
+        className="sidebar__nav-button sidebar__nav-button--active"
+        title={searchLabel}
+        aria-label={searchLabel}
+        activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
+      >
+        <Globe aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{searchLabel}</span> : null}
+      </Link>
+
+      <div className="sidebar__group">
+        <button
+          className="sidebar__nav-button"
+          type="button"
+          title={projectsLabel}
+          aria-expanded={!isCollapsed && areProjectsOpen}
+          onClick={() => {
+            if (isCollapsed) {
+              onExpandSidebar();
+              return;
+            }
+
+            onToggleProjects();
+          }}
+        >
+          <Folder aria-hidden="true" size={18} strokeWidth={2} />
+          {!isCollapsed ? (
+            <>
+              <span>{projectsLabel}</span>
+              {areProjectsOpen ? (
+                <ChevronDown className="sidebar__chevron" aria-hidden="true" size={16} />
+              ) : (
+                <ChevronRight className="sidebar__chevron" aria-hidden="true" size={16} />
+              )}
+            </>
+          ) : null}
+        </button>
+
+        {!isCollapsed && areProjectsOpen ? (
+          <div className="sidebar__project-tree">
+            {projects.map((project) => (
+              <SidebarProjectGroup
+                key={project.id}
+                project={project}
+                isOpen={!!openProjects[project.id]}
+                onToggle={() => onToggleProject(project.id)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </nav>
+  );
+}
+
+function SidebarProjectGroup({
+  project,
+  isOpen,
+  onToggle,
+}: {
+  project: SidebarProject;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const ProjectChevron = isOpen ? ChevronDown : ChevronRight;
+
+  return (
+    <div className="sidebar__project-group">
+      <button
+        className="sidebar__project-button"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+      >
+        <ProjectChevron aria-hidden="true" size={14} strokeWidth={2} />
+        <span>{project.name}</span>
+        <span className="sidebar__project-count">{project.items.length}</span>
+      </button>
+      {isOpen ? (
+        <div className="sidebar__project-items">
+          {project.items.map((item) => (
+            <Link className="sidebar__project-item" to="/reader" key={item}>
+              <FileText aria-hidden="true" size={13} strokeWidth={2} />
+              <span>{item}</span>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SidebarFooter({
+  isCollapsed,
+  settingsLabel,
+  feedbackLabel,
+  themeLabel,
+  ThemeIcon,
+  onOpenSettings,
+  onToggleTheme,
+}: SidebarFooterProps) {
+  return (
+    <div className="sidebar__footer">
+      <button
+        className="sidebar__nav-button"
+        type="button"
+        title={settingsLabel}
+        onClick={onOpenSettings}
+      >
+        <Settings aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{settingsLabel}</span> : null}
+      </button>
+
+      <button className="sidebar__nav-button" type="button" title={feedbackLabel}>
+        <MessageSquare aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{feedbackLabel}</span> : null}
+      </button>
+
+      <button
+        className="sidebar__nav-button"
+        type="button"
+        title={themeLabel}
+        onClick={onToggleTheme}
+      >
+        <ThemeIcon aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{themeLabel}</span> : null}
+      </button>
+    </div>
   );
 }

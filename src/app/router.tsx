@@ -7,6 +7,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { AppLayout } from './layout/app-layout';
 import { HomePage } from '../pages/home/home-page';
+import { ReaderPage } from '../pages/reader/reader-page';
 import { queryClient } from './query-client';
 
 export interface RouterContext {
@@ -23,7 +24,13 @@ const homeRoute = createRoute({
   component: HomePage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute]);
+const readerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reader',
+  component: ReaderPage,
+});
+
+const routeTree = rootRoute.addChildren([homeRoute, readerRoute]);
 
 export const router = createRouter({
   routeTree,
