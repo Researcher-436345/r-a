@@ -27,8 +27,8 @@ pnpm-debug.log*
 # Editor and OS files
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 .idea/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-
