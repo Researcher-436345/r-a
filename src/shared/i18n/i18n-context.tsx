@@ -19,14 +19,21 @@ type TranslationKey =
   | 'nav.light'
   | 'nav.dark'
   | 'nav.language'
+  | 'nav.collapse'
+  | 'nav.expand'
+  | 'nav.darkMode'
+  | 'nav.lightMode'
   | 'projects.multimodal'
   | 'projects.reasoning'
   | 'ask.title'
   | 'ask.placeholder'
   | 'ask.send'
+  | 'ask.attach'
   | 'ask.webSearch'
   | 'ask.deepResearch'
+  | 'ask.sendHint'
   | 'papers.trending'
+  | 'papers.trendingSub'
   | 'papers.personalize'
   | 'papers.loading'
   | 'papers.error'
@@ -34,39 +41,58 @@ type TranslationKey =
   | 'papers.inList'
   | 'papers.popularity'
   | 'papers.pdfPreview'
-  | 'papers.github';
+  | 'papers.github'
+  | 'settings.title'
+  | 'settings.close'
+  | 'settings.languageLabel'
+  | 'settings.languageHint'
+  | 'settings.themeSetting'
+  | 'settings.themeHint';
 
 const translations: Record<Locale, Record<TranslationKey, string>> = {
   ru: {
     'app.logo': 'r-a',
-    'nav.search': 'Поиск',
+    'nav.search': 'Исследовать',
     'nav.projects': 'Проекты',
     'nav.settings': 'Настройки',
     'nav.feedback': 'Обратная связь',
     'nav.theme': 'Тема',
     'nav.light': 'Светлая',
-    'nav.dark': 'Темная',
+    'nav.dark': 'Тёмная',
     'nav.language': 'Язык',
+    'nav.collapse': 'Свернуть панель',
+    'nav.expand': 'Развернуть панель',
+    'nav.darkMode': 'Тёмная тема',
+    'nav.lightMode': 'Светлая тема',
     'projects.multimodal': 'Multimodal Papers',
     'projects.reasoning': 'Reasoning Benchmarks',
-    'ask.title': 'Спросите AI о статьях, идеях или направлениях исследования...',
-    'ask.placeholder': 'Например: какие свежие работы объединяют RAG и мультимодальных агентов?',
+    'ask.title': 'Что исследуем сегодня?',
+    'ask.placeholder': 'Спросите AI о статьях, идеях или направлениях исследований...',
     'ask.send': 'Отправить',
+    'ask.attach': 'Прикрепить файл',
     'ask.webSearch': 'Веб-поиск',
     'ask.deepResearch': 'Глубокое исследование',
+    'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Трендовые статьи',
+    'papers.trendingSub': 'обновлено только что',
     'papers.personalize': 'Настроить предпочтения',
     'papers.loading': 'Загружаем статьи...',
     'papers.error': 'Не удалось загрузить статьи',
     'papers.wantToRead': 'Хочу прочитать',
-    'papers.inList': 'В списке',
+    'papers.inList': 'В списке чтения',
     'papers.popularity': 'Популярность',
-    'papers.pdfPreview': 'PDF Preview',
+    'papers.pdfPreview': 'Превью PDF',
     'papers.github': 'GitHub',
+    'settings.title': 'Настройки',
+    'settings.close': 'Закрыть настройки',
+    'settings.languageLabel': 'Язык интерфейса',
+    'settings.languageHint': 'Названия статей остаются на английском',
+    'settings.themeSetting': 'Тема оформления',
+    'settings.themeHint': 'Светлое или тёмное оформление',
   },
   en: {
     'app.logo': 'r-a',
-    'nav.search': 'Search',
+    'nav.search': 'Explore',
     'nav.projects': 'Projects',
     'nav.settings': 'Settings',
     'nav.feedback': 'Feedback',
@@ -74,22 +100,35 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'nav.light': 'Light',
     'nav.dark': 'Dark',
     'nav.language': 'Language',
+    'nav.collapse': 'Collapse sidebar',
+    'nav.expand': 'Expand sidebar',
+    'nav.darkMode': 'Dark mode',
+    'nav.lightMode': 'Light mode',
     'projects.multimodal': 'Multimodal Papers',
     'projects.reasoning': 'Reasoning Benchmarks',
-    'ask.title': 'Ask AI about papers, ideas, or research directions...',
-    'ask.placeholder': 'Example: which recent papers connect RAG and multimodal agents?',
+    'ask.title': 'What are we researching today?',
+    'ask.placeholder': 'Ask AI about papers, ideas, or research directions...',
     'ask.send': 'Send',
+    'ask.attach': 'Attach file',
     'ask.webSearch': 'Web Search',
     'ask.deepResearch': 'Deep Research',
+    'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Trending papers',
+    'papers.trendingSub': 'updated just now',
     'papers.personalize': 'Personalize preferences',
     'papers.loading': 'Loading papers...',
     'papers.error': 'Could not load papers',
     'papers.wantToRead': 'Want to read',
-    'papers.inList': 'In list',
+    'papers.inList': 'In reading list',
     'papers.popularity': 'Popularity',
     'papers.pdfPreview': 'PDF Preview',
     'papers.github': 'GitHub',
+    'settings.title': 'Settings',
+    'settings.close': 'Close settings',
+    'settings.languageLabel': 'Interface language',
+    'settings.languageHint': 'Paper titles stay in English',
+    'settings.themeSetting': 'Appearance',
+    'settings.themeHint': 'Light or dark interface',
   },
 };
 

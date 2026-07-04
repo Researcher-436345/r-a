@@ -1,3 +1,6 @@
+import { Bookmark, BookmarkCheck, GitFork, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+
 import { useI18n, type Locale } from '../../../shared/i18n/i18n-context';
 import type { Paper } from '../types';
 
@@ -5,54 +8,93 @@ interface PaperCardProps {
   paper: Paper;
 }
 
-function formatPublishedAt(value: string, locale: Locale) {
+const months: Record<Locale, string[]> = {
+  ru: ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+};
+
+function formatDate(value: string, locale: Locale) {
+  const publishedDate = new Date(value);
+  return `${publishedDate.getUTCDate()} ${
+    months[locale][publishedDate.getUTCMonth()]
+  } ${publishedDate.getUTCFullYear()}`;
+}
+
+function formatRelativeDate(value: string, locale: Locale) {
   const publishedDate = new Date(value);
   const now = new Date();
-  const diffMs = publishedDate.getTime() - now.getTime();
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const diffMs = now.getTime() - publishedDate.getTime();
+  const diffDays = Math.max(0, Math.floor(diffMs / 86_400_000));
 
-  if (Math.abs(diffDays) < 30) {
-    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(
-      diffDays,
-      'day',
-    );
+  if (locale === 'ru') {
+    if (diffDays === 0) {
+      return 'сегодня';
+    }
+
+    if (diffDays === 1) {
+      return 'вчера';
+    }
+
+    if (diffDays < 7) {
+      return `${diffDays} дн. назад`;
+    }
+
+    return `${Math.floor(diffDays / 7)} нед. назад`;
   }
 
-  return new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(publishedDate);
+  if (diffDays === 0) {
+    return 'today';
+  }
+
+  if (diffDays === 1) {
+    return 'yesterday';
+  }
+
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return `${Math.floor(diffDays / 7)}w ago`;
+}
+
+function formatScore(value: number) {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1).replace('.0', '')}k`;
+  }
+
+  return String(value);
 }
 
 export function PaperCard({ paper }: PaperCardProps) {
   const { locale, t } = useI18n();
+  const [isSaved, setIsSaved] = useState(paper.wantToRead);
+  const SaveIcon = isSaved ? BookmarkCheck : Bookmark;
 
   return (
     <article className="paper-card">
       <div className="paper-card__content">
-        <div>
-          <h3>{paper.title}</h3>
+        <div className="paper-card__main">
+          <a className="paper-card__title" href="#">
+            {paper.title}
+          </a>
+          <div className="paper-card__meta">
+            <span>{formatDate(paper.publishedAt, locale)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatRelativeDate(paper.publishedAt, locale)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{paper.authors}</span>
+          </div>
           <p>{paper.description}</p>
-        </div>
-
-        <div className="paper-card__meta">
-          <span>{formatPublishedAt(paper.publishedAt, locale)}</span>
-          <span>
-            {t('papers.popularity')}: {paper.popularityScore}
-          </span>
         </div>
 
         <div className="paper-card__actions">
           <button
-            className={
-              paper.wantToRead
-                ? 'compact-button compact-button--selected'
-                : 'compact-button'
-            }
+            className={isSaved ? 'compact-button compact-button--selected' : 'compact-button'}
             type="button"
+            onClick={() => setIsSaved((value) => !value)}
           >
-            {paper.wantToRead ? t('papers.inList') : t('papers.wantToRead')}
+            <SaveIcon aria-hidden="true" size={15} strokeWidth={2} />
+            <span>{isSaved ? t('papers.inList') : t('papers.wantToRead')}</span>
           </button>
 
           {paper.githubUrl ? (
@@ -62,15 +104,26 @@ export function PaperCard({ paper }: PaperCardProps) {
               target="_blank"
               rel="noreferrer"
             >
-              {t('papers.github')}
+              <GitFork aria-hidden="true" size={15} strokeWidth={2} />
+              <span>{formatScore(paper.githubStars ?? 0)}</span>
             </a>
           ) : null}
+
+          <div className="compact-button compact-button--score">
+            <TrendingUp aria-hidden="true" size={15} strokeWidth={2} />
+            <span>{formatScore(paper.popularityScore)}</span>
+          </div>
         </div>
       </div>
 
       <div className="paper-card__preview" aria-label={t('papers.pdfPreview')}>
         <span>{t('papers.pdfPreview')}</span>
         <div className="pdf-lines" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
           <i />
           <i />
           <i />
