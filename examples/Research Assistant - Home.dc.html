@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ext-resource-dependency" content="Sidebar.dc.html" data-resource-id="sidebarDc" />
+<meta name="ext-resource-dependency" content="assets/logo.png" data-resource-id="sidebarLogo" />
+<script>
+/* Standalone shim: when this file is bundled offline, the Sidebar sub-component
+   and its logo are inlined into window.__resources. Redirect the runtime's
+   sibling-fetch to that inlined data and rewrite the logo path inside it.
+   In normal project preview window.__resources is undefined, so this no-ops. */
+(function(){
+  if (!window.fetch) return;
+  var orig = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    var url = "";
+    try { url = (typeof input === "string") ? input : (input && input.url) || ""; } catch(e){}
+    if (/Sidebar\.dc\.html(\?|#|$)/.test(url) && window.__resources && window.__resources.sidebarDc) {
+      return orig(window.__resources.sidebarDc, init)
+        .then(function(r){ return r.text(); })
+        .then(function(txt){
+          if (window.__resources.sidebarLogo) {
+            txt = txt.split("assets/logo.png").join(window.__resources.sidebarLogo);
+          }
+          return new Response(txt, { status:200, headers:{ "Content-Type":"text/html" } });
+        });
+    }
+    return orig(input, init);
+  };
+})();
+</script>
+<script src="./support.js"></script>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#fbfbfc">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="540" cy="360" r="150" fill="#ffffff" stroke="#5e82c2" stroke-width="34"/>
+    <line x1="650" y1="470" x2="800" y2="620" stroke="#5e82c2" stroke-width="40" stroke-linecap="round"/>
+    <line x1="470" y1="330" x2="610" y2="330" stroke="#c9d7ec" stroke-width="20" stroke-linecap="round"/>
+    <line x1="470" y1="390" x2="560" y2="390" stroke="#c9d7ec" stroke-width="20" stroke-linecap="round"/>
+  </svg>
+</template>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  textarea { font-family: inherit; }
+  ::placeholder { color: var(--faint); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  @keyframes ra-pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+</style>
+</helmet>
+
+<div id="ra-root" ref="{{ rootRef }}" style="--bg:#fbfbfc;--panel:#ffffff;--card:#ffffff;--text:#191c20;--sub:#6a7178;--faint:#a2a8af;--border:#eceef1;--hover:#f5f6f8;--accent:#5e82c2;--accent-strong:#4d6fad;--accent-soft:#eef3fb;--accent-text:#42608f;--skeleton:#eef0f3; display:flex; min-height:100vh; width:100%; background:var(--bg); color:var(--text); font-family:'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing:antialiased; line-height:1.5;">
+
+  <!-- ============ SIDEBAR (shared component) ============ -->
+  <dc-import name="Sidebar"
+    lang="{{ lang }}"
+    theme="{{ theme }}"
+    collapsed="{{ collapsed }}"
+    projects-open="{{ projectsOpen }}"
+    projects="{{ projects }}"
+    on-toggle-collapse="{{ onToggleCollapse }}"
+    on-toggle-projects="{{ onToggleProjects }}"
+    on-toggle-theme="{{ onToggleTheme }}"
+    on-open-settings="{{ onOpenSettings }}"
+    on-feedback="{{ noop }}"
+    on-nav-search="{{ noop }}"
+    hint-size="252px,100vh">
+  </dc-import>
+
+  <!-- ============ MAIN ============ -->
+  <main style="flex:1; min-width:0; overflow-y:auto; height:100vh;">
+    <div style="max-width:880px; margin:0 auto; padding:56px 40px 80px;">
+
+      <!-- hero -->
+      <h1 style="margin:0 0 22px; text-align:center; font-size:27px; font-weight:600; letter-spacing:-.5px;">{{ T.heroTitle }}</h1>
+
+      <!-- ask box -->
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px 16px 12px; box-shadow:0 1px 2px rgba(20,24,30,.03);">
+        <textarea value="{{ query }}" onInput="{{ onQueryInput }}" rows="2" placeholder="{{ T.placeholder }}" style="width:100%; border:none; outline:none; resize:none; background:transparent; color:var(--text); font-size:15.5px; line-height:1.55; padding:4px 4px 8px; min-height:48px;"></textarea>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <button onClick="{{ noop }}" style="width:34px; height:34px; flex:none; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--sub); cursor:pointer;" style-hover="background:var(--hover);">
+            <iconify-icon icon="lucide:paperclip" style="font-size:17px;"></iconify-icon>
+          </button>
+          <div style="display:inline-flex; align-items:center; gap:2px; padding:3px; background:var(--hover); border:1px solid var(--border); border-radius:10px;">
+            <button onClick="{{ onModeWeb }}" style="{{ modeWebStyle }}">
+              <iconify-icon icon="lucide:globe" style="font-size:15px;"></iconify-icon>
+              <span>{{ T.modeWeb }}</span>
+            </button>
+            <button onClick="{{ onModeDeep }}" style="{{ modeDeepStyle }}">
+              <iconify-icon icon="lucide:telescope" style="font-size:15px;"></iconify-icon>
+              <span>{{ T.modeDeep }}</span>
+            </button>
+          </div>
+          <div style="flex:1;"></div>
+          <span style="font-size:12px; color:var(--faint); font-family:'Geist Mono', monospace;">{{ T.sendHint }}</span>
+          <button onClick="{{ noop }}" style="width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; border:none; border-radius:50%; background:var(--accent); color:#fff; cursor:pointer; box-shadow:0 1px 3px rgba(94,130,194,.4);" style-hover="background:var(--accent-strong);">
+            <iconify-icon icon="lucide:arrow-up" style="font-size:18px;"></iconify-icon>
+          </button>
+        </div>
+      </div>
+
+      <!-- trending header -->
+      <div style="display:flex; align-items:center; gap:12px; margin:44px 0 18px;">
+        <h2 style="margin:0; font-size:18px; font-weight:600; letter-spacing:-.3px;">{{ T.trending }}</h2>
+        <span style="font-size:13px; color:var(--faint);">{{ T.trendingSub }}</span>
+        <div style="flex:1;"></div>
+        <button onClick="{{ noop }}" style="display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border:1px solid var(--border); border-radius:9px; background:var(--card); color:var(--accent-text); font-family:inherit; font-size:13px; font-weight:500; cursor:pointer;" style-hover="background:var(--accent-soft); border-color:var(--accent-soft);">
+          <iconify-icon icon="lucide:sliders-horizontal" style="font-size:15px;"></iconify-icon>
+          <span>{{ T.personalize }}</span>
+        </button>
+      </div>
+
+      <!-- loading skeletons -->
+      <sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <sc-for list="{{ skeletons }}" as="sk" hint-placeholder-count="3">
+            <div style="display:flex; gap:18px; border:1px solid var(--border); border-radius:14px; padding:18px; background:var(--card); animation:ra-pulse 1.4s ease-in-out infinite;">
+              <div style="flex:1; display:flex; flex-direction:column; gap:11px;">
+                <div style="height:18px; width:55%; background:var(--skeleton); border-radius:6px;"></div>
+                <div style="height:11px; width:40%; background:var(--skeleton); border-radius:6px;"></div>
+                <div style="height:11px; width:92%; background:var(--skeleton); border-radius:6px; margin-top:4px;"></div>
+                <div style="height:11px; width:78%; background:var(--skeleton); border-radius:6px;"></div>
+                <div style="height:30px; width:200px; background:var(--skeleton); border-radius:8px; margin-top:8px;"></div>
+              </div>
+              <div style="width:128px; flex:none; background:var(--skeleton); border-radius:8px;"></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- papers -->
+      <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <sc-for list="{{ papers }}" as="p" hint-placeholder-count="5">
+            <div style="display:flex; gap:20px; border:1px solid var(--border); border-radius:14px; padding:18px 18px 16px; background:var(--card); transition:border-color .15s, box-shadow .15s;" style-hover="border-color:var(--accent-soft); box-shadow:0 4px 18px rgba(20,24,30,.05);">
+
+              <!-- left: info -->
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+                <a href="#" style="font-size:18px; font-weight:600; letter-spacing:-.3px; color:var(--text); text-decoration:none; line-height:1.3;" style-hover="color:var(--accent-text);">{{ p.title }}</a>
+
+                <div style="display:flex; align-items:center; gap:8px; margin:7px 0 9px; font-size:12.5px; color:var(--sub);">
+                  <span>{{ p.dateLabel }}</span>
+                  <span style="color:var(--faint);">·</span>
+                  <span>{{ p.relLabel }}</span>
+                  <span style="color:var(--faint);">·</span>
+                  <span style="font-family:'Geist Mono', monospace; color:var(--faint);">{{ p.authors }}</span>
+                </div>
+
+                <p style="margin:0; font-size:13.5px; line-height:1.55; color:var(--sub); text-wrap:pretty; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">{{ p.description }}</p>
+
+                <!-- actions -->
+                <div style="display:flex; align-items:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                  <button onClick="{{ p.onToggleSave }}" style="{{ p.saveStyle }}">
+                    <iconify-icon icon="{{ p.saveIcon }}" style="font-size:15px;"></iconify-icon>
+                    <span>{{ p.saveLabel }}</span>
+                  </button>
+
+                  <sc-if value="{{ p.hasGithub }}" hint-placeholder-val="{{ false }}">
+                    <a href="{{ p.githubUrl }}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); font-size:13px; font-weight:500; text-decoration:none; cursor:pointer;" style-hover="background:var(--hover);">
+                      <iconify-icon icon="lucide:github" style="font-size:15px;"></iconify-icon>
+                      <span style="font-family:'Geist Mono', monospace;">{{ p.githubStars }}</span>
+                    </a>
+                  </sc-if>
+
+                  <div style="display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:8px; background:var(--accent-soft); color:var(--accent-text); font-size:13px; font-weight:500;">
+                    <iconify-icon icon="lucide:trending-up" style="font-size:15px;"></iconify-icon>
+                    <span style="font-family:'Geist Mono', monospace;">{{ p.scoreLabel }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- right: pdf preview -->
+              <div style="width:132px; flex:none; align-self:stretch; min-height:172px; border:1px solid var(--border); border-radius:9px; background:var(--bg); padding:13px 12px; display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden;">
+                <div style="font-size:9px; font-weight:600; color:var(--faint); letter-spacing:.3px; text-align:center; margin-bottom:3px; text-transform:uppercase;">{{ T.pdfPreview }}</div>
+                <div style="height:6px; width:70%; background:var(--skeleton); border-radius:3px; margin:0 auto 3px;"></div>
+                <div style="height:4px; width:100%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:100%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:88%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:100%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:62%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:24px;"></div>
+                <div style="height:4px; width:100%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:94%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:100%; background:var(--skeleton); border-radius:3px;"></div>
+                <div style="height:4px; width:48%; background:var(--skeleton); border-radius:3px;"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+
+  <!-- ============ SETTINGS MODAL ============ -->
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onCloseSettings }}" style="position:fixed; inset:0; background:rgba(15,18,22,.4); display:flex; align-items:center; justify-content:center; z-index:50; padding:24px;">
+      <div onClick="{{ stop }}" style="width:440px; max-width:100%; background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px; box-shadow:0 16px 50px rgba(15,18,22,.25);">
+        <div style="display:flex; align-items:center; margin-bottom:20px;">
+          <h3 style="margin:0; font-size:17px; font-weight:600; flex:1;">{{ T.settings }}</h3>
+          <button onClick="{{ onCloseSettings }}" style="width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:none; border-radius:8px; background:transparent; color:var(--sub); cursor:pointer;" style-hover="background:var(--hover);">
+            <iconify-icon icon="lucide:x" style="font-size:18px;"></iconify-icon>
+          </button>
+        </div>
+
+        <div style="display:flex; align-items:center; padding:14px 0; border-top:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-size:14px; font-weight:500;">{{ T.languageLabel }}</div>
+            <div style="font-size:12.5px; color:var(--faint); margin-top:2px;">{{ T.languageHint }}</div>
+          </div>
+          <div style="display:inline-flex; align-items:center; gap:2px; padding:3px; background:var(--hover); border:1px solid var(--border); border-radius:10px;">
+            <button onClick="{{ onLangRu }}" style="{{ langRuStyle }}">RU</button>
+            <button onClick="{{ onLangEn }}" style="{{ langEnStyle }}">EN</button>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; padding:14px 0; border-top:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-size:14px; font-weight:500;">{{ T.themeSetting }}</div>
+            <div style="font-size:12.5px; color:var(--faint); margin-top:2px;">{{ T.themeHint }}</div>
+          </div>
+          <div style="display:inline-flex; align-items:center; gap:2px; padding:3px; background:var(--hover); border:1px solid var(--border); border-radius:10px;">
+            <button onClick="{{ onThemeLight }}" style="{{ themeLightStyle }}">
+              <iconify-icon icon="lucide:sun" style="font-size:15px;"></iconify-icon>
+              <span>{{ T.light }}</span>
+            </button>
+            <button onClick="{{ onThemeDark }}" style="{{ themeDarkStyle }}">
+              <iconify-icon icon="lucide:moon" style="font-size:15px;"></iconify-icon>
+              <span>{{ T.dark }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#5e82c2&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;language&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ru&quot;,&quot;en&quot;],&quot;default&quot;:&quot;ru&quot;,&quot;tsType&quot;:&quot;'ru' | 'en'&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.rootRef = React.createRef();
+    this.asideRef = React.createRef();
+
+    this.THEMES = {
+      light: {
+        '--bg':'#fbfbfc','--panel':'#ffffff','--card':'#ffffff','--text':'#191c20',
+        '--sub':'#6a7178','--faint':'#a2a8af','--border':'#eceef1','--hover':'#f5f6f8',
+        '--accent':'#5e82c2','--accent-strong':'#4d6fad','--accent-soft':'#eef3fb',
+        '--accent-text':'#42608f','--skeleton':'#eef0f3'
+      },
+      dark: {
+        '--bg':'#0f1113','--panel':'#16191c','--card':'#16191c','--text':'#e7eaed',
+        '--sub':'#969ca3','--faint':'#646b72','--border':'#262a2f','--hover':'#1d2126',
+        '--accent':'#7c9ed6','--accent-strong':'#8eabdd','--accent-soft':'#1b2433',
+        '--accent-text':'#9fbae6','--skeleton':'#1f2429'
+      }
+    };
+
+    this.MONTHS = {
+      ru: ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'],
+      en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    };
+
+    this.STRINGS = {
+      ru: {
+        search:'Исследовать', projects:'Проекты', settings:'Настройки', feedback:'Обратная связь',
+        collapse:'Свернуть панель',
+        heroTitle:'Что исследуем сегодня?',
+        placeholder:'Спросите AI о статьях, идеях или направлениях исследований…',
+        modeWeb:'Веб-поиск', modeDeep:'Глубокое исследование', sendHint:'Alt + Enter',
+        trending:'Трендовые статьи', trendingSub:'обновлено только что',
+        personalize:'Настроить предпочтения',
+        wantToRead:'Хочу прочитать', inReadingList:'В списке чтения',
+        pdfPreview:'Превью PDF',
+        light:'Светлая', dark:'Тёмная',
+        languageLabel:'Язык интерфейса', languageHint:'Названия статей остаются на английском',
+        themeSetting:'Тема оформления', themeHint:'Светлое или тёмное оформление'
+      },
+      en: {
+        search:'Explore', projects:'Projects', settings:'Settings', feedback:'Feedback',
+        collapse:'Collapse sidebar',
+        heroTitle:'What are we researching today?',
+        placeholder:'Ask AI about papers, ideas, or research directions…',
+        modeWeb:'Web Search', modeDeep:'Deep Research', sendHint:'Alt + Enter',
+        trending:'Trending papers', trendingSub:'updated just now',
+        personalize:'Personalize preferences',
+        wantToRead:'Want to read', inReadingList:'In reading list',
+        pdfPreview:'PDF Preview',
+        light:'Light', dark:'Dark',
+        languageLabel:'Interface language', languageHint:'Paper titles stay in English',
+        themeSetting:'Appearance', themeHint:'Light or dark interface'
+      }
+    };
+
+    // --- mock data (would come from TanStack Query / api.ts) ---
+    this.PAPERS = [
+      { id:'p1', title:'Self-Refining Language Models via Online Critique',
+        authors:'Park, Iyer, Zhang +3',
+        description:'A training-time framework where a model generates, critiques, and revises its own responses through an internal reward signal, improving reasoning accuracy on math and code benchmarks without additional human labels.',
+        publishedAt:'2026-06-12', popularityScore:942, wantToRead:false,
+        githubUrl:'https://github.com', githubStars:213 },
+      { id:'p2', title:'MoE-Lite: Sparse Mixture-of-Experts for On-Device Inference',
+        authors:'Nakamura, Ortega',
+        description:'Introduces a lightweight expert-routing scheme that runs 8-expert MoE models on consumer hardware, cutting active parameters by 4× while preserving 97% of dense-model quality across instruction-following tasks.',
+        publishedAt:'2026-06-13', popularityScore:671, wantToRead:true,
+        githubUrl:'https://github.com', githubStars:156 },
+      { id:'p3', title:'RAG-Bench: A Unified Benchmark for Retrieval-Augmented Generation',
+        authors:'Fernandez, Cho, Williams +2',
+        description:'Proposes a standardized evaluation suite covering retrieval quality, faithfulness, and answer relevance across 12 domains, revealing that current RAG pipelines overfit to surface-level lexical overlap.',
+        publishedAt:'2026-06-10', popularityScore:1240, wantToRead:false,
+        githubUrl:null, githubStars:0 },
+      { id:'p4', title:'Chain-of-Agents: Collaborative Reasoning Across Specialized LLMs',
+        authors:'Dubois, Ananthaswamy',
+        description:'A multi-agent orchestration method where specialist models hand off intermediate state through a shared scratchpad, achieving stronger long-horizon planning than monolithic models on agentic web tasks.',
+        publishedAt:'2026-06-06', popularityScore:805, wantToRead:false,
+        githubUrl:'https://github.com', githubStars:489 },
+      { id:'p5', title:'Visual Grounding in Multimodal Foundation Models at Scale',
+        authors:'Petrova, Lindqvist +4',
+        description:'Studies how vision-language models localize referring expressions as parameter count grows, finding emergent fine-grained grounding above 30B params and releasing a 2M-image evaluation set.',
+        publishedAt:'2026-05-30', popularityScore:388, wantToRead:false,
+        githubUrl:'https://github.com', githubStars:74 }
+    ];
+
+    this.PROJECTS = [
+      { id:'p1', name:'Multimodal Papers', items:['Visual Grounding in Multimodal Foundation Models', 'CLIP-Beyond: Unified Embeddings', 'Audio-Visual Pretraining Survey'] },
+      { id:'p2', name:'Reasoning Benchmarks', items:['RAG-Bench v2', 'Chain-of-Agents Eval Harness'] }
+    ];
+
+    this.state = {
+      lang: (props && props.language) || 'ru',
+      theme: (props && props.theme) || 'light',
+      mode: 'web',
+      query: '',
+      loading: true,
+      expandedProjects: true,
+      openProject: { p1:false, p2:false },
+      savedOverride: {},
+      settingsOpen: false,
+      collapsed: false,
+      narrow: false
+    };
+  }
+
+  componentDidMount() {
+    this.applyTheme();
+    // mock async query (TanStack Query w/ delay)
+    this._timer = setTimeout(() => this.setState({ loading:false }), 900);
+  }
+  componentWillUnmount() {
+    clearTimeout(this._timer);
+  }
+  componentDidUpdate() {
+    this.applyTheme();
+  }
+  setTheme(theme) {
+    this.setState({ theme }, () => this.applyTheme());
+  }
+
+  applyTheme() {
+    const el = document.getElementById('ra-root'); if (!el) return;
+    const accent = this.props && this.props.accentColor;
+    const t = Object.assign({}, this.THEMES[this.state.theme]);
+    if (accent) { t['--accent'] = accent; }
+    Object.entries(t).forEach(([k,v]) => el.style.setProperty(k, v));
+  }
+
+  seg(active) {
+    return {
+      display:'inline-flex', alignItems:'center', gap:'6px',
+      padding:'6px 12px', borderRadius:'7px', fontSize:'13px', fontWeight:500,
+      border:'none', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap',
+      background: active ? 'var(--card)' : 'transparent',
+      color: active ? 'var(--accent-text)' : 'var(--sub)',
+      boxShadow: active ? '0 1px 2px rgba(20,24,30,.1)' : 'none'
+    };
+  }
+
+  fmtScore(n) { return n >= 1000 ? (n/1000).toFixed(1).replace('.0','') + 'k' : String(n); }
+
+  relTime(dateStr, lang) {
+    const now = new Date('2026-06-14T12:00:00Z');
+    const d = new Date(dateStr + 'T00:00:00Z');
+    const days = Math.max(0, Math.floor((now - d) / 86400000));
+    if (lang === 'ru') {
+      if (days === 0) return 'сегодня';
+      if (days === 1) return 'вчера';
+      if (days < 7) return days + ' дн. назад';
+      return Math.floor(days/7) + ' нед. назад';
+    }
+    if (days === 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 7) return days + 'd ago';
+    return Math.floor(days/7) + 'w ago';
+  }
+  fmtDate(dateStr, lang) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    return d.getUTCDate() + ' ' + this.MONTHS[lang][d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+  }
+
+  isSaved(p) {
+    return (p.id in this.state.savedOverride) ? this.state.savedOverride[p.id] : p.wantToRead;
+  }
+  toggleSave(id, cur) {
+    this.setState(s => ({ savedOverride: Object.assign({}, s.savedOverride, { [id]: !cur }) }));
+  }
+
+  renderVals() {
+    const { lang, theme, mode, query, loading, expandedProjects, openProject, settingsOpen } = this.state;
+    const T = this.STRINGS[lang];
+
+    const papers = this.PAPERS.map(p => {
+      const saved = this.isSaved(p);
+      const saveStyle = {
+        display:'inline-flex', alignItems:'center', gap:'6px',
+        padding:'6px 12px', borderRadius:'8px', fontSize:'13px', fontWeight:500,
+        cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap',
+        border: saved ? '1px solid var(--accent)' : '1px solid var(--border)',
+        background: saved ? 'var(--accent-soft)' : 'transparent',
+        color: saved ? 'var(--accent-text)' : 'var(--text)'
+      };
+      return {
+        title:p.title, description:p.description, authors:p.authors,
+        dateLabel:this.fmtDate(p.publishedAt, lang),
+        relLabel:this.relTime(p.publishedAt, lang),
+        scoreLabel:this.fmtScore(p.popularityScore),
+        hasGithub:!!p.githubUrl, githubUrl:p.githubUrl || '#',
+        githubStars:this.fmtScore(p.githubStars),
+        saveLabel: saved ? T.inReadingList : T.wantToRead,
+        saveIcon: saved ? 'lucide:bookmark-check' : 'lucide:bookmark',
+        saveStyle,
+        onToggleSave: () => this.toggleSave(p.id, saved)
+      };
+    });
+
+    const projects = this.PROJECTS.map(pr => {
+      const open = !!openProject[pr.id];
+      return {
+        name:pr.name, items:pr.items, count:String(pr.items.length),
+        open, chevron: open ? 'lucide:chevron-down' : 'lucide:chevron-right',
+        onToggle: () => this.setState(s => ({ openProject: Object.assign({}, s.openProject, { [pr.id]: !s.openProject[pr.id] }) }))
+      };
+    });
+
+    return {
+      rootRef:this.rootRef, asideRef:this.asideRef,
+      T,
+      query, loading, loaded: !loading,
+      skeletons:[1,2,3], papers, projects,
+      projectsOpen: expandedProjects,
+      projectsChevron: expandedProjects ? 'lucide:chevron-down' : 'lucide:chevron-right',
+      settingsOpen,
+      collapsed: this.state.collapsed,
+      onToggleCollapse: () => this.setState(s => ({ collapsed: !s.collapsed })),
+      themeIcon: theme === 'light' ? 'lucide:moon' : 'lucide:sun',
+      themeLabel: theme === 'light'
+        ? (lang === 'ru' ? 'Тёмная тема' : 'Dark mode')
+        : (lang === 'ru' ? 'Светлая тема' : 'Light mode'),
+      modeWebStyle: this.seg(mode === 'web'),
+      modeDeepStyle: this.seg(mode === 'deep'),
+      langRuStyle: this.seg(lang === 'ru'),
+      langEnStyle: this.seg(lang === 'en'),
+      themeLightStyle: this.seg(theme === 'light'),
+      themeDarkStyle: this.seg(theme === 'dark'),
+      noop: () => {},
+      stop: (e) => { e.stopPropagation(); },
+      onQueryInput: (e) => this.setState({ query: e.target.value }),
+      onModeWeb: () => this.setState({ mode:'web' }),
+      onModeDeep: () => this.setState({ mode:'deep' }),
+      onToggleProjects: () => this.setState(s => ({ expandedProjects: !s.expandedProjects })),
+      onOpenSettings: () => this.setState({ settingsOpen:true }),
+      onCloseSettings: () => this.setState({ settingsOpen:false }),
+      onToggleTheme: () => this.setTheme(theme === 'light' ? 'dark' : 'light'),
+      onLangRu: () => this.setState({ lang:'ru' }),
+      onLangEn: () => this.setState({ lang:'en' }),
+      onThemeLight: () => this.setTheme('light'),
+      onThemeDark: () => this.setTheme('dark')
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border, #eceef1); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+</style>
+</helmet>
+
+<aside style="{{ asideStyle }}">
+
+  <!-- header: logo + collapse/expand toggle -->
+  <div style="{{ headerStyle }}">
+    <div style="width:44px; height:44px; flex:none; display:flex; align-items:center; justify-content:center;">
+      <img src="assets/logo.png" alt="logo" style="width:44px; height:44px; object-fit:contain; display:block;" />
+    </div>
+    <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;"></div>
+    </sc-if>
+    <button onClick="{{ onToggleCollapse }}" title="{{ toggleTitle }}" style="{{ toggleBtnStyle }}" style-hover="background:var(--hover, #f5f6f8);">
+      <iconify-icon icon="{{ toggleIcon }}" style="font-size:18px;"></iconify-icon>
+    </button>
+  </div>
+
+  <!-- primary nav: explore (active) -->
+  <button onClick="{{ onNavSearch }}" title="{{ T.search }}" style="{{ searchBtnStyle }}" style-hover="background:var(--accent-soft, #eef3fb);">
+    <iconify-icon icon="lucide:globe" style="font-size:18px; flex:none;"></iconify-icon>
+    <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+      <span style="flex:1; text-align:left;">{{ T.search }}</span>
+    </sc-if>
+  </button>
+
+  <!-- projects group: icon always visible; label + tree only when expanded -->
+  <div style="display:flex; flex-direction:column;">
+    <button onClick="{{ onProjectsClick }}" title="{{ T.projects }}" style="{{ projectsBtnStyle }}" style-hover="background:var(--hover, #f5f6f8);">
+      <iconify-icon icon="lucide:folder" style="font-size:18px; color:var(--sub, #6a7178); flex:none;"></iconify-icon>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"><span style="flex:1; text-align:left;">{{ T.projects }}</span></sc-if>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"><span style="display:flex;"><iconify-icon icon="{{ projectsChevron }}" style="font-size:16px; color:var(--faint, #a2a8af);"></iconify-icon></span></sc-if>
+    </button>
+
+    <sc-if value="{{ showProjectsTree }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex; flex-direction:column; padding:2px 0 4px 8px; margin-left:11px; border-left:1px solid var(--border, #eceef1);">
+          <sc-for list="{{ projects }}" as="proj" hint-placeholder-count="2">
+            <div style="display:flex; flex-direction:column;">
+              <button onClick="{{ proj.onToggle }}" style="display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:none; border-radius:8px; cursor:pointer; background:transparent; color:var(--text, #191c20); font-family:inherit; font-size:13px; font-weight:500; text-align:left;" style-hover="background:var(--hover, #f5f6f8);">
+                <iconify-icon icon="{{ proj.chevron }}" style="font-size:14px; color:var(--faint, #a2a8af);"></iconify-icon>
+                <span style="flex:1;">{{ proj.name }}</span>
+                <span style="font-size:11px; color:var(--faint, #a2a8af); font-family:'Geist Mono', monospace;">{{ proj.count }}</span>
+              </button>
+              <sc-if value="{{ proj.open }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-direction:column; padding:1px 0 3px 6px; margin-left:13px; border-left:1px solid var(--border, #eceef1);">
+                  <sc-for list="{{ proj.items }}" as="it" hint-placeholder-count="2">
+                    <a href="#" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; text-decoration:none; color:var(--sub, #6a7178); font-size:12.5px;" style-hover="background:var(--hover, #f5f6f8); color:var(--text, #191c20);">
+                      <iconify-icon icon="lucide:file-text" style="font-size:13px; color:var(--faint, #a2a8af); flex:none;"></iconify-icon>
+                      <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ it }}</span>
+                    </a>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+  <div style="flex:1;"></div>
+
+  <!-- footer nav: settings / feedback / theme -->
+  <div style="display:flex; flex-direction:column; gap:2px; padding-top:8px; border-top:1px solid var(--border, #eceef1);">
+    <button onClick="{{ onOpenSettings }}" title="{{ T.settings }}" style="{{ settingsBtnStyle }}" style-hover="background:var(--hover, #f5f6f8);">
+      <iconify-icon icon="lucide:settings" style="font-size:18px; color:var(--sub, #6a7178); flex:none;"></iconify-icon>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"><span style="text-align:left;">{{ T.settings }}</span></sc-if>
+    </button>
+    <button onClick="{{ onFeedback }}" title="{{ T.feedback }}" style="{{ feedbackBtnStyle }}" style-hover="background:var(--hover, #f5f6f8);">
+      <iconify-icon icon="lucide:message-square" style="font-size:18px; color:var(--sub, #6a7178); flex:none;"></iconify-icon>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"><span style="text-align:left;">{{ T.feedback }}</span></sc-if>
+    </button>
+    <button onClick="{{ onToggleTheme }}" title="{{ themeLabel }}" style="{{ themeBtnStyle }}" style-hover="background:var(--hover, #f5f6f8);">
+      <iconify-icon icon="{{ themeIcon }}" style="font-size:18px; color:var(--sub, #6a7178); flex:none;"></iconify-icon>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"><span style="text-align:left;">{{ themeLabel }}</span></sc-if>
+    </button>
+  </div>
+
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:252,&quot;height&quot;:680},&quot;lang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ru&quot;,&quot;en&quot;],&quot;default&quot;:&quot;ru&quot;,&quot;tsType&quot;:&quot;'ru' | 'en'&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;},&quot;collapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;projectsOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;projects&quot;:{&quot;editor&quot;:null,&quot;default&quot;:[],&quot;tsType&quot;:&quot;any[]&quot;},&quot;onToggleCollapse&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onToggleProjects&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onToggleTheme&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onOpenSettings&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onFeedback&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;onNavSearch&quot;:{&quot;editor&quot;:null,&quot;default&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.STRINGS = {
+      ru: { search:'Исследовать', projects:'Проекты', settings:'Настройки', feedback:'Обратная связь', collapse:'Свернуть панель', expand:'Развернуть панель' },
+      en: { search:'Explore', projects:'Projects', settings:'Settings', feedback:'Feedback', collapse:'Collapse sidebar', expand:'Expand sidebar' }
+    };
+    // self-contained sample data for standalone preview (used only when no `projects` prop)
+    this.SAMPLE = [
+      { id:'rl', name:'Reinforcement Learning', items:['Q-Guided Flow Policies','IDQL as Actor-Critic','Diffusion Policy'] },
+      { id:'mm', name:'Multimodal', items:['Visual Grounding at Scale','CLIP-Beyond'] }
+    ];
+    this.state = { sCollapsed:false, sProjectsOpen:true, sOpen:{} };
+  }
+
+  // nav button style — varies by active state and collapsed layout
+  navStyle(active, collapsed) {
+    return {
+      display:'flex', alignItems:'center', width:'100%',
+      border:'none', borderRadius:'9px', cursor:'pointer',
+      fontFamily:'inherit', fontSize:'14px',
+      gap: collapsed ? '0' : '11px',
+      justifyContent: collapsed ? 'center' : 'flex-start',
+      padding: collapsed ? '9px 0' : '9px 12px',
+      fontWeight: active ? 600 : 500,
+      background: active ? 'var(--accent-soft, #eef3fb)' : 'transparent',
+      color: active ? 'var(--accent-text, #42608f)' : 'var(--text, #191c20)'
+    };
+  }
+
+  renderVals() {
+    const p = this.props || {};
+    const collapsed = (p.collapsed !== undefined) ? !!p.collapsed : this.state.sCollapsed;
+    const expanded = !collapsed;
+    const lang = p.lang || 'ru';
+    const theme = p.theme || 'light';
+    const T = this.STRINGS[lang] || this.STRINGS.ru;
+    const noop = () => {};
+
+    const projectsOpen = (p.projectsOpen !== undefined) ? !!p.projectsOpen : this.state.sProjectsOpen;
+    const toggleCollapse = p.onToggleCollapse || (() => this.setState(s => ({ sCollapsed: !s.sCollapsed })));
+    const toggleProjects = p.onToggleProjects || (() => this.setState(s => ({ sProjectsOpen: !s.sProjectsOpen })));
+
+    // use supplied projects, else build interactive sample for standalone use
+    let projects;
+    if (p.projects && p.projects.length) {
+      projects = p.projects;
+    } else {
+      projects = this.SAMPLE.map(pr => {
+        const open = !!this.state.sOpen[pr.id];
+        return {
+          name:pr.name, items:pr.items, count:String(pr.items.length), open,
+          chevron: open ? 'lucide:chevron-down' : 'lucide:chevron-right',
+          onToggle: () => this.setState(s => ({ sOpen: Object.assign({}, s.sOpen, { [pr.id]: !s.sOpen[pr.id] }) }))
+        };
+      });
+    }
+
+    return {
+      expanded, collapsed, showProjects: expanded, T,
+      asideStyle: {
+        width: collapsed ? '68px' : '252px', flex:'none',
+        background:'var(--panel, #ffffff)', borderRight:'1px solid var(--border, #eceef1)',
+        display:'flex', flexDirection:'column',
+        padding: collapsed ? '18px 10px 14px' : '18px 14px 14px',
+        gap:'6px', height:'100%', minHeight:'0'
+      },
+      headerStyle: {
+        display:'flex', alignItems:'center',
+        flexDirection: collapsed ? 'column' : 'row',
+        gap: collapsed ? '12px' : '10px',
+        padding: collapsed ? '0 0 14px' : '4px 6px 14px'
+      },
+      toggleBtnStyle: {
+        width:'32px', height:'32px', flex:'none', display:'flex', alignItems:'center',
+        justifyContent:'center', border:'none', borderRadius:'8px', background:'transparent',
+        color:'var(--sub, #6a7178)', cursor:'pointer'
+      },
+      toggleIcon: collapsed ? 'lucide:panel-left-open' : 'lucide:panel-left-close',
+      toggleTitle: collapsed ? T.expand : T.collapse,
+
+      searchBtnStyle: this.navStyle(true, collapsed),
+      projectsBtnStyle: this.navStyle(false, collapsed),
+      settingsBtnStyle: this.navStyle(false, collapsed),
+      feedbackBtnStyle: this.navStyle(false, collapsed),
+      themeBtnStyle: this.navStyle(false, collapsed),
+
+      projectsOpen,
+      showProjectsTree: expanded && projectsOpen,
+      projectsChevron: projectsOpen ? 'lucide:chevron-down' : 'lucide:chevron-right',
+      projects,
+      // collapsed: clicking the folder expands the sidebar; expanded: toggles the tree
+      onProjectsClick: collapsed ? toggleCollapse : toggleProjects,
+
+      themeIcon: theme === 'light' ? 'lucide:moon' : 'lucide:sun',
+      themeLabel: theme === 'light' ? (lang==='ru'?'Тёмная тема':'Dark mode') : (lang==='ru'?'Светлая тема':'Light mode'),
+
+      onToggleCollapse: toggleCollapse,
+      onToggleProjects: toggleProjects,
+      onToggleTheme: p.onToggleTheme || noop,
+      onOpenSettings: p.onOpenSettings || noop,
+      onFeedback: p.onFeedback || noop,
+      onNavSearch: p.onNavSearch || noop,
+      noop
+    };
+  }
+}
+</script>
+</body>
+</html>
