@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   fetchAnnotations,
@@ -43,6 +43,7 @@ export function ReaderPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(paperId));
+  const pdfObjectUrlRef = useRef<string | null>(null);
 
   const loadAnnotations = useCallback(async (id: string) => {
     const items = await fetchAnnotations(id);
@@ -97,6 +98,10 @@ export function ReaderPage() {
       setError(null);
       setPdfUrl(null);
       setPdfStatus('loading');
+      if (pdfObjectUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfObjectUrlRef.current);
+        pdfObjectUrlRef.current = null;
+      }
       try {
         const nextPaper = await fetchPaper(paperId);
         if (cancelled) {
@@ -112,10 +117,15 @@ export function ReaderPage() {
 
         try {
           const pdf = await waitForPdfUrl(paperId);
-          if (!cancelled) {
-            setPdfUrl(pdf.url);
-            setPdfStatus('ready');
+          if (cancelled) {
+            if (pdf.url.startsWith('blob:')) {
+              URL.revokeObjectURL(pdf.url);
+            }
+            return;
           }
+          pdfObjectUrlRef.current = pdf.url;
+          setPdfUrl(pdf.url);
+          setPdfStatus('ready');
         } catch (pdfErr) {
           if (!cancelled) {
             setPdfStatus('failed');
@@ -140,6 +150,10 @@ export function ReaderPage() {
     void load();
     return () => {
       cancelled = true;
+      if (pdfObjectUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfObjectUrlRef.current);
+        pdfObjectUrlRef.current = null;
+      }
     };
   }, [paperId]);
 

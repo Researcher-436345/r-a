@@ -112,13 +112,37 @@ export function fetchPdfUrl(
   );
 }
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+
+/** Скачивает PDF через API (не через MinIO напрямую) и отдаёт blob URL для PDF.js. */
+export async function fetchPdfObjectUrl(paperId: string): Promise<string> {
+  const token = authToken();
+  const response = await fetch(`${API_URL}/papers/${paperId}/pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (data.detail) {
+        detail = data.detail;
+      }
+    } catch {
+      // ignore
+    }
+    throw new ApiError(response.status, detail);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
 export function fetchPaper(paperId: string): Promise<LibraryPaper> {
   return apiRequest<LibraryPaper>(`/papers/${paperId}`, {
     token: authToken(),
   });
 }
 
-/** Ждём, пока worker положит PDF в MinIO */
+/** Ждём, пока worker положит PDF в MinIO, затем отдаём blob URL. */
 export async function waitForPdfUrl(
   paperId: string,
   {
@@ -129,7 +153,9 @@ export async function waitForPdfUrl(
   let lastError: unknown;
   for (let i = 0; i < attempts; i += 1) {
     try {
-      return await fetchPdfUrl(paperId);
+      await fetchPdfUrl(paperId);
+      const objectUrl = await fetchPdfObjectUrl(paperId);
+      return { url: objectUrl, expires_in: 0, status: 'ready', source: 'api' };
     } catch (err) {
       lastError = err;
       const detail = err instanceof ApiError ? err.detail : '';
