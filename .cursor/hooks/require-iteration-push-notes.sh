@@ -1,44 +1,51 @@
 #!/usr/bin/env bash
-# Before `git push`: require ITERATION_PUSH.md refreshed today (Last refreshed: YYYY-MM-DD).
+# Gate real pushes: require ITERATION_PUSH.md with today's Last refreshed date.
 set -euo pipefail
 
 input=$(cat || true)
 command=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("command") or "")' 2>/dev/null || true)
 
-# Only gate real pushes (allow dry-run / help)
-case "$command" in
-  *git\ push*)
-    ;;
-  *)
-    printf '%s\n' '{"permission":"allow"}'
-    exit 0
-    ;;
-esac
-
-if printf '%s' "$command" | grep -Eq 'push[[:space:]]+(-n|--dry-run)\b|push[[:space:]]+--help\b'; then
+# Allow anything that is not a push to a remote
+if ! printf '%s' "$command" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+push([[:space:]]|$)'; then
   printf '%s\n' '{"permission":"allow"}'
   exit 0
 fi
 
-# Find repo root with ITERATION_PUSH.md or docker-compose.yml
+if printf '%s' "$command" | grep -Eq '[[:space:]](-n|--dry-run|--help)([[:space:]]|$)'; then
+  printf '%s\n' '{"permission":"allow"}'
+  exit 0
+fi
+
 root=$(pwd)
+today=$(date +%Y-%m-%d)
 notes=""
-for cand in "$root/ITERATION_PUSH.md" "$root/../ITERATION_PUSH.md"; do
+for cand in \
+  "$root/ITERATION_PUSH.md" \
+  "$root/r-a/ITERATION_PUSH.md"
+do
   if [[ -f "$cand" ]]; then
     notes="$cand"
     break
   fi
 done
 
-today=$(date +%Y-%m-%d)
+if [[ -z "$notes" ]]; then
+  sub=$(printf '%s' "$command" | python3 -c 'import re,sys; m=re.search(r"cd\s+([^\s;&|]+)", sys.stdin.read()); print(m.group(1) if m else "")' 2>/dev/null || true)
+  if [[ -n "$sub" && "$sub" != /* ]]; then
+    sub="$root/$sub"
+  fi
+  if [[ -n "$sub" && -f "$sub/ITERATION_PUSH.md" ]]; then
+    notes="$sub/ITERATION_PUSH.md"
+  fi
+fi
 
 if [[ -z "$notes" ]]; then
   python3 - <<'PY'
 import json
 print(json.dumps({
   "permission": "deny",
-  "user_message": "Перед push нужен файл ITERATION_PUSH.md. Агент обновит его по скиллу iteration-push-notes.",
-  "agent_message": "Push blocked: ITERATION_PUSH.md missing. Apply skill iteration-push-notes, write ITERATION_PUSH.md with today's Last refreshed date, commit it, then retry git push."
+  "user_message": "Нужен ITERATION_PUSH.md перед отправкой в remote. Скилл: iteration-push-notes.",
+  "agent_message": "Blocked: ITERATION_PUSH.md missing. Apply skill iteration-push-notes, write the file with today's Last refreshed, commit, retry."
 }))
 PY
   exit 0
@@ -51,8 +58,8 @@ if [[ "$refreshed" != "$today" ]]; then
 import json
 print(json.dumps({
   "permission": "deny",
-  "user_message": "ITERATION_PUSH.md устарел (нужна сегодняшняя дата Last refreshed). Обновите заметки перед push.",
-  "agent_message": "Push blocked: ITERATION_PUSH.md Last refreshed is '${refreshed}' (need ${today}). Apply skill iteration-push-notes, refresh ITERATION_PUSH.md, commit, then retry git push."
+  "user_message": "ITERATION_PUSH.md устарел — обновите Last refreshed на сегодня.",
+  "agent_message": "Blocked: ITERATION_PUSH.md Last refreshed='${refreshed}', need '${today}'. Apply skill iteration-push-notes, commit, retry."
 }))
 PY
   exit 0

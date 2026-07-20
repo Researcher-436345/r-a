@@ -4,7 +4,7 @@
     "beforeShellExecution": [
       {
         "command": ".cursor/hooks/require-iteration-push-notes.sh",
-        "matcher": "git\\s+push",
+        "matcher": "git",
         "failClosed": true
       }
     ]
