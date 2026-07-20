@@ -47,7 +47,11 @@ type TranslationKey =
   | 'settings.languageLabel'
   | 'settings.languageHint'
   | 'settings.themeSetting'
-  | 'settings.themeHint';
+  | 'settings.themeHint'
+  | 'settings.readerTheme'
+  | 'settings.readerThemeHint'
+  | 'settings.readerThemeBoth'
+  | 'settings.readerThemeUiOnly';
 
 const translations: Record<Locale, Record<TranslationKey, string>> = {
   ru: {
@@ -74,7 +78,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'ask.deepResearch': 'Глубокое исследование',
     'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Трендовые статьи',
-    'papers.trendingSub': 'обновлено только что',
+    'papers.trendingSub': 'свежие с arXiv · cs.AI',
     'papers.personalize': 'Настроить предпочтения',
     'papers.loading': 'Загружаем статьи...',
     'papers.error': 'Не удалось загрузить статьи',
@@ -89,6 +93,10 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'settings.languageHint': 'Названия статей остаются на английском',
     'settings.themeSetting': 'Тема оформления',
     'settings.themeHint': 'Светлое или тёмное оформление',
+    'settings.readerTheme': 'Тема PDF-ридера',
+    'settings.readerThemeHint': 'Менять вместе с интерфейсом или оставить светлую бумагу',
+    'settings.readerThemeBoth': 'С интерфейсом',
+    'settings.readerThemeUiOnly': 'Только UI',
   },
   en: {
     'app.logo': 'r-a',
@@ -114,9 +122,9 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'ask.deepResearch': 'Deep Research',
     'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Trending papers',
-    'papers.trendingSub': 'updated just now',
+    'papers.trendingSub': 'fresh from arXiv · cs.AI',
     'papers.personalize': 'Personalize preferences',
-    'papers.loading': 'Loading papers...',
+    'papers.loading': 'Loading papers',
     'papers.error': 'Could not load papers',
     'papers.wantToRead': 'Want to read',
     'papers.inList': 'In reading list',
@@ -129,6 +137,10 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'settings.languageHint': 'Paper titles stay in English',
     'settings.themeSetting': 'Appearance',
     'settings.themeHint': 'Light or dark interface',
+    'settings.readerTheme': 'PDF reader theme',
+    'settings.readerThemeHint': 'Follow the UI theme or keep paper light',
+    'settings.readerThemeBoth': 'With UI',
+    'settings.readerThemeUiOnly': 'UI only',
   },
 };
 

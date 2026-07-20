@@ -3,6 +3,8 @@ import {
   GlobalWorkerOptions,
   type PDFDocumentProxy,
   type RenderTask,
+  renderTextLayer,
+  type TextLayerRenderTask,
 } from 'pdfjs-dist';
 import { useEffect, useRef, useState } from 'react';
 
@@ -10,10 +12,28 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+export interface ReaderTextSelection {
+  page: number;
+  text: string;
+  rect: { x: number; y: number; w: number; h: number };
+  anchor: { x: number; y: number };
+}
+
+export interface ReaderAnnotationFocus {
+  id: string;
+  page: number;
+  rect: { x: number; y: number; w: number; h: number } | null;
+}
+
 interface ReaderPdfCanvasViewerProps {
   src: string;
   scale: number;
   onPageCount: (pageCount: number) => void;
+  onTextSelect?: (selection: ReaderTextSelection) => void;
+  focusAnnotation?: ReaderAnnotationFocus | null;
+  onFocusComplete?: () => void;
+  /** Постоянная подсветка активного выделения (пока открыт попап) */
+  activeHighlight?: { page: number; rect: { x: number; y: number; w: number; h: number } } | null;
 }
 
 interface ReaderPdfPageProps {
@@ -23,6 +43,9 @@ interface ReaderPdfPageProps {
   defaultSize: ReaderPdfPageSize | null;
   renderImmediately: boolean;
   onNavigateToDestination: (destination: PdfLinkDestination) => void;
+  highlightRect?: { x: number; y: number; w: number; h: number } | null;
+  highlightKey?: string | null;
+  highlightPersistent?: boolean;
 }
 
 interface ReaderPdfPageSize {
@@ -60,11 +83,20 @@ export function ReaderPdfCanvasViewer({
   src,
   scale,
   onPageCount,
+  onTextSelect,
+  focusAnnotation,
+  onFocusComplete,
+  activeHighlight = null,
 }: ReaderPdfCanvasViewerProps) {
+  const documentRef = useRef<HTMLDivElement | null>(null);
+  const onFocusCompleteRef = useRef(onFocusComplete);
+  onFocusCompleteRef.current = onFocusComplete;
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageNumbers, setPageNumbers] = useState<number[]>([]);
   const [defaultPageSize, setDefaultPageSize] = useState<ReaderPdfPageSize | null>(null);
   const [hasError, setHasError] = useState(false);
+  /** Подсветка стартует только когда целевая страница реально видна */
+  const [visibleHighlight, setVisibleHighlight] = useState<ReaderAnnotationFocus | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -149,6 +181,135 @@ export function ReaderPdfCanvasViewer({
     });
   };
 
+  const handleMouseUp = () => {
+    if (!onTextSelect) {
+      return;
+    }
+
+    const selection = window.getSelection();
+    const text = selection?.toString().trim() ?? '';
+    if (!text || !selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const pageElement = range.commonAncestorContainer.parentElement?.closest('.reader-pdf-page');
+    if (!pageElement || !documentRef.current?.contains(pageElement)) {
+      return;
+    }
+
+    const pageId = pageElement.id;
+    const pageMatch = pageId.match(/reader-pdf-page-(\d+)/);
+    const page = pageMatch ? Number(pageMatch[1]) : 1;
+    const pageRect = pageElement.getBoundingClientRect();
+    const selectionRect = range.getBoundingClientRect();
+
+    onTextSelect({
+      page,
+      text,
+      rect: {
+        x: selectionRect.left - pageRect.left,
+        y: selectionRect.top - pageRect.top,
+        w: selectionRect.width,
+        h: selectionRect.height,
+      },
+      anchor: {
+        x: selectionRect.left + selectionRect.width / 2,
+        y: selectionRect.bottom,
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!focusAnnotation) {
+      setVisibleHighlight(null);
+      return;
+    }
+
+    let cancelled = false;
+    let flashTimer: ReturnType<typeof setTimeout> | null = null;
+    let observer: IntersectionObserver | null = null;
+    let flashStarted = false;
+
+    const startFlash = () => {
+      if (cancelled || flashStarted) {
+        return;
+      }
+      flashStarted = true;
+      setVisibleHighlight(focusAnnotation);
+      flashTimer = setTimeout(() => {
+        if (!cancelled) {
+          setVisibleHighlight(null);
+          onFocusCompleteRef.current?.();
+        }
+      }, 2200);
+    };
+
+    const tryAttach = () => {
+      const pageElement = document.getElementById(`reader-pdf-page-${focusAnnotation.page}`);
+      if (!pageElement) {
+        return false;
+      }
+
+      pageElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+
+      const rect = pageElement.getBoundingClientRect();
+      const alreadyVisible =
+        rect.top < window.innerHeight * 0.85 && rect.bottom > window.innerHeight * 0.15;
+
+      if (alreadyVisible) {
+        // Дать scrollIntoView чуть подровнять позицию
+        window.setTimeout(startFlash, 120);
+        return true;
+      }
+
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.15) {
+            startFlash();
+            observer?.disconnect();
+            observer = null;
+          }
+        },
+        { threshold: [0.15, 0.3, 0.5] },
+      );
+      observer.observe(pageElement);
+
+      // Fallback: если smooth scroll долгий / IO не сработал
+      window.setTimeout(() => {
+        if (!flashStarted) {
+          startFlash();
+          observer?.disconnect();
+          observer = null;
+        }
+      }, 1200);
+
+      return true;
+    };
+
+    // Страница может ещё не быть в DOM — ретраим коротко
+    let attempts = 0;
+    const attachInterval = window.setInterval(() => {
+      attempts += 1;
+      if (tryAttach() || attempts >= 20) {
+        window.clearInterval(attachInterval);
+      }
+    }, 50);
+    tryAttach();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(attachInterval);
+      observer?.disconnect();
+      if (flashTimer) {
+        clearTimeout(flashTimer);
+      }
+    };
+  }, [focusAnnotation]);
+
   if (hasError) {
     return <div className="reader-pdf-status">PDF could not be loaded</div>;
   }
@@ -158,7 +319,7 @@ export function ReaderPdfCanvasViewer({
   }
 
   return (
-    <div className="reader-pdf-document">
+    <div className="reader-pdf-document" ref={documentRef} onMouseUp={handleMouseUp}>
       {pageNumbers.map((pageNumber) => (
         <ReaderPdfPage
           key={pageNumber}
@@ -166,8 +327,25 @@ export function ReaderPdfCanvasViewer({
           pdf={pdf}
           scale={scale}
           defaultSize={defaultPageSize}
-          renderImmediately={pageNumber === 1}
+          renderImmediately={
+            pageNumber === 1 || focusAnnotation?.page === pageNumber
+          }
           onNavigateToDestination={navigateToDestination}
+          highlightRect={
+            activeHighlight?.page === pageNumber
+              ? activeHighlight.rect
+              : visibleHighlight?.page === pageNumber
+                ? visibleHighlight.rect
+                : null
+          }
+          highlightKey={
+            activeHighlight?.page === pageNumber
+              ? `active-${pageNumber}`
+              : visibleHighlight?.page === pageNumber
+                ? visibleHighlight.id
+                : null
+          }
+          highlightPersistent={activeHighlight?.page === pageNumber}
         />
       ))}
     </div>
@@ -181,9 +359,13 @@ function ReaderPdfPage({
   defaultSize,
   renderImmediately,
   onNavigateToDestination,
+  highlightRect,
+  highlightKey,
+  highlightPersistent = false,
 }: ReaderPdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [shouldRender, setShouldRender] = useState(renderImmediately);
   const [pageSize, setPageSize] = useState<ReaderPdfPageSize | null>(defaultSize);
   const [links, setLinks] = useState<ReaderPdfLink[]>([]);
@@ -195,6 +377,12 @@ function ReaderPdfPage({
       setPageSize(defaultSize);
     }
   }, [defaultSize, hasRenderedPage]);
+
+  useEffect(() => {
+    if (renderImmediately) {
+      setShouldRender(true);
+    }
+  }, [renderImmediately]);
 
   useEffect(() => {
     if (shouldRender) {
@@ -230,9 +418,10 @@ function ReaderPdfPage({
 
     let isCancelled = false;
     let renderTask: RenderTask | null = null;
+    let textLayerTask: TextLayerRenderTask | null = null;
     setHasRenderError(false);
 
-    void pdf.getPage(pageNumber).then((page) => {
+    void pdf.getPage(pageNumber).then(async (page) => {
       if (isCancelled) {
         return;
       }
@@ -285,42 +474,137 @@ function ReaderPdfPage({
           .filter((link) => (link.href || link.destination) && link.width > 0 && link.height > 0),
       ).catch(() => []);
 
-      renderTask.promise
-        .then(async () => {
-          const canvas = canvasRef.current;
-          const canvasContext = canvas?.getContext('2d');
-          const nextLinks = await nextLinksPromise;
+      try {
+        await renderTask.promise;
+        const canvas = canvasRef.current;
+        const canvasContext = canvas?.getContext('2d');
+        const nextLinks = await nextLinksPromise;
 
-          if (isCancelled || !canvas || !canvasContext) {
+        if (isCancelled || !canvas || !canvasContext) {
+          return;
+        }
+
+        canvas.width = nextCanvas.width;
+        canvas.height = nextCanvas.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+
+        canvasContext.setTransform(1, 0, 0, 1, 0, 0);
+        canvasContext.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+        canvasContext.drawImage(nextCanvas, 0, 0);
+
+        setPageSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        setLinks(nextLinks);
+        setHasRenderedPage(true);
+
+        const textLayer = textLayerRef.current;
+        if (textLayer) {
+          textLayer.replaceChildren();
+          textLayer.style.setProperty('--scale-factor', String(viewport.scale));
+          textLayer.style.width = `${viewport.width}px`;
+          textLayer.style.height = `${viewport.height}px`;
+
+          const textContent = await page.getTextContent();
+          textLayerTask = renderTextLayer({
+            textContentSource: textContent,
+            container: textLayer,
+            viewport,
+            textDivs: [],
+            textContentItemsStr: [],
+          });
+          await textLayerTask.promise;
+
+          if (isCancelled) {
             return;
           }
 
-          canvas.width = nextCanvas.width;
-          canvas.height = nextCanvas.height;
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
+          // Mozilla: блок под текстом, чтобы drag мимо строки не цеплял весь документ
+          const endOfContent = document.createElement('div');
+          endOfContent.className = 'endOfContent';
+          textLayer.append(endOfContent);
 
-          canvasContext.setTransform(1, 0, 0, 1, 0, 0);
-          canvasContext.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-          canvasContext.drawImage(nextCanvas, 0, 0);
-
-          setPageSize({
-            width: viewport.width,
-            height: viewport.height,
+          // Запас вокруг глифов — курсор чуть мимо не «вываливается» из спана
+          const padX = Math.max(5, Math.round(viewport.scale * 3.5));
+          const padY = Math.max(2, Math.round(viewport.scale * 1.5));
+          textLayer.querySelectorAll(':scope > span').forEach((node) => {
+            const span = node as HTMLElement;
+            if (span.classList.contains('markedContent')) {
+              return;
+            }
+            span.style.padding = `${padY}px ${padX}px`;
+            span.style.margin = `-${padY}px -${padX}px`;
+            span.style.boxSizing = 'content-box';
           });
-          setLinks(nextLinks);
-          setHasRenderedPage(true);
-        })
-        .catch(() => {
-          if (!isCancelled) {
-            setHasRenderError(true);
-          }
-        });
+
+          let selecting = false;
+
+          const updateEndOfContent = (clientY: number) => {
+            const end = textLayer.querySelector('.endOfContent') as HTMLElement | null;
+            if (!end) {
+              return;
+            }
+            const bounds = textLayer.getBoundingClientRect();
+            const slackPx = Math.max(10, padY * 3);
+            const ratio = Math.max(0, (clientY - bounds.top - slackPx) / bounds.height);
+            end.style.top = `${(ratio * 100).toFixed(2)}%`;
+            end.classList.add('active');
+          };
+
+          const onMouseDown = (event: MouseEvent) => {
+            selecting = true;
+            updateEndOfContent(event.clientY);
+          };
+
+          const onMouseMove = (event: MouseEvent) => {
+            if (!selecting) {
+              return;
+            }
+            updateEndOfContent(event.clientY);
+          };
+
+          const onMouseUp = () => {
+            selecting = false;
+            const end = textLayer.querySelector('.endOfContent') as HTMLElement | null;
+            if (!end) {
+              return;
+            }
+            end.style.top = '';
+            end.classList.remove('active');
+          };
+
+          textLayer.addEventListener('mousedown', onMouseDown);
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          textLayer.dataset.selectionBound = '1';
+          (
+            textLayer as HTMLDivElement & {
+              __selectionCleanup?: () => void;
+            }
+          ).__selectionCleanup = () => {
+            textLayer.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+          };
+        }
+      } catch {
+        if (!isCancelled) {
+          setHasRenderError(true);
+        }
+      }
     });
 
     return () => {
       isCancelled = true;
       renderTask?.cancel();
+      textLayerTask?.cancel();
+      const textLayer = textLayerRef.current as
+        | (HTMLDivElement & { __selectionCleanup?: () => void })
+        | null;
+      textLayer?.__selectionCleanup?.();
+      delete textLayer?.__selectionCleanup;
     };
   }, [pageNumber, pdf, scale, shouldRender]);
 
@@ -340,6 +624,25 @@ function ReaderPdfPage({
     >
       {hasRenderError ? <div className="reader-pdf-page__error">Page failed to render</div> : null}
       {shouldRender ? <canvas ref={canvasRef} className="reader-pdf-page__canvas" /> : null}
+      {shouldRender ? (
+        <div ref={textLayerRef} className="textLayer reader-pdf-page__text-layer" />
+      ) : null}
+      {highlightRect && highlightRect.w > 0 && highlightRect.h > 0 ? (
+        <div
+          key={highlightKey ?? 'highlight'}
+          className={
+            highlightPersistent
+              ? 'reader-pdf-page__highlight reader-pdf-page__highlight--active'
+              : 'reader-pdf-page__highlight'
+          }
+          style={{
+            left: highlightRect.x,
+            top: highlightRect.y,
+            width: highlightRect.w,
+            height: highlightRect.h,
+          }}
+        />
+      ) : null}
       {links.length > 0 ? (
         <div className="reader-pdf-page__link-layer" aria-hidden={false}>
           {links.map((link, index) => (

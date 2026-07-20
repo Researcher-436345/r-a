@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { fetchLibrary } from '../../library/api';
 import { useI18n } from '../../../shared/i18n/i18n-context';
 import { trendingPapersQuery } from '../queries';
 import { PaperCard } from './paper-card';
@@ -10,6 +12,26 @@ const skeletons = ['one', 'two', 'three'] as const;
 export function TrendingPapers() {
   const { t } = useI18n();
   const { data: papers = [], isLoading, isError } = useQuery(trendingPapersQuery());
+  const [libraryByArxiv, setLibraryByArxiv] = useState<Record<string, string>>({});
+
+  const refreshLibraryMap = useCallback(async () => {
+    try {
+      const data = await fetchLibrary(1, 100);
+      const map: Record<string, string> = {};
+      for (const item of data.items) {
+        if (item.paper.arxiv_id) {
+          map[item.paper.arxiv_id] = item.paper.id;
+        }
+      }
+      setLibraryByArxiv(map);
+    } catch {
+      // лента работает и без карты библиотеки
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLibraryMap();
+  }, [refreshLibraryMap]);
 
   return (
     <section className="trending-papers" aria-labelledby="trending-papers-title">
@@ -45,7 +67,22 @@ export function TrendingPapers() {
       {!isLoading && !isError ? (
         <div className="paper-list">
           {papers.map((paper) => (
-            <PaperCard key={paper.id} paper={paper} />
+            <PaperCard
+              key={paper.id}
+              paper={paper}
+              libraryPaperId={libraryByArxiv[paper.arxivId] ?? null}
+              onLibraryChange={(arxivId, libraryPaperId) => {
+                setLibraryByArxiv((current) => {
+                  const next = { ...current };
+                  if (libraryPaperId) {
+                    next[arxivId] = libraryPaperId;
+                  } else {
+                    delete next[arxivId];
+                  }
+                  return next;
+                });
+              }}
+            />
           ))}
         </div>
       ) : null}

@@ -1,24 +1,18 @@
-import { Moon, Sun, X } from 'lucide-react';
+import { FileText, LayoutTemplate, Moon, Sun, X } from 'lucide-react';
 
 import { useI18n } from '../../shared/i18n/i18n-context';
+import { useTheme } from '../../shared/theme/theme-context';
 import { IconButton } from '../../shared/ui/icon-button';
 import { SegmentedControl } from '../../shared/ui/segmented-control';
-import type { ThemeMode } from './app-layout';
 
 interface SettingsModalProps {
   isOpen: boolean;
-  theme: ThemeMode;
-  onThemeChange: (theme: ThemeMode) => void;
   onClose: () => void;
 }
 
-export function SettingsModal({
-  isOpen,
-  theme,
-  onThemeChange,
-  onClose,
-}: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { locale, setLocale, t } = useI18n();
+  const { theme, setTheme, readerThemeScope, setReaderThemeScope } = useTheme();
 
   if (!isOpen) {
     return null;
@@ -62,10 +56,34 @@ export function SettingsModal({
           <SegmentedControl
             ariaLabel={t('settings.themeSetting')}
             value={theme}
-            onChange={onThemeChange}
+            onChange={setTheme}
             options={[
               { value: 'light', label: t('nav.light'), icon: Sun },
               { value: 'dark', label: t('nav.dark'), icon: Moon },
+            ]}
+          />
+        </div>
+
+        <div className="settings-modal__row">
+          <div className="settings-modal__copy">
+            <div>{t('settings.readerTheme')}</div>
+            <span>{t('settings.readerThemeHint')}</span>
+          </div>
+          <SegmentedControl
+            ariaLabel={t('settings.readerTheme')}
+            value={readerThemeScope}
+            onChange={setReaderThemeScope}
+            options={[
+              {
+                value: 'with-ui' as const,
+                label: t('settings.readerThemeBoth'),
+                icon: LayoutTemplate,
+              },
+              {
+                value: 'ui-only' as const,
+                label: t('settings.readerThemeUiOnly'),
+                icon: FileText,
+              },
             ]}
           />
         </div>

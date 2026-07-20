@@ -12,6 +12,10 @@ npm run dev -- --port 5173
 
 Open `http://localhost:5173`.
 
+Auth pages: `/login`, `/register`.  
+API URL: `VITE_API_URL` in `.env` (default `http://localhost:8080`).  
+Backend must be running (`docker compose up` from repo root).
+
 ## Commands
 
 ```bash

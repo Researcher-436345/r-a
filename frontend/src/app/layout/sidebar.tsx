@@ -1,10 +1,12 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
+  BookMarked,
   ChevronDown,
   ChevronRight,
   FileText,
   Folder,
   Globe,
+  LogOut,
   MessageSquare,
   Moon,
   PanelLeftClose,
@@ -15,9 +17,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { clearTokens } from '../../features/auth/token-storage';
 import { useI18n } from '../../shared/i18n/i18n-context';
 import { LogoMark } from '../../shared/ui/logo-mark';
-import type { ThemeMode } from './app-layout';
+import type { ThemeMode } from '../../shared/theme/theme-context';
 
 interface SidebarProps {
   theme: ThemeMode;
@@ -51,9 +54,11 @@ interface SidebarFooterProps {
   settingsLabel: string;
   feedbackLabel: string;
   themeLabel: string;
+  logoutLabel: string;
   ThemeIcon: LucideIcon;
   onOpenSettings: () => void;
   onToggleTheme: () => void;
+  onLogout: () => void;
 }
 
 const homeSidebarProjects = [
@@ -95,6 +100,7 @@ export function Sidebar({
   projects = homeSidebarProjects,
 }: SidebarProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [areProjectsOpen, setAreProjectsOpen] = useState(defaultProjectsOpen);
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({});
@@ -103,6 +109,11 @@ export function Sidebar({
   const ThemeIcon = theme === 'light' ? Moon : Sun;
   const CollapseIcon = isCollapsed ? PanelLeftOpen : PanelLeftClose;
   const themeLabel = theme === 'light' ? t('nav.darkMode') : t('nav.lightMode');
+
+  const handleLogout = () => {
+    clearTokens();
+    void navigate({ to: '/login' });
+  };
 
   useEffect(() => {
     setIsCollapsed(defaultCollapsed);
@@ -157,9 +168,11 @@ export function Sidebar({
         settingsLabel={t('nav.settings')}
         feedbackLabel={t('nav.feedback')}
         themeLabel={themeLabel}
+        logoutLabel="Выйти"
         ThemeIcon={ThemeIcon}
         onOpenSettings={onOpenSettings}
         onToggleTheme={() => onThemeChange(nextTheme)}
+        onLogout={handleLogout}
       />
     </aside>
   );
@@ -180,13 +193,24 @@ function SidebarPrimaryNav({
     <nav className="sidebar__nav" aria-label="Primary navigation">
       <Link
         to="/"
-        className="sidebar__nav-button sidebar__nav-button--active"
+        className="sidebar__nav-button"
         title={searchLabel}
         aria-label={searchLabel}
         activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
       >
         <Globe aria-hidden="true" size={18} strokeWidth={2} />
         {!isCollapsed ? <span>{searchLabel}</span> : null}
+      </Link>
+
+      <Link
+        to="/library"
+        className="sidebar__nav-button"
+        title="Библиотека"
+        aria-label="Библиотека"
+        activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
+      >
+        <BookMarked aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>Библиотека</span> : null}
       </Link>
 
       <div className="sidebar__group">
@@ -276,9 +300,11 @@ function SidebarFooter({
   settingsLabel,
   feedbackLabel,
   themeLabel,
+  logoutLabel,
   ThemeIcon,
   onOpenSettings,
   onToggleTheme,
+  onLogout,
 }: SidebarFooterProps) {
   return (
     <div className="sidebar__footer">
@@ -305,6 +331,16 @@ function SidebarFooter({
       >
         <ThemeIcon aria-hidden="true" size={18} strokeWidth={2} />
         {!isCollapsed ? <span>{themeLabel}</span> : null}
+      </button>
+
+      <button
+        className="sidebar__nav-button"
+        type="button"
+        title={logoutLabel}
+        onClick={onLogout}
+      >
+        <LogOut aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{logoutLabel}</span> : null}
       </button>
     </div>
   );
