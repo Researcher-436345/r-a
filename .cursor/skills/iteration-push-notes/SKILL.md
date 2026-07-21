@@ -12,7 +12,7 @@ description: >-
 
 ## Goal
 
-Produce a single file **`ITERATION_PUSH.md`** at the repo root that is detailed enough for another developer (or agent) to continue the project without prior chat context.
+Produce a single file **`docs/ITERATION_PUSH.md`** that is detailed enough for another developer (or agent) to continue the project without prior chat context.
 
 ## When
 
@@ -21,7 +21,7 @@ Produce a single file **`ITERATION_PUSH.md`** at the repo root that is detailed 
 
 ## Output file
 
-Write/overwrite: `ITERATION_PUSH.md` (repo root — the directory that contains `docker-compose.yml` and `frontend/` or `r-a/frontend/`).
+Write/overwrite: `docs/ITERATION_PUSH.md` (create `docs/` if needed).
 
 First lines **must** include:
 
@@ -36,16 +36,14 @@ Branch: <current branch>
 
 ## Workflow
 
-1. Detect layout:
-   - Monorepo in `r-a`: `frontend/`, `backend-go/`, …
-   - Or parent `researcher/` with nested `r-a/frontend/`
-2. Read existing: `HANDOFF.md`, `STATUS.md`, `iteration-1.md` (epic tables), `GO_MIGRATION.md` if present.
+1. Detect layout: `backend/` (Go), `frontend/`, `docs/`.
+2. Read existing: `docs/HANDOFF.md`, `docs/STATUS.md`, `docs/iteration-1.md` if present.
 3. Verify against code (do not invent ✅):
-   - Routes: `backend-go/internal/httpapi/` or `backend/app/routers/`
-   - Compose: `docker-compose.yml` (which image is api/worker)
-   - Frontend: reader PDF path, auth, library
-4. Write `ITERATION_PUSH.md` using the template below (fill with real facts).
-5. Tell the user to commit `ITERATION_PUSH.md` (and related docs) then `git push`.
+   - Routes: `backend/internal/httpapi/`
+   - Compose: `docker-compose.yml`
+   - Frontend: `frontend/src/...`
+4. Write `docs/ITERATION_PUSH.md` using the template below.
+5. Tell the user to commit and push.
 
 ## Template (fill in; keep headings)
 
@@ -89,5 +87,5 @@ List endpoints touched or the full private API summary.
 - Prefer evidence from the repo over chat memory.
 - Russian is OK (project language); keep structure scannable.
 - Do not put secrets (API keys, `.env` values) in the file.
-- Keep under ~250 lines; link to `HANDOFF.md` / `STATUS.md` for long history.
-- After writing, remind: `git add ITERATION_PUSH.md && git commit && git push`.
+- Keep under ~250 lines; link to `docs/HANDOFF.md` / `docs/STATUS.md` for long history.
+- After writing, remind: `git add docs/ITERATION_PUSH.md && git commit && git push`.
