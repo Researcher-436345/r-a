@@ -36,7 +36,10 @@ func Check(ctx context.Context, pool *pgxpool.Pool) bool {
 }
 
 func MigrationsOK(ctx context.Context, pool *pgxpool.Pool) bool {
-	var v string
-	err := pool.QueryRow(ctx, `SELECT version_num FROM alembic_version LIMIT 1`).Scan(&v)
-	return err == nil && v != ""
+	var n int
+	err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name IN ('users', 'papers')
+	`).Scan(&n)
+	return err == nil && n == 2
 }
