@@ -33,28 +33,29 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
       MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:5173,http://127.0.0.1:5173"
     ports:
+      # Host 9000/9002 often clash with Cursor — keep 9002 for API
       - "9002:9000"
       - "9003:9001"
     volumes:
       - minio_data:/data
 
-  # One-shot Alembic migrations (schema shared with Go API)
   migrate:
-    build:
-      context: ./backend
+    image: postgres:16-alpine
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+psycopg://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+    volumes:
+      - ./migrations:/migrations:ro
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["alembic", "upgrade", "head"]
+    entrypoint: ["/bin/sh", "/migrations/migrate.sh"]
     restart: "no"
 
   api:
     build:
-      context: ./backend-go
+      context: ./backend
     ports:
       - "8080:8000"
     env_file:
@@ -80,7 +81,7 @@ services:
 
   worker:
     build:
-      context: ./backend-go
+      context: ./backend
     env_file:
       - .env
     environment:
@@ -101,14 +102,6 @@ services:
       migrate:
         condition: service_completed_successfully
     entrypoint: ["worker"]
-
-  # Optional: старый Python API на 8081, если нужен fallback
-  # api-python:
-  #   build:
-  #     context: ./backend
-  #   ports:
-  #     - "8081:8000"
-  #   ...
 
 volumes:
   postgres_data:
