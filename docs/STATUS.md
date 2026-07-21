@@ -9,10 +9,10 @@
 
 | Эпик | Приоритет | Статус | Комментарий |
 |------|-----------|--------|-------------|
-| EPIC-01 Инфра | P0 | ✅ | Docker Compose: Go API/worker + Alembic migrate |
+| EPIC-01 Инфра | P0 | ✅ | Docker Compose: Go API/worker + SQL migrations |
 | EPIC-02 Auth | P0 | ✅ | register/login/refresh, JWT (Go) |
 | EPIC-03 Статьи | P0 | ✅ | upload / arXiv / DOI, asynq worker; title из PDF |
-| EPIC-04 Библиотека + PDF | P0 | ✅ | library, ридер; PDF через `GET /papers/{id}/pdf` (blob) |
+| EPIC-04 Библиотека + PDF | P0 | ✅ | library, ридер; PDF через API stream `GET /papers/{id}/pdf` (blob) |
 | EPIC-12 Дедуп | P1 | ✅ | unique DOI/arXiv, SHA-256 |
 | EPIC-06 Заметки | P1 | ✅ | CRUD annotations + UI |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
@@ -24,6 +24,7 @@
 
 ## Недавние изменения (changelog)
 
+- Структура: markdown → `docs/`, Python backend удалён, Go в `backend/`, SQL в `migrations/`
 - **HANDOFF.md** — полный контекст проекта для продолжения работы
 - PDF через API stream (MinIO порты конфликтовали с Cursor)
 - Чипы чата: `стр. N · слова` + клик → прыжок; перевод выделения

@@ -1,6 +1,6 @@
 # Iteration push notes
 
-Last refreshed: 2026-07-20
+Last refreshed: 2026-07-21
 Branch: develop-aleksandr
 Repo: Researcher-436345/r-a
 
@@ -31,7 +31,7 @@ npm run dev -- --port 5173
 | Postgres | localhost:5432 |
 | Redis | localhost:6379 |
 
-Compose: Go `api` + `worker`, one-shot `migrate` (Alembic из `backend/`).
+Compose: Go `api` + `worker`, one-shot SQL `migrate` из `migrations/`.
 
 ## Done / working now
 
@@ -53,7 +53,7 @@ Compose: Go `api` + `worker`, one-shot `migrate` (Alembic из `backend/`).
 - EPIC-10 теги
 - EPIC-08: нет `chat_messages` в БД; LLM часто недоступен из РФ
 - Similar tab — моки
-- Миграции ещё Alembic (Python image), не goose
+- Миграции: SQL в `migrations/` (Python удалён)
 
 ## Architecture snapshot
 
@@ -64,7 +64,7 @@ frontend → JWT → Go API (:8080)
 worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf
 ```
 
-Код API: `backend-go/internal/httpapi/server.go`.  
+Код API: `backend/internal/httpapi/server.go`.  
 Фронт ридера: `frontend/src/pages/reader/`, `frontend/src/features/reader/`, `frontend/src/features/library/api.ts`.
 
 ## Pitfalls
@@ -78,7 +78,7 @@ worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf
 
 1. EPIC-05: projects API + живой sidebar  
 2. chat_messages + история чата  
-3. goose вместо Alembic; убрать Python из runtime  
+3. При смене схемы — новый файл в `migrations/`  
 4. Explain из selection popup  
 5. Дочистить моки Similar / Ask-box  
 
@@ -90,6 +90,6 @@ worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf
 
 - `HANDOFF.md`, `STATUS.md`, `ITERATION_PUSH.md` (этот файл)
 - `docker-compose.yml`, `.env.example`
-- `backend-go/cmd/api`, `backend-go/cmd/worker`, `backend-go/internal/httpapi/server.go`
+- `backend/cmd/api`, `backend/cmd/worker`, `backend/internal/httpapi/server.go`
 - `frontend/src/features/library/api.ts`, `frontend/src/pages/reader/reader-page.tsx`
 - `.cursor/skills/iteration-push-notes/SKILL.md`, `.cursor/hooks.json`

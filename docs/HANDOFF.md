@@ -2,9 +2,9 @@
 
 **Для кого:** любой, кто продолжает разработку.  
 **Дата:** 2026-07-20  
-**Коротко:** локальный прототип научной библиотеки + PDF-ридер. Сквозной сценарий «зарегистрироваться → добавить статью → читать → заметки» работает. AI из РФ нестабилен. Бэкенд уже на **Go**; Python остался только для миграций.
+**Коротко:** локальный прототип научной библиотеки + PDF-ридер. Сквозной сценарий «зарегистрироваться → добавить статью → читать → заметки» работает. AI из РФ нестабилен. Бэкенд на **Go**; схема БД — SQL в `migrations/`.
 
-Живой чеклист эпиков: [`STATUS.md`](./STATUS.md).  
+Живой чеклист эпиков: [`STATUS.md`](./STATUS.md) (эта папка `docs/`).  
 План итерации 1: [`iteration-1.md`](./iteration-1.md).  
 Долгий roadmap: [`roadmap.md`](./roadmap.md).
 
@@ -29,17 +29,14 @@ UI изначально был прототипом на моках (`frontend/`
 
 ```
 r-a/   (GitHub: Researcher-436345/r-a)
-├── backend-go/          # Актуальный API + worker (Go) ← основной бэкенд
-├── backend/             # Старый FastAPI; сейчас только Alembic (сервис migrate)
-├── frontend/        # React + Vite + TanStack Router/Query + PDF.js
-├── docker-compose.yml   # postgres, redis, minio, migrate, api, worker
-├── .env / .env.example
-├── iteration-1.md       # детальный план эпиков TASK-*
-├── roadmap.md           # этапы 0–5 + backlog идей
-├── STATUS.md            # краткий статус ✅/🟡/❌
-├── GO_MIGRATION.md      # заметки по переезду Python → Go
-├── HANDOFF.md           # этот файл
-└── .cursor/skills/project-status/  # скилл обновления STATUS.md
+├── backend/          # Go API + worker
+├── frontend/         # React + Vite + PDF.js
+├── docs/             # HANDOFF, STATUS, планы, push-notes
+├── migrations/       # SQL schema (без Python)
+├── docker-compose.yml
+├── README.md
+├── .env.example
+└── .cursor/          # skills + push hook
 ```
 
 ### Git (важно)
@@ -49,7 +46,7 @@ r-a/   (GitHub: Researcher-436345/r-a)
 | `researcher/` (корень) | часто **нет** remote; локальный `.git` | `main` |
 | этот репозиторий (`r-a`) | `github.com/Researcher-436345/r-a.git` | `develop` / `develop-aleksandr` |
 
-`r-a` — **вложенный** git-репозиторий. Фронт коммитить/пушить из `r-a/`. Корень держит бэкенд, compose, доки.
+`r-a` — **вложенный** git-репозиторий и **канон для GitHub**. Коммитить/пушить из `r-a/`. Корень `researcher/` — локальный workspace (может дублировать backend/docs).
 
 SSH для GitHub: ключ обычно `~/.ssh/id_ed25519`. Remote лучше на `git@github.com:...`.
 
@@ -89,7 +86,7 @@ npm run dev -- --port 5173
 Browser (5173)
     │  JWT Bearer
     ▼
-Go API (:8080)  ──► Postgres (схема из Alembic)
+Go API (:8080)  ──► Postgres (схема из `migrations/`)
     │           ──► Redis (asynq queue + feed cache)
     │           ──► MinIO (PDF), внутри Docker: minio:9000
     │
@@ -124,8 +121,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 | Область | Статус | Где смотреть |
 |---------|--------|--------------|
-| Docker Compose, health | ✅ | `docker-compose.yml`, `backend-go` |
-| Auth API + UI login/register | ✅ | `backend-go/internal/httpapi`, `frontend/src/pages/auth` |
+| Docker Compose, health | ✅ | `docker-compose.yml`, `backend` |
+| Auth API + UI login/register | ✅ | `backend/internal/httpapi`, `frontend/src/pages/auth` |
 | Papers: arXiv / DOI / upload | ✅ | `store/papers.go`, `services/arxiv|crossref|pdfmeta` |
 | Worker PDF | ✅ | `cmd/worker`, asynq |
 | Дедуп DOI/arXiv/SHA-256 | ✅ | papers service |
@@ -135,8 +132,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 | Trending feed + Redis | ✅ | `services/feed.go`, home page |
 | Chat UI + tokens из выделения | ✅ | `chat-composer`, чипы `стр. N · слова`, клик → прыжок |
 | Translate selection | ✅ | popup «Перевод» |
-| Title из PDF при upload | ✅ | pdfmeta (Go) / pypdf (Python legacy) |
-| Go вместо FastAPI в compose | ✅ | api/worker images from `backend-go` |
+| Title из PDF при upload | ✅ | pdfmeta (Go) |
+| Go вместо FastAPI в compose | ✅ | api/worker images from `backend` |
 
 ### User story
 
@@ -162,8 +159,7 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 | **EPIC-08 довести** | P1 | нет `chat_messages` в БД; explain из попапа слабо; LLM |
 | **EPIC-11** | P0 остаток | Similar tab — моки; проекты — моки |
 | История чата | — | только local state во фронте |
-| Миграции на Go (goose) | — | всё ещё Alembic из `backend/` |
-| Удаление Python-кода | — | можно после goose + уверенности в Go |
+| Новые SQL-миграции | — | добавлять файлы в `migrations/` |
 | Свободные заметки без выделения | backlog | идеи в `roadmap.md` §13 |
 
 ---
@@ -172,12 +168,12 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 **Go**
 
-- `backend-go/cmd/api/main.go` — HTTP  
-- `backend-go/cmd/worker/main.go` — asynq  
-- `backend-go/internal/httpapi/server.go` — все роуты  
-- `backend-go/internal/store/` — SQL  
-- `backend-go/internal/storage/s3.go` — MinIO  
-- `backend-go/internal/services/` — arxiv, crossref, feed, llm, translate, pdfmeta  
+- `backend/cmd/api/main.go` — HTTP  
+- `backend/cmd/worker/main.go` — asynq  
+- `backend/internal/httpapi/server.go` — все роуты  
+- `backend/internal/store/` — SQL  
+- `backend/internal/storage/s3.go` — MinIO  
+- `backend/internal/services/` — arxiv, crossref, feed, llm, translate, pdfmeta  
 
 **Frontend**
 
@@ -188,7 +184,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 **Схема БД**
 
-- `backend/alembic/versions/` — users → papers/library → annotations  
+- `migrations/001_init.sql` — baseline schema  
+- `migrations/migrate.sh` — apply / mark applied  
 
 ---
 
@@ -196,8 +193,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 1. **Порты MinIO 9000/9002** — Cursor может слушать те же порты на localhost. Не полагаться на presigned URL с хоста; PDF только через API.  
 2. **LLM из России** — прямой Gemini и OpenRouter часто режут. AITunnel / DeepSeek / Ollama.  
-3. **Два git** — не пушь фронт из корня как submodule «вслепую»; работай в `r-a/`.  
-4. **Старый Python API** — не в compose как основной; код в `backend/app` может расходиться с Go. Новые фичи — в **Go**.  
+3. **Два git** — не пушь из корня «вслепую»; работай в `r-a/`.  
+4. **Python backend удалён** — единственный API в `backend/` (Go).  
 5. **После `docker compose down`** volumes обычно остаются; данные Postgres/MinIO не обязаны пропадать.
 
 ---
@@ -221,8 +218,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 ### Если дочищаешь Go
 
-1. Перенести миграции на goose, убрать зависимость от Python image.  
-2. Удалить неиспользуемый FastAPI код.  
+1. Документировать новые SQL-миграции в `migrations/`.  
+2. Python backend удалён.  
 3. Обновить `GO_MIGRATION.md` / `STATUS.md`.
 
 ### Если работаешь агентом в Cursor
