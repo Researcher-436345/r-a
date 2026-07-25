@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -60,6 +62,9 @@ func (s Server) Router() http.Handler {
 		r.Post("/papers/{paperID}/chat", s.chat)
 		r.Post("/papers/{paperID}/explain", s.explain)
 		r.Post("/papers/{paperID}/translate", s.translate)
+		r.Get("/research/chats", s.listResearchChats)
+		r.Get("/research/chats/{chatID}", s.getResearchChat)
+		r.Post("/research/chats/{chatID}/messages", s.researchChat)
 		r.Get("/library", s.library)
 		r.Patch("/library/{paperID}", s.patchLibrary)
 		r.Delete("/library/{paperID}", s.deleteLibrary)
@@ -73,6 +78,9 @@ func (s Server) Router() http.Handler {
 }
 func (s Server) users() store.Users   { return store.Users{DB: s.DB} }
 func (s Server) papers() store.Papers { return store.Papers{DB: s.DB} }
+func (s Server) researchChats() store.ResearchChats {
+	return store.ResearchChats{DB: s.DB}
+}
 func (s Server) root(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, map[string]string{"service": s.Config.AppName, "docs": "/docs", "health": "/health", "db_reachable": strconv.FormatBool(db.Check(r.Context(), s.DB))})
 }
@@ -535,6 +543,141 @@ func (s Server) translate(w http.ResponseWriter, r *http.Request) {
 	t, d := services.Translate(r.Context(), services.LLM{Config: s.Config}, p, b.Text, b.TargetLang)
 	httpx.JSON(w, 200, map[string]any{"translation": t, "detected_source": d})
 }
+
+func (s Server) listResearchChats(w http.ResponseWriter, r *http.Request) {
+	chats, err := s.researchChats().List(r.Context(), userID(r))
+	if err != nil {
+		httpx.Error(w, 500, "Failed to load research chats")
+		return
+	}
+	httpx.JSON(w, 200, chats)
+}
+
+func (s Server) getResearchChat(w http.ResponseWriter, r *http.Request) {
+	chatID, ok := parseID(w, r, "chatID")
+	if !ok {
+		return
+	}
+	chat, err := s.researchChats().Get(r.Context(), userID(r), chatID)
+	if store.IsNotFound(err) {
+		httpx.Error(w, 404, "Research chat not found")
+		return
+	}
+	if err != nil {
+		httpx.Error(w, 500, "Failed to load research chat")
+		return
+	}
+	httpx.JSON(w, 200, chat)
+}
+
+func (s Server) researchChat(w http.ResponseWriter, r *http.Request) {
+	chatID, ok := parseID(w, r, "chatID")
+	if !ok {
+		return
+	}
+	var body struct {
+		Message string `json:"message"`
+		Mode    string `json:"mode"`
+	}
+	if !httpx.DecodeJSON(w, r, &body) {
+		return
+	}
+	body.Message = strings.TrimSpace(body.Message)
+	if body.Message == "" {
+		httpx.Error(w, 400, "Message is required")
+		return
+	}
+	if len([]rune(body.Message)) > 20_000 {
+		httpx.Error(w, 400, "Message is too long")
+		return
+	}
+	if body.Mode != "deep" {
+		body.Mode = "web"
+	}
+
+	title := truncateRunes(strings.Join(strings.Fields(body.Message), " "), 120)
+	chats := s.researchChats()
+	if err := chats.Ensure(r.Context(), userID(r), chatID, title, body.Mode); err != nil {
+		if store.IsNotFound(err) {
+			httpx.Error(w, 404, "Research chat not found")
+		} else {
+			httpx.Error(w, 500, "Failed to create research chat")
+		}
+		return
+	}
+	if _, err := chats.AddMessage(r.Context(), chatID, "user", body.Message); err != nil {
+		httpx.Error(w, 500, "Failed to save message")
+		return
+	}
+	history, err := chats.Messages(r.Context(), chatID, 40)
+	if err != nil {
+		httpx.Error(w, 500, "Failed to load chat context")
+		return
+	}
+	llmHistory := make([]services.LLMMessage, 0, len(history))
+	for _, message := range history {
+		llmHistory = append(llmHistory, services.LLMMessage{
+			Role:    message.Role,
+			Content: message.Content,
+		})
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		httpx.Error(w, 500, "Streaming is not supported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	writeSSE(w, "meta", map[string]string{"chat_id": chatID.String()})
+	flusher.Flush()
+
+	reply, streamErr := (services.LLM{Config: s.Config}).ResearchStream(
+		r.Context(),
+		llmHistory,
+		body.Mode,
+		func(delta string) error {
+			if err := writeSSE(w, "delta", map[string]string{"content": delta}); err != nil {
+				return err
+			}
+			flusher.Flush()
+			return nil
+		},
+	)
+	if streamErr != nil {
+		_ = writeSSE(w, "error", map[string]string{"detail": streamErr.Error()})
+		flusher.Flush()
+		return
+	}
+	message, err := chats.AddMessage(r.Context(), chatID, "assistant", reply)
+	if err != nil {
+		_ = writeSSE(w, "error", map[string]string{"detail": "Answer received but could not be saved"})
+		flusher.Flush()
+		return
+	}
+	_ = writeSSE(w, "done", message)
+	flusher.Flush()
+}
+
+func writeSSE(w http.ResponseWriter, event string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
+	return err
+}
+
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return strings.TrimSpace(string(runes[:limit-1])) + "…"
+}
+
 func (s Server) library(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {

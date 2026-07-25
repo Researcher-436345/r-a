@@ -108,16 +108,16 @@
 .chat-history__items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .chat-history__item {
   display: flex;
   width: 100%;
-  min-height: 36px;
+  min-height: 34px;
   align-items: center;
   overflow: hidden;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 9px;
   background: transparent;
   color: var(--text);
@@ -193,8 +193,8 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
+  gap: 6px;
+  padding: 5px 14px;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-text);
@@ -429,7 +429,7 @@
 }
 
 .chat-markdown > :last-child {
-  margin-bottom: 0;
+  margin-bottom: 14px;
 }
 
 .chat-markdown h1,

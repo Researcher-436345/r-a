@@ -1,8 +1,5 @@
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   CornerDownRight,
   Loader2,
   PanelLeftClose,
@@ -18,18 +15,21 @@ import {
   useState,
 } from 'react';
 
+import {
+  getResearchChat,
+  listResearchChats,
+  streamResearchMessage,
+  type ResearchChatSummary,
+} from '../../features/chat/api';
 import { MarkdownMessage } from '../../features/chat/components/markdown-message';
 import { ResearchComposer } from '../../features/chat/components/research-composer';
-import {
-  getMockFollowUpResponse,
-  getMockResponse,
-} from '../../features/chat/mock-response';
 import {
   createChatId,
   parseResearchMode,
   type ChatMessage,
   type ResearchMode,
 } from '../../features/chat/types';
+import { ApiError } from '../../shared/api/client';
 import { useI18n, type Locale } from '../../shared/i18n/i18n-context';
 
 interface ChatRouteSearch {
@@ -40,11 +40,6 @@ interface ChatRouteSearch {
 }
 
 type ChatScreen = 'conversation' | 'new';
-
-const defaultQuestions: Record<Locale, string> = {
-  ru: 'Какие из новых есть самые производительные web search / deep research подходы?',
-  en: 'Which recent web search and deep research approaches perform best?',
-};
 
 const chatCopy = {
   ru: {
@@ -57,24 +52,14 @@ const chatCopy = {
     historyLabel: 'История диалогов',
     collapseHistory: 'Свернуть список чатов',
     expandHistory: 'Развернуть список чатов',
-    thinkingDone: 'Размышление завершено',
-    thinkingDuration: '42 сек',
-    thinkingDetails:
-      'Пользователь спрашивает о самых производительных подходах к web search и deep research. Стоит разделить ответ на две парадигмы — тренировочные и инференс-оркестрационные — и подкрепить цифрами с ключевых бенчмарков: BrowseComp, GAIA, DeepResearch Bench…',
     preparing: 'Готовлю ответ…',
+    requestFailed: 'Не удалось выполнить исследовательский поиск',
     inputLabel: 'Сообщение',
     modeLabel: 'Режим исследования',
     suggestions: [
       'Что интересного вышло за последнее время?',
       'Собери обзор по свежим методам RLHF',
       'Какие статьи стоит прочитать по агентам?',
-    ],
-    olderChats: [
-      'Multilingual Steering Design',
-      'URL Content',
-      'Llama in English? Llama in…',
-      'ArXiv PDF summary',
-      'Эмбединги текстов как токены',
     ],
   },
   en: {
@@ -87,24 +72,14 @@ const chatCopy = {
     historyLabel: 'Conversation history',
     collapseHistory: 'Collapse chat list',
     expandHistory: 'Expand chat list',
-    thinkingDone: 'Thinking complete',
-    thinkingDuration: '42 sec',
-    thinkingDetails:
-      'The question asks about the strongest web search and deep research approaches. The answer should separate training-based systems from inference orchestration and compare them on BrowseComp, GAIA, and DeepResearch Bench.',
     preparing: 'Preparing an answer…',
+    requestFailed: 'The research search could not be completed',
     inputLabel: 'Message',
     modeLabel: 'Research mode',
     suggestions: [
       'What interesting work was published recently?',
       'Review the latest RLHF methods',
       'Which papers about agents should I read?',
-    ],
-    olderChats: [
-      'Multilingual Steering Design',
-      'URL Content',
-      'Llama in English? Llama in…',
-      'ArXiv PDF summary',
-      'Text embeddings as tokens',
     ],
   },
 } satisfies Record<
@@ -119,23 +94,20 @@ const chatCopy = {
     historyLabel: string;
     collapseHistory: string;
     expandHistory: string;
-    thinkingDone: string;
-    thinkingDuration: string;
-    thinkingDetails: string;
     preparing: string;
+    requestFailed: string;
     inputLabel: string;
     modeLabel: string;
     suggestions: string[];
-    olderChats: string[];
   }
 >;
 
-function readInitialQuestion(search: ChatRouteSearch, locale: Locale) {
+function readInitialQuestion(search: ChatRouteSearch) {
   const candidate = [search.q, search.query, search.question].find(
     (value): value is string => typeof value === 'string' && Boolean(value.trim()),
   );
 
-  return candidate?.trim() ?? defaultQuestions[locale];
+  return candidate?.trim() ?? '';
 }
 
 function conversationTitle(question: string, locale: Locale) {
@@ -152,66 +124,8 @@ function conversationTitle(question: string, locale: Locale) {
   return compact.length > 46 ? `${compact.slice(0, 45).trimEnd()}…` : compact;
 }
 
-function createInitialMessages(
-  question: string,
-  locale: Locale,
-  mode: ResearchMode,
-): ChatMessage[] {
-  return [
-    {
-      id: 'initial-user',
-      role: 'user',
-      content: question,
-    },
-    {
-      id: 'initial-assistant',
-      role: 'assistant',
-      content: getMockResponse(locale, mode),
-    },
-  ];
-}
-
 function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function ThinkingStatus({
-  locale,
-  isOpen,
-  onToggle,
-}: {
-  locale: Locale;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  const copy = chatCopy[locale];
-  const CollapseIcon = isOpen ? ChevronUp : ChevronDown;
-
-  return (
-    <section className="chat-thinking" aria-label={copy.thinkingDone}>
-      <button
-        className="chat-thinking__toggle"
-        type="button"
-        aria-expanded={isOpen}
-        onClick={onToggle}
-      >
-        <CheckCircle2 aria-hidden="true" size={17} strokeWidth={2} />
-        <span className="chat-thinking__title">{copy.thinkingDone}</span>
-        <span className="chat-thinking__duration">{copy.thinkingDuration}</span>
-        <span className="chat-thinking__spacer" />
-        <CollapseIcon
-          className="chat-thinking__chevron"
-          aria-hidden="true"
-          size={16}
-          strokeWidth={2}
-        />
-      </button>
-
-      {isOpen ? (
-        <div className="chat-thinking__details">{copy.thinkingDetails}</div>
-      ) : null}
-    </section>
-  );
 }
 
 function ChatMessageView({
@@ -262,7 +176,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams({ strict: false }) as { chatId?: string };
   const routeSearch = useSearch({ strict: false }) as ChatRouteSearch;
-  const initialQuestion = readInitialQuestion(routeSearch, locale);
+  const initialQuestion = readInitialQuestion(routeSearch);
   const routeMode = parseResearchMode(routeSearch.mode);
   const routeConversationKey = `${chatId ?? 'chat'}\u0000${routeMode}\u0000${initialQuestion}`;
   const copy = chatCopy[locale];
@@ -278,78 +192,189 @@ export function ChatPage() {
   );
   const [activeQuestion, setActiveQuestion] = useState(initialQuestion);
   const [composerMode, setComposerMode] = useState<ResearchMode>(routeMode);
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    createInitialMessages(initialQuestion, locale, routeMode),
-  );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatHistory, setChatHistory] = useState<ResearchChatSummary[]>([]);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [isThinkingOpen, setIsThinkingOpen] = useState(false);
-  const previousRouteConversationKeyRef = useRef(routeConversationKey);
-  const pendingTimerRef = useRef<number | null>(null);
+  const loadedRouteConversationKeyRef = useRef('');
+  const activeStreamRef = useRef<AbortController | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
   const title = useMemo(
-    () => conversationTitle(activeQuestion, locale),
+    () => activeQuestion ? conversationTitle(activeQuestion, locale) : copy.newChat,
     [activeQuestion, locale],
   );
 
-  const cancelPendingResponse = () => {
-    if (pendingTimerRef.current !== null) {
-      window.clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
+  const refreshChatHistory = async () => {
+    try {
+      setChatHistory(await listResearchChats());
+    } catch {
+      // The active conversation remains usable if the history list cannot refresh.
+    }
+  };
+
+  const streamIntoMessage = async (
+    targetChatId: string,
+    content: string,
+    mode: ResearchMode,
+    assistantId: string,
+    requestKey: string,
+  ) => {
+    const controller = new AbortController();
+    activeStreamRef.current = controller;
+    setIsSending(true);
+    try {
+      const storedMessage = await streamResearchMessage({
+        chatId: targetChatId,
+        message: content,
+        mode,
+        signal: controller.signal,
+        onDelta: (delta) => {
+          if (loadedRouteConversationKeyRef.current !== requestKey) {
+            return;
+          }
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: message.content + delta,
+                    pending: false,
+                  }
+                : message,
+            ),
+          );
+        },
+      });
+      if (loadedRouteConversationKeyRef.current === requestKey) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? { ...message, id: storedMessage.id, pending: false }
+              : message,
+          ),
+        );
+      }
+    } catch (error) {
+      if (controller.signal.aborted || loadedRouteConversationKeyRef.current !== requestKey) {
+        return;
+      }
+      const detail = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
         current.map((message) =>
-          message.pending
+          message.id === assistantId
             ? {
                 ...message,
-                content: getMockFollowUpResponse(locale, composerMode),
+                content: `${message.content ? `${message.content}\n\n---\n\n` : ''}> **${copy.requestFailed}.** ${detail}`,
                 pending: false,
               }
             : message,
         ),
       );
+    } finally {
+      if (activeStreamRef.current === controller) {
+        activeStreamRef.current = null;
+        if (loadedRouteConversationKeyRef.current === requestKey) {
+          setIsSending(false);
+        }
+      }
+      void refreshChatHistory();
     }
-    setIsSending(false);
   };
 
   useEffect(() => {
-    if (previousRouteConversationKeyRef.current === routeConversationKey) {
+    void refreshChatHistory();
+  }, []);
+
+  useEffect(() => {
+    if (loadedRouteConversationKeyRef.current === routeConversationKey) {
       return;
     }
 
-    previousRouteConversationKeyRef.current = routeConversationKey;
-    if (pendingTimerRef.current !== null) {
-      window.clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
-    }
+    activeStreamRef.current?.abort();
+    activeStreamRef.current = null;
+    loadedRouteConversationKeyRef.current = routeConversationKey;
+    setDraft('');
+    setIsSending(false);
 
-    if (chatId === 'new') {
-      setDraft('');
+    if (!chatId || chatId === 'new') {
+      setActiveQuestion('');
+      setMessages([]);
       setComposerMode('web');
-      setIsSending(false);
-      setIsThinkingOpen(false);
       setScreen('new');
       return;
     }
 
+    setScreen('conversation');
     setActiveQuestion(initialQuestion);
     setComposerMode(routeMode);
-    setMessages(createInitialMessages(initialQuestion, locale, routeMode));
-    setDraft('');
-    setIsSending(false);
-    setIsThinkingOpen(false);
-    setScreen('conversation');
-  }, [chatId, initialQuestion, locale, routeConversationKey, routeMode]);
+    setMessages([]);
 
-  useEffect(
-    () => () => {
-      if (pendingTimerRef.current !== null) {
-        window.clearTimeout(pendingTimerRef.current);
+    void (async () => {
+      try {
+        const storedChat = await getResearchChat(chatId);
+        if (loadedRouteConversationKeyRef.current !== routeConversationKey) {
+          return;
+        }
+        const firstQuestion =
+          storedChat.messages.find((message) => message.role === 'user')?.content ??
+          storedChat.title;
+        setActiveQuestion(firstQuestion);
+        setComposerMode(storedChat.mode);
+        setMessages(
+          storedChat.messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+          })),
+        );
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.status === 404 &&
+          initialQuestion &&
+          loadedRouteConversationKeyRef.current === routeConversationKey
+        ) {
+          const assistantId = createMessageId('assistant');
+          setMessages([
+            { id: createMessageId('user'), role: 'user', content: initialQuestion },
+            { id: assistantId, role: 'assistant', content: '', pending: true },
+          ]);
+          const now = new Date().toISOString();
+          setChatHistory((current) => [
+            {
+              id: chatId,
+              title: conversationTitle(initialQuestion, locale),
+              mode: routeMode,
+              created_at: now,
+              updated_at: now,
+            },
+            ...current.filter((chat) => chat.id !== chatId),
+          ]);
+          await streamIntoMessage(
+            chatId,
+            initialQuestion,
+            routeMode,
+            assistantId,
+            routeConversationKey,
+          );
+          return;
+        }
+        if (loadedRouteConversationKeyRef.current !== routeConversationKey) {
+          return;
+        }
+        const detail = error instanceof Error ? error.message : String(error);
+        setMessages([
+          {
+            id: createMessageId('assistant'),
+            role: 'assistant',
+            content: `> **${copy.requestFailed}.** ${detail}`,
+          },
+        ]);
       }
-    },
-    [],
-  );
+    })();
+  }, [chatId, initialQuestion, routeConversationKey, routeMode]);
 
   useEffect(() => {
     if (messages.length <= 2) {
@@ -359,21 +384,20 @@ export function ChatPage() {
   }, [messages]);
 
   const openNewChat = () => {
-    cancelPendingResponse();
+    activeStreamRef.current?.abort();
+    activeStreamRef.current = null;
     setDraft('');
-    setIsThinkingOpen(false);
+    setIsSending(false);
     setScreen('new');
     if (window.matchMedia('(max-width: 640px)').matches) {
       setIsHistoryOpen(false);
     }
     window.requestAnimationFrame(() => composerRef.current?.focus());
-  };
-
-  const openCurrentConversation = () => {
-    setScreen('conversation');
-    if (window.matchMedia('(max-width: 640px)').matches) {
-      setIsHistoryOpen(false);
-    }
+    void navigate({
+      to: '/chat/$chatId',
+      params: { chatId: 'new' },
+      search: { q: '', mode: 'web' },
+    });
   };
 
   const startNewConversation = (question: string) => {
@@ -381,10 +405,7 @@ export function ChatPage() {
     const nextMode = composerMode;
 
     setActiveQuestion(question);
-    setMessages(createInitialMessages(question, locale, nextMode));
     setDraft('');
-    setIsThinkingOpen(false);
-    setScreen('conversation');
 
     void navigate({
       to: '/chat/$chatId',
@@ -394,6 +415,9 @@ export function ChatPage() {
   };
 
   const sendFollowUp = (content: string) => {
+    if (!chatId || chatId === 'new') {
+      return;
+    }
     const assistantId = createMessageId('assistant');
     const responseMode = composerMode;
 
@@ -412,23 +436,13 @@ export function ChatPage() {
       },
     ]);
     setDraft('');
-    setIsSending(true);
-
-    pendingTimerRef.current = window.setTimeout(() => {
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: getMockFollowUpResponse(locale, responseMode),
-                pending: false,
-              }
-            : message,
-        ),
-      );
-      setIsSending(false);
-      pendingTimerRef.current = null;
-    }, 720);
+    void streamIntoMessage(
+      chatId,
+      content,
+      responseMode,
+      assistantId,
+      routeConversationKey,
+    );
   };
 
   const submitDraft = () => {
@@ -449,6 +463,26 @@ export function ChatPage() {
     setDraft(suggestion);
     window.requestAnimationFrame(() => composerRef.current?.focus());
   };
+
+  const openStoredChat = (chat: ResearchChatSummary) => {
+    setScreen('conversation');
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      setIsHistoryOpen(false);
+    }
+    void navigate({
+      to: '/chat/$chatId',
+      params: { chatId: chat.id },
+      search: { q: '', mode: chat.mode },
+    });
+  };
+
+  const today = new Date().toDateString();
+  const todayChats = chatHistory.filter(
+    (chat) => new Date(chat.updated_at).toDateString() === today,
+  );
+  const earlierChats = chatHistory.filter(
+    (chat) => new Date(chat.updated_at).toDateString() !== today,
+  );
 
   return (
     <div className="chat-page">
@@ -477,36 +511,57 @@ export function ChatPage() {
           <nav className="chat-history__nav">
             <section className="chat-history__group">
               <h2>{copy.today}</h2>
-              <button
-                className={
-                  screen === 'conversation'
-                    ? 'chat-history__item chat-history__item--active'
-                    : 'chat-history__item'
-                }
-                type="button"
-                aria-current={screen === 'conversation' ? 'page' : undefined}
-                onClick={openCurrentConversation}
-                title={title}
-              >
-                <span>{title}</span>
-              </button>
-            </section>
-
-            <section className="chat-history__group">
-              <h2>{copy.earlier}</h2>
               <div className="chat-history__items">
-                {copy.olderChats.map((item) => (
+                {todayChats.map((chat) => (
                   <button
-                    className="chat-history__item"
+                    className={
+                      screen === 'conversation' && chat.id === chatId
+                        ? 'chat-history__item chat-history__item--active'
+                        : 'chat-history__item'
+                    }
                     type="button"
-                    key={item}
-                    title={item}
+                    aria-current={
+                      screen === 'conversation' && chat.id === chatId
+                        ? 'page'
+                        : undefined
+                    }
+                    onClick={() => openStoredChat(chat)}
+                    title={chat.title}
+                    key={chat.id}
                   >
-                    <span>{item}</span>
+                    <span>{chat.title}</span>
                   </button>
                 ))}
               </div>
             </section>
+
+            {earlierChats.length > 0 ? (
+              <section className="chat-history__group">
+                <h2>{copy.earlier}</h2>
+                <div className="chat-history__items">
+                  {earlierChats.map((chat) => (
+                    <button
+                      className={
+                        screen === 'conversation' && chat.id === chatId
+                          ? 'chat-history__item chat-history__item--active'
+                          : 'chat-history__item'
+                      }
+                      type="button"
+                      aria-current={
+                        screen === 'conversation' && chat.id === chatId
+                          ? 'page'
+                          : undefined
+                      }
+                      onClick={() => openStoredChat(chat)}
+                      title={chat.title}
+                      key={chat.id}
+                    >
+                      <span>{chat.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </nav>
         </aside>
       ) : null}
@@ -560,15 +615,8 @@ export function ChatPage() {
         ) : (
           <div className="chat-page__scroll">
             <div className="chat-thread">
-              {messages.map((message, index) => (
+              {messages.map((message) => (
                 <Fragment key={message.id}>
-                  {index === 1 ? (
-                    <ThinkingStatus
-                      locale={locale}
-                      isOpen={isThinkingOpen}
-                      onToggle={() => setIsThinkingOpen((current) => !current)}
-                    />
-                  ) : null}
                   <ChatMessageView message={message} locale={locale} />
                 </Fragment>
               ))}

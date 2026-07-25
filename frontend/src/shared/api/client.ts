@@ -66,7 +66,7 @@ async function parseErrorDetail(response: Response) {
   return detail;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiFetch(path: string, options: RequestOptions = {}): Promise<Response> {
   const headers = new Headers(options.headers);
 
   if (options.body !== undefined) {
@@ -88,7 +88,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (shouldAttemptRefresh(path, response.status, Boolean(options._authRetried))) {
       const refreshed = await tryRefreshSession();
       if (refreshed) {
-        return apiRequest<T>(path, {
+        return apiFetch(path, {
           ...options,
           token: getAccessToken(),
           _authRetried: true,
@@ -101,6 +101,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
     throw new ApiError(response.status, await parseErrorDetail(response));
   }
+
+  return response;
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await apiFetch(path, options);
 
   if (response.status === 204) {
     return undefined as T;

@@ -16,10 +16,13 @@ export function parseResearchMode(value: unknown): ResearchMode {
 }
 
 export function createChatId() {
-  const randomPart =
-    typeof globalThis.crypto?.randomUUID === 'function'
-      ? globalThis.crypto.randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10);
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
 
-  return `${Date.now().toString(36)}-${randomPart}`;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }

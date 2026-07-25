@@ -39,7 +39,8 @@ func MigrationsOK(ctx context.Context, pool *pgxpool.Pool) bool {
 	var n int
 	err := pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM information_schema.tables
-		WHERE table_schema = 'public' AND table_name IN ('users', 'papers')
+		WHERE table_schema = 'public'
+		  AND table_name IN ('users', 'papers', 'research_chats', 'research_chat_messages')
 	`).Scan(&n)
-	return err == nil && n == 2
+	return err == nil && n == 4
 }

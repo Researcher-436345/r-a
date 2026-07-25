@@ -81,6 +81,23 @@ type TrendingPaper struct {
 	AbsURL          string   `json:"abs_url"`
 }
 
+type ResearchChatMessage struct {
+	ID        uuid.UUID `json:"id"`
+	ChatID    uuid.UUID `json:"chat_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ResearchChat struct {
+	ID        uuid.UUID             `json:"id"`
+	Title     string                `json:"title"`
+	Mode      string                `json:"mode"`
+	CreatedAt time.Time             `json:"created_at"`
+	UpdatedAt time.Time             `json:"updated_at"`
+	Messages  []ResearchChatMessage `json:"messages,omitempty"`
+}
+
 func RectFromJSON(raw []byte) *AnnotationRect {
 	if len(raw) == 0 {
 		return nil

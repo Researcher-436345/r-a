@@ -28,16 +28,21 @@ type Config struct {
 	S3Region         string
 	S3PresignExpire  time.Duration
 
-	LLMProvider    string
-	LLMBaseURL     string
-	LLMAPIKey      string
-	LLMModel       string
-	LLMTimeout     time.Duration
-	LLMHTTPReferer string
-	LLMAppTitle    string
+	LLMProvider         string
+	LLMBaseURL          string
+	LLMBaseURLWebSearch string
+	LLMAPIKey           string
+	LLMModel            string
+	LLMModelWebSearch   string
+	LLMTimeout          time.Duration
+	LLMWebSearchTimeout time.Duration
+	LLMHTTPReferer      string
+	LLMAppTitle         string
 }
 
 func Load() Config {
+	llmBaseURL := getenv("LLM_BASE_URL", "https://api.aitunnel.ru/v1")
+
 	return Config{
 		AppName:     getenv("APP_NAME", "researcher-api"),
 		Environment: getenv("ENVIRONMENT", "local"),
@@ -59,13 +64,16 @@ func Load() Config {
 		S3Region:         getenv("S3_REGION", "us-east-1"),
 		S3PresignExpire:  seconds(getenv("S3_PRESIGN_EXPIRE_SECONDS", "900"), 900),
 
-		LLMProvider:    getenv("LLM_PROVIDER", "openai_compatible"),
-		LLMBaseURL:     getenv("LLM_BASE_URL", "https://api.aitunnel.ru/v1"),
-		LLMAPIKey:      getenv("LLM_API_KEY", ""),
-		LLMModel:       getenv("LLM_MODEL", "auto"),
-		LLMTimeout:     seconds(getenv("LLM_TIMEOUT_SECONDS", "60"), 60),
-		LLMHTTPReferer: getenv("LLM_HTTP_REFERER", "http://localhost:5173"),
-		LLMAppTitle:    getenv("LLM_APP_TITLE", "Researcher"),
+		LLMProvider:         getenv("LLM_PROVIDER", "openai_compatible"),
+		LLMBaseURL:          llmBaseURL,
+		LLMBaseURLWebSearch: getenv("LLM_BASE_URL_WEB_SEARCH", llmBaseURL),
+		LLMAPIKey:           getenv("LLM_API_KEY", ""),
+		LLMModel:            getenv("LLM_MODEL", "auto"),
+		LLMModelWebSearch:   getenv("LLM_MODEL_WEB_SEARCH", "perplexity/sonar-pro-search"),
+		LLMTimeout:          seconds(getenv("LLM_TIMEOUT_SECONDS", "60"), 60),
+		LLMWebSearchTimeout: seconds(getenv("LLM_WEB_SEARCH_TIMEOUT_SECONDS", "180"), 180),
+		LLMHTTPReferer:      getenv("LLM_HTTP_REFERER", "http://localhost:5173"),
+		LLMAppTitle:         getenv("LLM_APP_TITLE", "Researcher"),
 	}
 }
 

@@ -71,7 +71,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'projects.multimodal': 'Multimodal Papers',
     'projects.reasoning': 'Reasoning Benchmarks',
     'ask.title': 'Что исследуем сегодня?',
-    'ask.placeholder': 'Спросите AI о статьях, идеях или направлениях исследований…',
+    'ask.placeholder': 'Спросите о статьях, идеях или направлениях исследований…',
     'ask.send': 'Отправить',
     'ask.attach': 'Прикрепить файл',
     'ask.webSearch': 'Веб-поиск',
