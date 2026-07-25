@@ -1,0 +1,9 @@
+# local secrets / config
+.env
+.env.local
+
+# build output
+/assistant
+/out/
+
+.claude/

@@ -1,0 +1,6 @@
+.env
+.env.local
+.git
+*_test.go
+/assistant
+/out

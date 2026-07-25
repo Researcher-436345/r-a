@@ -1,0 +1,28 @@
+services:
+  assistant:
+    build: .
+    image: assistant
+    ports:
+      - "8080:8080"
+    # .env is loaded automatically (OPENAI_API_KEY, OPENAI_BASE_URL, model, ...).
+    env_file:
+      - .env
+    # Override the upstream URLs so the container talks to the mock service below
+    # by its compose network name (this wins over the values in .env). Point these
+    # at your real Article/Chat services once they exist.
+    environment:
+      ARTICLE_SERVICE_URL: http://mock:9100
+      CHAT_SERVICE_URL: http://mock:9100
+    depends_on:
+      - mock
+    restart: unless-stopped
+
+  # Local mock of the Article + Chat services (in-memory). For trying the service
+  # end-to-end without real upstreams.
+  mock:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./dev:/app:ro
+    command: ["python", "mock_upstream.py"]
+    restart: unless-stopped

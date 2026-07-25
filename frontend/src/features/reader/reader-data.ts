@@ -3,6 +3,7 @@ import type { Locale } from '../../shared/i18n/i18n-context';
 export type ReaderTab = 'assistant' | 'notes' | 'similar';
 
 export const readerPaper = {
+  id: 'qgf-flow-policies',
   title: 'Test-Time Gradient Guidance of Flow Policies in Reinforcement Learning',
   meta: 'Zhou et al. · arXiv:2606.11087 · 2026',
   authors:
@@ -27,6 +28,8 @@ export const readerStrings: Record<
     chatPlaceholder: string;
     attach: string;
     sendHint: string;
+    thinking: string;
+    errorPrefix: string;
   }
 > = {
   ru: {
@@ -44,7 +47,9 @@ export const readerStrings: Record<
     tryHint: 'Попробуйте спросить: «В чём интуиция за разделом 2?»',
     chatPlaceholder: 'Спросите об этой статье или выделите текст...',
     attach: 'Прикрепить',
-    sendHint: 'Alt + Enter',
+    sendHint: 'Enter',
+    thinking: 'Думаю…',
+    errorPrefix: 'Ошибка',
   },
   en: {
     zoomIn: 'Zoom in',
@@ -61,7 +66,9 @@ export const readerStrings: Record<
     tryHint: 'Try asking: “What’s the intuition behind section 2?”',
     chatPlaceholder: 'Ask about this paper or highlight text...',
     attach: 'Attach',
-    sendHint: 'Alt + Enter',
+    sendHint: 'Enter',
+    thinking: 'Thinking…',
+    errorPrefix: 'Error',
   },
 };
 
