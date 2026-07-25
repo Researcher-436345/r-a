@@ -10,21 +10,23 @@ export type { ThemeMode } from '../../shared/theme/theme-context';
 export function AppLayout() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const isReader = pathname === '/reader' || pathname.startsWith('/reader/');
+  const isChat = pathname.startsWith('/chat/');
+  const isWorkspace = isReader || isChat;
   const { theme, setTheme } = useTheme();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
-    <div className={isReader ? 'app-shell app-shell--reader' : 'app-shell'}>
+    <div className={isWorkspace ? 'app-shell app-shell--workspace' : 'app-shell'}>
       <Sidebar
         theme={theme}
         onThemeChange={setTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        defaultCollapsed={isReader}
-        defaultProjectsOpen={!isReader}
+        defaultCollapsed={isWorkspace}
+        defaultProjectsOpen={!isWorkspace}
         projects={isReader ? readerSidebarProjects : undefined}
       />
       <main
-        className={isReader ? 'main-content main-content--reader' : 'main-content'}
+        className={isWorkspace ? 'main-content main-content--workspace' : 'main-content'}
         aria-label="Main content"
       >
         <Outlet />

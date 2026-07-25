@@ -6,6 +6,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { queryClient } from './app/query-client';
 import { router } from './app/router';
 import './shared/styles/global.css';
+import './features/chat/chat.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

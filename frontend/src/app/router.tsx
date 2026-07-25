@@ -10,6 +10,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { isAuthenticated } from '../features/auth/token-storage';
 import { LoginPage } from '../pages/auth/login-page';
 import { RegisterPage } from '../pages/auth/register-page';
+import { ChatPage } from '../pages/chat/chat-page';
 import { HomePage } from '../pages/home/home-page';
 import { AddPaperPage } from '../pages/library/add-paper-page';
 import { LibraryPage } from '../pages/library/library-page';
@@ -76,6 +77,16 @@ const homeRoute = createRoute({
   component: HomePage,
 });
 
+const chatRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/chat/$chatId',
+  component: ChatPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    q: typeof search.q === 'string' ? search.q : '',
+    mode: search.mode === 'deep' ? ('deep' as const) : ('web' as const),
+  }),
+});
+
 const libraryRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library',
@@ -105,6 +116,7 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   appRoute.addChildren([
     homeRoute,
+    chatRoute,
     libraryRoute,
     addPaperRoute,
     readerRoute,

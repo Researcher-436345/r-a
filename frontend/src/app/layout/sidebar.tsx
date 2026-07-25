@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   BookMarked,
   ChevronDown,
@@ -39,6 +39,8 @@ export interface SidebarProject {
 
 interface SidebarPrimaryNavProps {
   isCollapsed: boolean;
+  isExploreActive: boolean;
+  isExploreCurrent: boolean;
   areProjectsOpen: boolean;
   projects: readonly SidebarProject[];
   openProjects: Record<string, boolean>;
@@ -101,6 +103,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [areProjectsOpen, setAreProjectsOpen] = useState(defaultProjectsOpen);
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({});
@@ -153,6 +156,8 @@ export function Sidebar({
 
       <SidebarPrimaryNav
         isCollapsed={isCollapsed}
+        isExploreActive={pathname === '/' || pathname.startsWith('/chat/')}
+        isExploreCurrent={pathname === '/'}
         areProjectsOpen={areProjectsOpen}
         projects={projects}
         openProjects={openProjects}
@@ -180,6 +185,8 @@ export function Sidebar({
 
 function SidebarPrimaryNav({
   isCollapsed,
+  isExploreActive,
+  isExploreCurrent,
   areProjectsOpen,
   projects,
   openProjects,
@@ -193,10 +200,14 @@ function SidebarPrimaryNav({
     <nav className="sidebar__nav" aria-label="Primary navigation">
       <Link
         to="/"
-        className="sidebar__nav-button"
+        className={
+          isExploreActive
+            ? 'sidebar__nav-button sidebar__nav-button--active'
+            : 'sidebar__nav-button'
+        }
         title={searchLabel}
         aria-label={searchLabel}
-        activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
+        aria-current={isExploreCurrent ? 'page' : undefined}
       >
         <Globe aria-hidden="true" size={18} strokeWidth={2} />
         {!isCollapsed ? <span>{searchLabel}</span> : null}
