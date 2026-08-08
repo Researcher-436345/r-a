@@ -1672,22 +1672,41 @@ textarea:focus-visible {
   border-radius: 8px;
 }
 
+.trending-papers__sort {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.trending-papers__sort .segmented-control__item {
+  box-sizing: border-box;
+  min-width: 6.5rem;
+  justify-content: center;
+}
+
+.paper-list--refreshing {
+  opacity: 0.72;
+  transition: opacity 0.15s ease;
+}
+
 .trending-papers {
   margin-top: 44px;
 }
 
 .section-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
   margin: 0 0 18px;
 }
 
 .section-header__title {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
+  flex: 1;
 }
 
 .section-header h2 {
@@ -1701,7 +1720,7 @@ textarea:focus-visible {
 .section-header__title span {
   color: var(--faint);
   font-size: 13px;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .secondary-button,
@@ -1866,20 +1885,24 @@ textarea:focus-visible {
   color: var(--accent-text);
 }
 
-.compact-button--link span,
-.compact-button--score span {
+.compact-button--link span {
   font-family: "Geist Mono", ui-monospace, monospace;
 }
 
-.compact-button--score {
+.compact-button--citations {
   border: none;
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: var(--hover);
+  color: var(--sub);
   cursor: default;
 }
 
-.compact-button--score:hover {
-  background: var(--accent-soft);
+.compact-button--citations span {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-button--citations:hover {
+  background: var(--hover);
 }
 
 .paper-card__preview {
@@ -2209,10 +2232,19 @@ textarea:focus-visible {
 
   .ask-box__footer,
   .section-header,
-  .section-header__title,
   .settings-modal__row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .section-header__title {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .trending-papers__sort {
+    margin-left: 0;
+    width: 100%;
   }
 
   .ask-box__spacer,
@@ -2225,8 +2257,10 @@ textarea:focus-visible {
     width: 100%;
   }
 
-  .segmented-control__item {
+  .segmented-control__item,
+  .trending-papers__sort .segmented-control__item {
     flex: 1;
+    min-width: 0;
     justify-content: center;
   }
 

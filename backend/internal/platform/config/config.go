@@ -35,6 +35,11 @@ type Config struct {
 	LLMTimeout     time.Duration
 	LLMHTTPReferer string
 	LLMAppTitle    string
+
+	// Citations — OpenAlex без ключа сейчас; S2 — когда появится ключ.
+	CitationsEnabled       bool
+	OpenAlexMailto         string
+	SemanticScholarAPIKey  string
 }
 
 func Load() Config {
@@ -66,6 +71,10 @@ func Load() Config {
 		LLMTimeout:     seconds(getenv("LLM_TIMEOUT_SECONDS", "60"), 60),
 		LLMHTTPReferer: getenv("LLM_HTTP_REFERER", "http://localhost:5173"),
 		LLMAppTitle:    getenv("LLM_APP_TITLE", "Researcher"),
+
+		CitationsEnabled:      getenv("CITATIONS_ENABLED", "true") != "false",
+		OpenAlexMailto:        getenv("OPENALEX_MAILTO", "researcher@localhost"),
+		SemanticScholarAPIKey: getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
 	}
 }
 

@@ -33,10 +33,25 @@ func (a API) trending(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "Invalid limit")
 		return
 	}
-	items, cached, e := a.Service.Trending(r.Context(), category, limit)
+
+	mode := ParseSortMode(r.URL.Query().Get("sort"))
+	if mode == "" && r.URL.Query().Get("sort") != "" {
+		httpx.Error(w, 400, "Invalid sort (use new, hot, popular)")
+		return
+	}
+	if mode == "" {
+		mode = SortNew
+	}
+
+	items, cached, e := a.Service.Trending(r.Context(), category, limit, mode)
 	if e != nil {
 		httpx.Error(w, 502, e.Error())
 		return
 	}
-	httpx.JSON(w, 200, map[string]any{"items": items, "category": category, "cached": cached})
+	httpx.JSON(w, 200, map[string]any{
+		"items":    items,
+		"category": category,
+		"sort":     mode,
+		"cached":   cached,
+	})
 }

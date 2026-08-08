@@ -16,7 +16,7 @@ internal/
     catalog/           # papers, PDF, arxiv/doi/upload
     library/           # user_library_items
     annotations/       # highlights / notes
-    feed/              # trending
+    feed/              # trending + citation enrich (OpenAlex / optional S2)
     assistant/         # chat / explain / translate
 ```
 
@@ -31,6 +31,20 @@ internal/
 - SQL for a domain stays inside that module’s `store.go`.
 
 To grow a module into its own process later: add `cmd/<name>` and move wiring out of `app/router.go`.
+
+## Citations
+
+Лента обогащает статьи цитированиями:
+
+| Сейчас | Потом (вставить в `.env`) |
+|--------|---------------------------|
+| **OpenAlex** без ключа (`OPENALEX_MAILTO`) | `SEMANTIC_SCHOLAR_API_KEY` — [форма ключа](https://www.semanticscholar.org/product/api#api-key-form) |
+| Кеш Redis `cite:v1:*` на 24h | Опционально OpenAlex API key |
+
+На brand-new arXiv часто `citation_count: null` (ещё нет в индексе) — на UI бейдж не показываем.  
+`sort=popular` после enrich переранжирует по известным цитированиям.
+
+См. комментарии в корневом `.env.example`.
 
 ## Run (Docker)
 

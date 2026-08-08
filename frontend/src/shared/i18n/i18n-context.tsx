@@ -34,12 +34,20 @@ type TranslationKey =
   | 'ask.sendHint'
   | 'papers.trending'
   | 'papers.trendingSub'
+  | 'papers.trendingSub.new'
+  | 'papers.trendingSub.hot'
+  | 'papers.trendingSub.popular'
+  | 'papers.sort'
+  | 'papers.sort.new'
+  | 'papers.sort.hot'
+  | 'papers.sort.popular'
   | 'papers.personalize'
   | 'papers.loading'
   | 'papers.error'
   | 'papers.wantToRead'
   | 'papers.inList'
   | 'papers.popularity'
+  | 'papers.citations'
   | 'papers.pdfPreview'
   | 'papers.github'
   | 'settings.title'
@@ -79,12 +87,20 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Трендовые статьи',
     'papers.trendingSub': 'свежие с arXiv · cs.AI',
+    'papers.trendingSub.new': 'новые сабмиты · arXiv cs.AI',
+    'papers.trendingSub.hot': 'недавно обновлённые · arXiv cs.AI',
+    'papers.trendingSub.popular': 'свежесть + активность · бейзлайн',
+    'papers.sort': 'Сортировка ленты',
+    'papers.sort.new': 'New',
+    'papers.sort.hot': 'Hot',
+    'papers.sort.popular': 'Popular',
     'papers.personalize': 'Настроить предпочтения',
     'papers.loading': 'Загружаем статьи...',
     'papers.error': 'Не удалось загрузить статьи',
     'papers.wantToRead': 'Хочу прочитать',
     'papers.inList': 'В списке чтения',
     'papers.popularity': 'Популярность',
+    'papers.citations': 'Цитирования',
     'papers.pdfPreview': 'Превью PDF',
     'papers.github': 'GitHub',
     'settings.title': 'Настройки',
@@ -123,12 +139,20 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'ask.sendHint': 'Alt + Enter',
     'papers.trending': 'Trending papers',
     'papers.trendingSub': 'fresh from arXiv · cs.AI',
+    'papers.trendingSub.new': 'new submissions · arXiv cs.AI',
+    'papers.trendingSub.hot': 'recently updated · arXiv cs.AI',
+    'papers.trendingSub.popular': 'freshness + activity · baseline',
+    'papers.sort': 'Feed sort',
+    'papers.sort.new': 'New',
+    'papers.sort.hot': 'Hot',
+    'papers.sort.popular': 'Popular',
     'papers.personalize': 'Personalize preferences',
     'papers.loading': 'Loading papers',
     'papers.error': 'Could not load papers',
     'papers.wantToRead': 'Want to read',
     'papers.inList': 'In reading list',
     'papers.popularity': 'Popularity',
+    'papers.citations': 'Citations',
     'papers.pdfPreview': 'PDF Preview',
     'papers.github': 'GitHub',
     'settings.title': 'Settings',

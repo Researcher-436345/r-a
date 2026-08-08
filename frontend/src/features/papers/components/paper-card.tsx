@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { Bookmark, BookmarkCheck, ExternalLink, LoaderCircle, TrendingUp } from 'lucide-react';
+import { Bookmark, BookmarkCheck, ExternalLink, LoaderCircle, Quote } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -61,9 +61,9 @@ function formatRelativeDate(value: string, locale: Locale) {
   return `${Math.floor(diffDays / 7)}w ago`;
 }
 
-function formatScore(value: number) {
+function formatCitationCount(value: number) {
   if (value >= 1000) {
-    return `${(value / 1000).toFixed(1).replace('.0', '')}k`;
+    return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   }
   return String(value);
 }
@@ -219,10 +219,19 @@ export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: Pap
             </a>
           ) : null}
 
-          <div className="compact-button compact-button--score">
-            <TrendingUp aria-hidden="true" size={15} strokeWidth={2} />
-            <span>{formatScore(paper.popularityScore)}</span>
-          </div>
+          {typeof paper.citationCount === 'number' && paper.citationCount > 0 ? (
+            <div
+              className="compact-button compact-button--citations"
+              title={
+                paper.citationSource
+                  ? `${t('papers.citations')} · ${paper.citationSource}`
+                  : t('papers.citations')
+              }
+            >
+              <Quote aria-hidden="true" size={15} strokeWidth={2} />
+              <span>{formatCitationCount(paper.citationCount)}</span>
+            </div>
+          ) : null}
         </div>
       </div>
 

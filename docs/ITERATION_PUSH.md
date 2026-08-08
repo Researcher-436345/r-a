@@ -6,7 +6,7 @@ Repo: Researcher-436345/r-a
 
 ## One-liner
 
-Научная библиотека + PDF-ридер. В этом пуше: UX ридера — **fit-to-width** PDF, resizable чат, попап выделения не пропадает при ресайзе, **пастельные цвета** хайлайта; плюс ранее — modular monolith бэкенда и фиксы library/PDF meta.
+Научная библиотека + PDF-ридер. В этом пуше: reader UX (fit-to-width, sticky selection, цвета), лента **New/Hot/Popular**, цитирования через **OpenAlex** (без ключа; S2 key — TODO в `.env.example`).
 
 Подробнее: [HANDOFF.md](./HANDOFF.md), чеклист: [STATUS.md](./STATUS.md).
 
@@ -53,6 +53,17 @@ Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
 - Чат-баблы: chip’ы без overflow (`reader-chat-bubble__body`)
 - PDF scroll: frame-wrap `block` + `margin-inline: auto` у страниц (без обрезания слева)
 
+### Feed / citations
+
+- Sort `new|hot|popular` на `GET /feed/trending?sort=`
+  - new: arXiv `submittedDate`
+  - hot: `lastUpdatedDate` + скор от `updated`
+  - popular: rising-скор + переранжирование по `citation_count` когда есть
+- Citation enrich: OpenAlex batch (`doi:10.48550/arXiv.{id}`), Redis `cite:v1:*`
+- UI: бейдж цитирований только если count **> 0**; фейковый popularity 896 убран
+- Sort control закреплён справа, кнопки равной ширины (не прыгают от subtitle)
+- **TODO:** `SEMANTIC_SCHOLAR_API_KEY` в `.env` — см. `.env.example`, `backend/README.md`
+
 ### Backend (уже на ветке)
 
 - Modular monolith: `internal/app` + `platform` + `modules/{identity,catalog,library,annotations,feed,assistant}`
@@ -67,6 +78,7 @@ Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
 - Similar tab — моки
 - Ветка `papper_chat` (Gleb) — отдельный assistant-прототип, не влита
 - Сохранённые annotation `rect` всё ещё в **px** на момент сохранения (старые заметки после сильного zoom могут «плыть»); текущее выделение — ratio
+- Цитирования: без S2-ключа покрытие свежих arXiv слабое (OpenAlex часто 404) — нужен `SEMANTIC_SCHOLAR_API_KEY`
 
 ## Architecture snapshot
 
@@ -100,18 +112,19 @@ worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf  [uses catalog]
 
 ## API surface
 
-Без breaking changes. Annotations уже принимают `color` (default `#facc15` на бэке; UI шлёт пастельные hex).
+`GET /feed/trending?category=&limit=&sort=new|hot|popular` → items с опциональным `citation_count` / `citation_source`.
+
+Annotations: `color`. Остальное без breaking changes.
 
 `/auth/*`, `/papers/{…}`, `/library/*`, `/papers/{id}/annotations`, `/annotations/{id}`, `/feed/trending`
 
 ## Files to look at first
 
+- `backend/internal/modules/feed/service.go`
+- `backend/internal/modules/feed/citations.go`
+- `frontend/src/features/papers/components/trending-papers.tsx`
+- `frontend/src/features/papers/components/paper-card.tsx`
+- `.env.example` (S2 key TODO)
 - `frontend/src/pages/reader/reader-page.tsx`
-- `frontend/src/features/reader/components/reader-pdf-viewer.tsx`
 - `frontend/src/features/reader/components/reader-selection-popup.tsx`
-- `frontend/src/features/reader/highlight-colors.ts`
-- `frontend/src/features/reader/components/reader-pdf-canvas-viewer.tsx`
-- `frontend/src/shared/styles/global.css`
-- `backend/internal/app/router.go`
-- `backend/internal/modules/annotations/`
 - `docs/HANDOFF.md`, `docs/STATUS.md`

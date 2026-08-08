@@ -8,6 +8,9 @@ type TrendingPaper struct {
 	PublishedAt     string   `json:"published_at"`
 	Category        string   `json:"category"`
 	PopularityScore float64  `json:"popularity_score"`
-	PDFURL          string   `json:"pdf_url"`
-	AbsURL          string   `json:"abs_url"`
+	// CitationCount — реальные цитирования (OpenAlex/S2). nil если ещё нет в индексе.
+	CitationCount  *int    `json:"citation_count"`
+	CitationSource *string `json:"citation_source,omitempty"`
+	PDFURL         string  `json:"pdf_url"`
+	AbsURL         string  `json:"abs_url"`
 }
