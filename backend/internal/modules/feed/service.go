@@ -1,4 +1,4 @@
-package services
+package feed
 
 import (
 	"context"
@@ -8,16 +8,31 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/centraluniversity/researcher/internal/models"
 	"github.com/redis/go-redis/v9"
 )
 
-type Feed struct{ Redis *redis.Client }
+type Service struct{ Redis *redis.Client }
 
-func (f Feed) Trending(ctx context.Context, category string, limit int) ([]models.TrendingPaper, bool, error) {
+type atomFeed struct {
+	Entries []atomEntry `xml:"entry"`
+}
+type atomEntry struct {
+	Title     string `xml:"title"`
+	Summary   string `xml:"summary"`
+	Published string `xml:"published"`
+	Authors   []struct {
+		Name string `xml:"name"`
+	} `xml:"author"`
+	Links []struct {
+		Href string `xml:"href,attr"`
+	} `xml:"link"`
+}
+
+func (f Service) Trending(ctx context.Context, category string, limit int) ([]TrendingPaper, bool, error) {
 	if category == "" {
 		category = "cs.AI"
 	}
@@ -30,13 +45,13 @@ func (f Feed) Trending(ctx context.Context, category string, limit int) ([]model
 	key := fmt.Sprintf("feed:trending:%s:%d", category, limit)
 	if f.Redis != nil {
 		if cached, err := f.Redis.Get(ctx, key).Result(); err == nil {
-			var items []models.TrendingPaper
+			var items []TrendingPaper
 			if json.Unmarshal([]byte(cached), &items) == nil {
 				return items, true, nil
 			}
 		}
 	}
-	items, err := f.fetch(ctx, category, limit)
+	items, err := fetchTrending(ctx, category, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -47,13 +62,16 @@ func (f Feed) Trending(ctx context.Context, category string, limit int) ([]model
 	}
 	return items, false, nil
 }
-func (f Feed) fetch(ctx context.Context, category string, limit int) ([]models.TrendingPaper, error) {
-	return fetchTrending(ctx, category, limit)
-}
+
 func popularity(t time.Time) float64 {
 	return math.Max(1, math.Floor(1000*math.Exp(-time.Since(t).Hours()/24/14)))
 }
-func fetchTrending(ctx context.Context, category string, limit int) ([]models.TrendingPaper, error) {
+
+func canonicalArxivID(id string) string {
+	return regexp.MustCompile(`(?i)v\d+$`).ReplaceAllString(id, "")
+}
+
+func fetchTrending(ctx context.Context, category string, limit int) ([]TrendingPaper, error) {
 	u := "https://export.arxiv.org/api/query?search_query=" + url.QueryEscape("cat:"+category) + fmt.Sprintf("&start=0&max_results=%d&sortBy=submittedDate&sortOrder=descending", limit)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -71,12 +89,12 @@ func fetchTrending(ctx context.Context, category string, limit int) ([]models.Tr
 	if err = xml.NewDecoder(resp.Body).Decode(&feed); err != nil {
 		return nil, err
 	}
-	out := make([]models.TrendingPaper, 0, len(feed.Entries))
+	out := make([]TrendingPaper, 0, len(feed.Entries))
 	for _, e := range feed.Entries {
 		id := ""
 		for _, l := range e.Links {
 			if strings.Contains(l.Href, "/abs/") {
-				id = CanonicalArxivID(strings.TrimSuffix(strings.TrimPrefix(l.Href, "https://arxiv.org/abs/"), "/"))
+				id = canonicalArxivID(strings.TrimSuffix(strings.TrimPrefix(l.Href, "https://arxiv.org/abs/"), "/"))
 				break
 			}
 		}
@@ -84,7 +102,12 @@ func fetchTrending(ctx context.Context, category string, limit int) ([]models.Tr
 			continue
 		}
 		published, _ := time.Parse(time.RFC3339, e.Published)
-		item := models.TrendingPaper{ArxivID: id, Title: strings.Join(strings.Fields(e.Title), " "), Abstract: strPtr(strings.Join(strings.Fields(e.Summary), " ")), PublishedAt: e.Published, Category: category, PopularityScore: popularity(published), PDFURL: "https://arxiv.org/pdf/" + id + ".pdf", AbsURL: "https://arxiv.org/abs/" + id}
+		item := TrendingPaper{
+			ArxivID: id, Title: strings.Join(strings.Fields(e.Title), " "),
+			Abstract: strPtr(strings.Join(strings.Fields(e.Summary), " ")),
+			PublishedAt: e.Published, Category: category, PopularityScore: popularity(published),
+			PDFURL: "https://arxiv.org/pdf/" + id + ".pdf", AbsURL: "https://arxiv.org/abs/" + id,
+		}
 		for _, a := range e.Authors {
 			item.Authors = append(item.Authors, strings.Join(strings.Fields(a.Name), " "))
 		}
@@ -92,6 +115,7 @@ func fetchTrending(ctx context.Context, category string, limit int) ([]models.Tr
 	}
 	return out, nil
 }
+
 func strPtr(s string) *string {
 	if s == "" {
 		return nil

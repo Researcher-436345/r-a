@@ -7,12 +7,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/centraluniversity/researcher/internal/config"
-	"github.com/centraluniversity/researcher/internal/db"
-	"github.com/centraluniversity/researcher/internal/queue"
-	"github.com/centraluniversity/researcher/internal/services"
-	"github.com/centraluniversity/researcher/internal/storage"
-	"github.com/centraluniversity/researcher/internal/store"
+	"github.com/centraluniversity/researcher/internal/modules/catalog"
+	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/db"
+	"github.com/centraluniversity/researcher/internal/platform/queue"
+	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 )
@@ -35,12 +34,17 @@ func main() {
 		log.Fatal(err)
 	}
 	mux := asynq.NewServeMux()
-	papers := store.Papers{DB: pool}
-	mux.HandleFunc(queue.ProcessArxivPDF, func(ctx context.Context, t *asynq.Task) error { return processArxiv(ctx, t, papers, s3) })
-	mux.HandleFunc(queue.FinalizeUploadedPDF, func(ctx context.Context, t *asynq.Task) error { return finalizeUpload(ctx, t, papers, s3) })
+	papers := catalog.Store{DB: pool}
+	mux.HandleFunc(queue.ProcessArxivPDF, func(ctx context.Context, t *asynq.Task) error {
+		return processArxiv(ctx, t, papers, s3)
+	})
+	mux.HandleFunc(queue.FinalizeUploadedPDF, func(ctx context.Context, t *asynq.Task) error {
+		return finalizeUpload(ctx, t, papers, s3)
+	})
 	log.Fatal(server.Run(mux))
 }
-func processArxiv(ctx context.Context, t *asynq.Task, p store.Papers, s3 *storage.Client) error {
+
+func processArxiv(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *storage.Client) error {
 	payload, err := queue.Decode(t)
 	if err != nil {
 		return err
@@ -56,7 +60,7 @@ func processArxiv(ctx context.Context, t *asynq.Task, p store.Papers, s3 *storag
 	if v.SourceURL == nil {
 		return fail(ctx, p, v, "Missing source URL")
 	}
-	data, err := services.DownloadPDF(ctx, *v.SourceURL)
+	data, err := catalog.DownloadPDF(ctx, *v.SourceURL)
 	if err != nil {
 		return fail(ctx, p, v, err.Error())
 	}
@@ -74,7 +78,8 @@ func processArxiv(ctx context.Context, t *asynq.Task, p store.Papers, s3 *storag
 	v.ErrorMessage = nil
 	return p.UpdateVersion(ctx, v)
 }
-func finalizeUpload(ctx context.Context, t *asynq.Task, p store.Papers, s3 *storage.Client) error {
+
+func finalizeUpload(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *storage.Client) error {
 	payload, err := queue.Decode(t)
 	if err != nil {
 		return err
@@ -103,7 +108,8 @@ func finalizeUpload(ctx context.Context, t *asynq.Task, p store.Papers, s3 *stor
 	v.ErrorMessage = nil
 	return p.UpdateVersion(ctx, v)
 }
-func fail(ctx context.Context, p store.Papers, v store.Version, message string) error {
+
+func fail(ctx context.Context, p catalog.Store, v catalog.Version, message string) error {
 	v.Status = "failed"
 	v.ErrorMessage = &message
 	return p.UpdateVersion(ctx, v)

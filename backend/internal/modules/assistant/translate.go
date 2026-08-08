@@ -1,4 +1,4 @@
-package services
+package assistant
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/centraluniversity/researcher/internal/models"
+	"github.com/centraluniversity/researcher/internal/modules/catalog"
 )
 
-func Translate(ctx context.Context, llm LLM, paper models.PaperOut, text, target string) (string, *string) {
+func Translate(ctx context.Context, llm LLM, paper catalog.PaperOut, text, target string) (string, *string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", nil
@@ -46,6 +46,7 @@ func Translate(ctx context.Context, llm LLM, paper models.PaperOut, text, target
 	}
 	return strings.TrimSpace(data.ResponseData.TranslatedText), source
 }
+
 func truncate(s string, n int) string {
 	r := []rune(s)
 	if len(r) > n {

@@ -1,4 +1,4 @@
-package services
+package catalog
 
 import (
 	"context"
@@ -29,6 +29,7 @@ func NormalizeDOI(v string) (string, error) {
 	}
 	return strings.ToLower(v), nil
 }
+
 func FetchCrossrefMetadata(ctx context.Context, doi string) (CrossrefPaper, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.crossref.org/works/"+url.PathEscape(doi), nil)
 	if err != nil {

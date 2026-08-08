@@ -24,7 +24,7 @@ Keep [STATUS.md](../../../docs/STATUS.md) accurate after work lands. For major s
 
 1. Read `docs/STATUS.md`, `docs/iteration-1.md` (EPIC tables), skim `docs/roadmap.md` if needed.
 2. Verify claims with code:
-   - Backend routes: `backend/internal/httpapi/`
+   - Backend modules: `backend/internal/modules/`, router: `backend/internal/app/router.go`
    - Schema: `migrations/`
    - Frontend: `frontend/src/features/`, pages
    - Remaining mocks: sidebar projects, Similar tab, etc.

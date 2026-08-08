@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/centraluniversity/researcher/internal/config"
-	"github.com/centraluniversity/researcher/internal/db"
-	"github.com/centraluniversity/researcher/internal/httpapi"
-	"github.com/centraluniversity/researcher/internal/queue"
-	"github.com/centraluniversity/researcher/internal/storage"
+	"github.com/centraluniversity/researcher/internal/app"
+	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/db"
+	"github.com/centraluniversity/researcher/internal/platform/queue"
+	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -39,7 +39,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := httpapi.Server{Config: cfg, DB: pool, Storage: s3, Queue: q, Redis: redis.NewClient(redisOpts)}
+	handler := app.Router(app.Deps{
+		Config:  cfg,
+		DB:      pool,
+		Storage: s3,
+		Queue:   q,
+		Redis:   redis.NewClient(redisOpts),
+	})
 	log.Printf("%s listening on %s", cfg.AppName, cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, server.Router()))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, handler))
 }

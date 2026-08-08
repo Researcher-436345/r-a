@@ -3,7 +3,7 @@
 > Краткий чеклист. **Полный контекст для нового человека:** [`HANDOFF.md`](./HANDOFF.md).  
 > Обновлять скиллом `project-status` после значимых изменений.
 
-**Последнее обновление:** 2026-07-20
+**Последнее обновление:** 2026-08-08
 
 ## Итерация 1 — эпики
 
@@ -24,6 +24,7 @@
 
 ## Недавние изменения (changelog)
 
+- Backend: modular monolith — `internal/modules/{identity,catalog,library,annotations,feed,assistant}` + `platform` + `app` router
 - Структура: markdown → `docs/`, Python backend удалён, Go в `backend/`, SQL в `migrations/`
 - **HANDOFF.md** — полный контекст проекта для продолжения работы
 - PDF через API stream (MinIO порты конфликтовали с Cursor)

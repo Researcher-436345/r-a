@@ -29,7 +29,11 @@ UI изначально был прототипом на моках (`frontend/`
 
 ```
 r-a/   (GitHub: Researcher-436345/r-a)
-├── backend/          # Go API + worker
+├── backend/          # Go modular monolith (api + worker)
+│   ├── cmd/api, cmd/worker
+│   ├── internal/app          # composition root (router)
+│   ├── internal/platform/    # config, db, queue, storage, httpx
+│   └── internal/modules/     # identity, catalog, library, annotations, feed, assistant
 ├── frontend/         # React + Vite + PDF.js
 ├── docs/             # HANDOFF, STATUS, планы, push-notes
 ├── migrations/       # SQL schema (без Python)
@@ -38,6 +42,8 @@ r-a/   (GitHub: Researcher-436345/r-a)
 ├── .env.example
 └── .cursor/          # skills + push hook
 ```
+
+Правила модулей — в [`backend/README.md`](../backend/README.md). HTTP-контракт тот же; границы нужны, чтобы потом выращивать `assistant` / `research` отдельными процессами.
 
 ### Git (важно)
 
@@ -168,12 +174,11 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 **Go**
 
-- `backend/cmd/api/main.go` — HTTP  
-- `backend/cmd/worker/main.go` — asynq  
-- `backend/internal/httpapi/server.go` — все роуты  
-- `backend/internal/store/` — SQL  
-- `backend/internal/storage/s3.go` — MinIO  
-- `backend/internal/services/` — arxiv, crossref, feed, llm, translate, pdfmeta  
+- `backend/cmd/api/main.go` — HTTP entry  
+- `backend/cmd/worker/main.go` — asynq PDF jobs  
+- `backend/internal/app/router.go` — wiring модулей  
+- `backend/internal/modules/*` — домены (identity, catalog, library, annotations, feed, assistant)  
+- `backend/internal/platform/*` — config, db, queue, MinIO, httpx  
 
 **Frontend**
 

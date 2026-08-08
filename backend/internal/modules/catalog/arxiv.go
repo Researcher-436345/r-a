@@ -1,4 +1,4 @@
-package services
+package catalog
 
 import (
 	"context"
@@ -17,6 +17,7 @@ type ArxivPaper struct {
 	Authors                          []string
 	Year                             *int
 }
+
 type atomFeed struct {
 	Entries []atomEntry `xml:"entry"`
 }
@@ -88,6 +89,7 @@ func FetchArxivMetadata(ctx context.Context, id string) (ArxivPaper, error) {
 	}
 	return p, nil
 }
+
 func DownloadPDF(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
