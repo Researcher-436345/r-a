@@ -386,6 +386,60 @@ textarea:focus-visible {
   background: var(--bg);
 }
 
+.reader-page--resizing {
+  cursor: col-resize;
+}
+
+.reader-page--resizing .reader-viewer,
+.reader-page--resizing .reader-chat-shell {
+  pointer-events: none;
+  user-select: none;
+}
+
+.reader-split-handle {
+  position: relative;
+  z-index: 5;
+  flex: none;
+  width: 5px;
+  margin: 0 -2px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.reader-split-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+  transition: background 120ms ease, width 120ms ease, left 120ms ease;
+}
+
+.reader-split-handle:hover::before,
+.reader-split-handle:focus-visible::before,
+.reader-page--resizing .reader-split-handle::before {
+  left: 1px;
+  width: 3px;
+  background: var(--accent);
+}
+
+.reader-split-handle:focus-visible {
+  outline: none;
+}
+
+.reader-chat-shell {
+  display: flex;
+  flex: none;
+  width: 420px;
+  min-width: 280px;
+  max-width: min(720px, 55vw);
+  min-height: 0;
+  flex-direction: column;
+}
+
 .reader-viewer {
   display: flex;
   flex: 1;
@@ -509,6 +563,25 @@ textarea:focus-visible {
   text-align: center;
 }
 
+.reader-zoom__value--button {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reader-zoom__value--button:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.reader-zoom__value--button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .reader-page-count {
   display: flex;
   align-items: center;
@@ -536,12 +609,20 @@ textarea:focus-visible {
 }
 
 .reader-pdf-frame-wrap {
-  display: flex;
+  /* block, не flex: иначе широкая страница с центрированием обрезается слева
+     и горизонтальный скролл не дотягивает до левого края */
+  display: block;
   flex: 1;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 28px 28px 60px;
   background: var(--panel);
+}
+
+.reader-pdf-frame-wrap--manual-zoom {
+  overflow-x: auto;
 }
 
 .reader-viewer--dark {
@@ -590,13 +671,15 @@ textarea:focus-visible {
   width: max-content;
   min-width: 100%;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 22px;
 }
 
 .reader-pdf-page {
   position: relative;
   flex: none;
+  /* центрируем, только если страница уже области; при overflow скролл идёт с нуля */
+  margin-inline: auto;
   overflow: hidden;
   background: #ffffff;
 }
@@ -757,6 +840,39 @@ textarea:focus-visible {
   gap: 2px;
 }
 
+.reader-selection-popup__choose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reader-selection-popup__colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 2px;
+}
+
+.reader-selection-popup__color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.reader-selection-popup__color:hover {
+  transform: scale(1.08);
+}
+
+.reader-selection-popup__color--active {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 3.5px rgba(15, 23, 42, 0.35);
+}
+
 .reader-selection-popup__tool {
   display: inline-flex;
   align-items: center;
@@ -868,13 +984,11 @@ textarea:focus-visible {
 
 .reader-chat-panel {
   display: flex;
-  flex: none;
-  width: 33vw;
-  min-width: 360px;
-  max-width: 480px;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
-  border-left: 1px solid var(--border);
   background: var(--panel);
 }
 
@@ -1037,6 +1151,17 @@ textarea:focus-visible {
   line-height: 1.5;
 }
 
+.reader-chat-bubble__body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.reader-chat-bubble__text {
+  white-space: pre-wrap;
+}
+
 .reader-chat-bubble p {
   margin: 0;
   white-space: pre-wrap;
@@ -1063,22 +1188,25 @@ textarea:focus-visible {
 }
 
 .reader-chat-token {
-  display: inline;
-  max-width: min(220px, 70%);
-  margin: 0 1px;
-  padding: 0 0.35em;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(240px, 85%);
+  margin: 0 0.15em;
+  padding: 0.1em 0.45em;
   border: none;
-  border-radius: 0.28em;
+  border-radius: 0.35em;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   color: var(--accent-text, var(--accent));
   font: inherit;
   font-weight: 600;
-  line-height: inherit;
+  line-height: 1.35;
   white-space: nowrap;
   vertical-align: baseline;
   user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reader-chat-token--clickable {
@@ -1090,9 +1218,12 @@ textarea:focus-visible {
 }
 
 .reader-chat-composer .reader-chat-token {
-  /* inline-block + padding поднимает чип; inline + clone выравнивает по строке */
+  display: inline;
+  padding: 0 0.35em;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* inline + clone: чип в contentEditable выравнивается по строке */
+  line-height: inherit;
 }
 
 .reader-chat-input-wrap {
@@ -1193,6 +1324,8 @@ textarea:focus-visible {
 .reader-note-card {
   overflow: hidden;
   border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: #f0e0a0;
   border-radius: 12px;
   background: var(--card);
 }

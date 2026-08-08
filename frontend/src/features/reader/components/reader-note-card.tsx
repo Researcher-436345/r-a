@@ -73,6 +73,7 @@ export function ReaderNoteCard({
           : 'reader-note-card reader-note-card--clickable'
       }
       data-note-id={note.id}
+      style={{ borderLeftColor: note.color || undefined }}
     >
       <button
         type="button"

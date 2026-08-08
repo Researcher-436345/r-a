@@ -10,11 +10,14 @@ import { useEffect, useRef, useState } from 'react';
 
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
+import { hexToRgba, toNormalizedRect } from '../highlight-colors';
+
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export interface ReaderTextSelection {
   page: number;
   text: string;
+  /** Доли страницы (0–1), чтобы выделение пережило zoom / ресайз */
   rect: { x: number; y: number; w: number; h: number };
   anchor: { x: number; y: number };
 }
@@ -23,17 +26,26 @@ export interface ReaderAnnotationFocus {
   id: string;
   page: number;
   rect: { x: number; y: number; w: number; h: number } | null;
+  /** px — старые заметки; ratio — текущее выделение */
+  rectUnit?: 'px' | 'ratio';
+  color?: string | null;
 }
 
 interface ReaderPdfCanvasViewerProps {
   src: string;
   scale: number;
   onPageCount: (pageCount: number) => void;
+  /** Ширина первой страницы при scale=1 — для fit-to-width */
+  onBasePageWidth?: (width: number) => void;
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
   /** Постоянная подсветка активного выделения (пока открыт попап) */
-  activeHighlight?: { page: number; rect: { x: number; y: number; w: number; h: number } } | null;
+  activeHighlight?: {
+    page: number;
+    rect: { x: number; y: number; w: number; h: number };
+    color?: string | null;
+  } | null;
 }
 
 interface ReaderPdfPageProps {
@@ -46,6 +58,9 @@ interface ReaderPdfPageProps {
   highlightRect?: { x: number; y: number; w: number; h: number } | null;
   highlightKey?: string | null;
   highlightPersistent?: boolean;
+  /** ratio — доли страницы; px — абсолютные координаты */
+  highlightUnit?: 'px' | 'ratio';
+  highlightColor?: string | null;
 }
 
 interface ReaderPdfPageSize {
@@ -83,6 +98,7 @@ export function ReaderPdfCanvasViewer({
   src,
   scale,
   onPageCount,
+  onBasePageWidth,
   onTextSelect,
   focusAnnotation,
   onFocusComplete,
@@ -118,6 +134,14 @@ export function ReaderPdfCanvasViewer({
         setPdf(loadedPdf);
         setPageNumbers(pages);
         onPageCount(loadedPdf.numPages);
+
+        void loadedPdf.getPage(1).then((page) => {
+          if (!isMounted) {
+            return;
+          }
+          const baseViewport = page.getViewport({ scale: 1 });
+          onBasePageWidth?.(baseViewport.width);
+        });
       })
       .catch(() => {
         if (isMounted) {
@@ -129,7 +153,7 @@ export function ReaderPdfCanvasViewer({
       isMounted = false;
       void loadingTask.destroy();
     };
-  }, [onPageCount, src]);
+  }, [onBasePageWidth, onPageCount, src]);
 
   useEffect(() => {
     if (!pdf) {
@@ -203,16 +227,12 @@ export function ReaderPdfCanvasViewer({
     const page = pageMatch ? Number(pageMatch[1]) : 1;
     const pageRect = pageElement.getBoundingClientRect();
     const selectionRect = range.getBoundingClientRect();
+    const rect = toNormalizedRect(selectionRect, pageRect);
 
     onTextSelect({
       page,
       text,
-      rect: {
-        x: selectionRect.left - pageRect.left,
-        y: selectionRect.top - pageRect.top,
-        w: selectionRect.width,
-        h: selectionRect.height,
-      },
+      rect,
       anchor: {
         x: selectionRect.left + selectionRect.width / 2,
         y: selectionRect.bottom,
@@ -346,6 +366,16 @@ export function ReaderPdfCanvasViewer({
                 : null
           }
           highlightPersistent={activeHighlight?.page === pageNumber}
+          highlightUnit={
+            activeHighlight?.page === pageNumber
+              ? 'ratio'
+              : (visibleHighlight?.rectUnit ?? 'px')
+          }
+          highlightColor={
+            activeHighlight?.page === pageNumber
+              ? activeHighlight.color
+              : visibleHighlight?.color
+          }
         />
       ))}
     </div>
@@ -362,6 +392,8 @@ function ReaderPdfPage({
   highlightRect,
   highlightKey,
   highlightPersistent = false,
+  highlightUnit = 'px',
+  highlightColor = null,
 }: ReaderPdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -635,12 +667,29 @@ function ReaderPdfPage({
               ? 'reader-pdf-page__highlight reader-pdf-page__highlight--active'
               : 'reader-pdf-page__highlight'
           }
-          style={{
-            left: highlightRect.x,
-            top: highlightRect.y,
-            width: highlightRect.w,
-            height: highlightRect.h,
-          }}
+          style={
+            highlightUnit === 'ratio'
+              ? {
+                  left: `${highlightRect.x * 100}%`,
+                  top: `${highlightRect.y * 100}%`,
+                  width: `${highlightRect.w * 100}%`,
+                  height: `${highlightRect.h * 100}%`,
+                  background: hexToRgba(highlightColor || '#f0e0a0', highlightPersistent ? 0.45 : 0.55),
+                  boxShadow: `inset 0 0 0 1px ${hexToRgba(highlightColor || '#f0e0a0', 0.65)}`,
+                }
+              : {
+                  left: highlightRect.x,
+                  top: highlightRect.y,
+                  width: highlightRect.w,
+                  height: highlightRect.h,
+                  ...(highlightColor
+                    ? {
+                        background: hexToRgba(highlightColor, highlightPersistent ? 0.45 : 0.55),
+                        boxShadow: `inset 0 0 0 1px ${hexToRgba(highlightColor, 0.65)}`,
+                      }
+                    : null),
+                }
+          }
         />
       ) : null}
       {links.length > 0 ? (

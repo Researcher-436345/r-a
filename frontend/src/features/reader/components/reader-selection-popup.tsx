@@ -3,11 +3,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 
 import type { ChatContextAttachment } from '../chat-context';
 import { buildPassageChipLabel } from '../chat-context';
+import {
+  HIGHLIGHT_COLORS,
+  toPagePixelRect,
+} from '../highlight-colors';
 import { normalizeSelectedQuote } from '../normalize-quote';
 
 export interface ReaderSelection {
   page: number;
   text: string;
+  /** Доли страницы (0–1) */
   rect: { x: number; y: number; w: number; h: number };
   anchor: { x: number; y: number };
 }
@@ -19,8 +24,10 @@ interface ReaderSelectionPopupProps {
   isSaving: boolean;
   isTranslating?: boolean;
   translation?: string | null;
+  highlightColor: string;
+  onHighlightColorChange: (color: string) => void;
   onClose: () => void;
-  onSave: (payload: { note: string; quote: string }) => void;
+  onSave: (payload: { note: string; quote: string; color: string }) => void;
   onAskAssistant: (attachment: ChatContextAttachment) => void;
   onTranslate: (text: string) => void;
 }
@@ -39,22 +46,28 @@ function buildAttachment(selection: ReaderSelection): ChatContextAttachment {
   };
 }
 
-function computeAnchor(selection: ReaderSelection) {
+function resolvePageMetrics(selection: ReaderSelection) {
   const pageElement = document.getElementById(`reader-pdf-page-${selection.page}`);
   if (!pageElement) {
-    return selection.anchor;
+    return null;
   }
 
   const pageRect = pageElement.getBoundingClientRect();
+  const pixelRect = toPagePixelRect(selection.rect, pageRect.width, pageRect.height);
+
   return {
-    x: pageRect.left + selection.rect.x + selection.rect.w / 2,
-    y: pageRect.top + selection.rect.y + selection.rect.h,
+    pageRect,
+    pixelRect,
+    anchor: {
+      x: pageRect.left + pixelRect.x + pixelRect.w / 2,
+      y: pageRect.top + pixelRect.y + pixelRect.h,
+    },
   };
 }
 
 function computePopupPosition(
   anchor: { x: number; y: number },
-  selection: ReaderSelection,
+  selectionHeight: number,
   width: number,
   height: number,
 ) {
@@ -63,10 +76,19 @@ function computePopupPosition(
   const preferredTop = anchor.y + pad;
   const top =
     preferredTop + height > window.innerHeight - pad
-      ? Math.max(pad, anchor.y - selection.rect.h - height - pad)
+      ? Math.max(pad, anchor.y - selectionHeight - height - pad)
       : preferredTop;
 
   return { left, top };
+}
+
+function shouldIgnoreOutsidePointer(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  // Ресайз сплита: mousedown на ручке не должен закрывать попап
+  return Boolean(target.closest('.reader-split-handle') || target.closest('.reader-zoom'));
 }
 
 export function ReaderSelectionPopup({
@@ -74,6 +96,8 @@ export function ReaderSelectionPopup({
   isSaving,
   isTranslating = false,
   translation = null,
+  highlightColor,
+  onHighlightColorChange,
   onClose,
   onSave,
   onAskAssistant,
@@ -85,15 +109,25 @@ export function ReaderSelectionPopup({
   const [note, setNote] = useState('');
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [isOccluded, setIsOccluded] = useState(false);
+  const selectionKeyRef = useRef<string | null>(null);
 
   const updatePosition = useCallback(() => {
     if (!selection || !rootRef.current) {
       return;
     }
 
-    const anchor = computeAnchor(selection);
+    const metrics = resolvePageMetrics(selection);
+    if (!metrics) {
+      return;
+    }
+
     const node = rootRef.current;
-    const nextPosition = computePopupPosition(anchor, selection, node.offsetWidth, node.offsetHeight);
+    const nextPosition = computePopupPosition(
+      metrics.anchor,
+      metrics.pixelRect.h,
+      node.offsetWidth,
+      node.offsetHeight,
+    );
     setPosition(nextPosition);
 
     const toolbar = document.querySelector('.reader-toolbar');
@@ -107,10 +141,16 @@ export function ReaderSelectionPopup({
       setMode('choose');
       setNote('');
       setPosition(null);
+      selectionKeyRef.current = null;
       return;
     }
-    setMode('choose');
-    setNote('');
+
+    const key = `${selection.page}:${selection.text}`;
+    if (selectionKeyRef.current !== key) {
+      selectionKeyRef.current = key;
+      setMode('choose');
+      setNote('');
+    }
   }, [selection]);
 
   useEffect(() => {
@@ -121,7 +161,7 @@ export function ReaderSelectionPopup({
 
   useLayoutEffect(() => {
     updatePosition();
-  }, [selection, mode, translation, isTranslating, updatePosition]);
+  }, [selection, mode, translation, isTranslating, highlightColor, updatePosition]);
 
   useEffect(() => {
     if (!selection) {
@@ -142,6 +182,9 @@ export function ReaderSelectionPopup({
       if (rootRef.current?.contains(target)) {
         return;
       }
+      if (shouldIgnoreOutsidePointer(target)) {
+        return;
+      }
       onClose();
     };
 
@@ -152,11 +195,26 @@ export function ReaderSelectionPopup({
     window.addEventListener('scroll', onReposition, true);
     window.addEventListener('resize', onReposition);
 
+    const pageElement = document.getElementById(`reader-pdf-page-${selection.page}`);
+    const resizeObserver =
+      pageElement && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => updatePosition())
+        : null;
+    if (pageElement && resizeObserver) {
+      resizeObserver.observe(pageElement);
+    }
+
+    const frameWrap = document.querySelector('.reader-pdf-frame-wrap');
+    if (frameWrap && resizeObserver) {
+      resizeObserver.observe(frameWrap);
+    }
+
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousedown', onPointerDown, true);
       window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('resize', onReposition);
+      resizeObserver?.disconnect();
     };
   }, [selection, onClose, updatePosition]);
 
@@ -170,7 +228,7 @@ export function ReaderSelectionPopup({
     if (!quote) {
       return;
     }
-    onSave({ note: note.trim(), quote });
+    onSave({ note: note.trim(), quote, color: highlightColor });
   };
 
   const askAssistant = () => {
@@ -184,6 +242,30 @@ export function ReaderSelectionPopup({
       onTranslate(raw);
     }
   };
+
+  const colorPicker = (
+    <div className="reader-selection-popup__colors" role="group" aria-label="Цвет выделения">
+      {HIGHLIGHT_COLORS.map((swatch) => {
+        const isActive = highlightColor === swatch.hex;
+        return (
+          <button
+            key={swatch.id}
+            type="button"
+            className={
+              isActive
+                ? 'reader-selection-popup__color reader-selection-popup__color--active'
+                : 'reader-selection-popup__color'
+            }
+            style={{ background: swatch.hex }}
+            title={swatch.label}
+            aria-label={swatch.label}
+            aria-pressed={isActive}
+            onClick={() => onHighlightColorChange(swatch.hex)}
+          />
+        );
+      })}
+    </div>
+  );
 
   return (
     <div
@@ -206,27 +288,30 @@ export function ReaderSelectionPopup({
       }}
     >
       {mode === 'choose' ? (
-        <div className="reader-selection-popup__toolbar">
-          <button type="button" className="reader-selection-popup__tool" onClick={askAssistant}>
-            <MessageSquareText aria-hidden="true" size={15} strokeWidth={2} />
-            В чат
-          </button>
-          <button type="button" className="reader-selection-popup__tool" onClick={() => setMode('note')}>
-            <NotebookPen aria-hidden="true" size={15} strokeWidth={2} />
-            Заметка
-          </button>
-          <button type="button" className="reader-selection-popup__tool" onClick={startTranslate}>
-            <Languages aria-hidden="true" size={15} strokeWidth={2} />
-            Перевод
-          </button>
-          <button
-            type="button"
-            className="reader-selection-popup__tool reader-selection-popup__tool--ghost"
-            onClick={onClose}
-            aria-label="Закрыть"
-          >
-            <X aria-hidden="true" size={15} strokeWidth={2} />
-          </button>
+        <div className="reader-selection-popup__choose">
+          {colorPicker}
+          <div className="reader-selection-popup__toolbar">
+            <button type="button" className="reader-selection-popup__tool" onClick={askAssistant}>
+              <MessageSquareText aria-hidden="true" size={15} strokeWidth={2} />
+              В чат
+            </button>
+            <button type="button" className="reader-selection-popup__tool" onClick={() => setMode('note')}>
+              <NotebookPen aria-hidden="true" size={15} strokeWidth={2} />
+              Заметка
+            </button>
+            <button type="button" className="reader-selection-popup__tool" onClick={startTranslate}>
+              <Languages aria-hidden="true" size={15} strokeWidth={2} />
+              Перевод
+            </button>
+            <button
+              type="button"
+              className="reader-selection-popup__tool reader-selection-popup__tool--ghost"
+              onClick={onClose}
+              aria-label="Закрыть"
+            >
+              <X aria-hidden="true" size={15} strokeWidth={2} />
+            </button>
+          </div>
         </div>
       ) : mode === 'translate' ? (
         <div className="reader-selection-popup__note">
@@ -244,6 +329,7 @@ export function ReaderSelectionPopup({
         </div>
       ) : (
         <form className="reader-selection-popup__note" onSubmit={onSubmitNote}>
+          {colorPicker}
           <textarea
             ref={noteRef}
             className="reader-selection-popup__input"

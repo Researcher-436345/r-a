@@ -9,6 +9,10 @@ import {
 } from '../../features/reader/api';
 import type { ChatContextAttachment } from '../../features/reader/chat-context';
 import {
+  DEFAULT_HIGHLIGHT_COLOR,
+  toPagePixelRect,
+} from '../../features/reader/highlight-colors';
+import {
   fetchPaper,
   waitForPdfUrl,
   type LibraryPaper,
@@ -32,6 +36,7 @@ export function ReaderPage() {
   const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'failed' | 'idle'>('idle');
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
+  const [highlightColor, setHighlightColor] = useState(DEFAULT_HIGHLIGHT_COLOR);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [flashFocus, setFlashFocus] = useState<ReaderAnnotationFocus | null>(null);
   const [chatAttachment, setChatAttachment] = useState<ChatContextAttachment | null>(null);
@@ -44,6 +49,15 @@ export function ReaderPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(paperId));
   const pdfObjectUrlRef = useRef<string | null>(null);
+  const readerPageRef = useRef<HTMLDivElement | null>(null);
+  const [chatWidth, setChatWidth] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 420;
+    }
+    const raw = Number(window.localStorage.getItem('researcher.reader.chatWidth'));
+    return Number.isFinite(raw) && raw >= 280 ? raw : 420;
+  });
+  const [isResizingChat, setIsResizingChat] = useState(false);
 
   const loadAnnotations = useCallback(async (id: string) => {
     const items = await fetchAnnotations(id);
@@ -58,18 +72,62 @@ export function ReaderPage() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (!isResizingChat) {
+      return;
+    }
+
+    const onMove = (event: MouseEvent) => {
+      const root = readerPageRef.current;
+      if (!root) {
+        return;
+      }
+      const rect = root.getBoundingClientRect();
+      const next = rect.right - event.clientX;
+      const minChat = 280;
+      const minViewer = 320;
+      const maxChat = Math.max(minChat, rect.width - minViewer);
+      const clamped = Math.min(maxChat, Math.max(minChat, next));
+      setChatWidth(clamped);
+    };
+
+    const onUp = () => {
+      setIsResizingChat(false);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isResizingChat]);
+
+  useEffect(() => {
+    window.localStorage.setItem('researcher.reader.chatWidth', String(Math.round(chatWidth)));
+  }, [chatWidth]);
+
   const showToast = (message: string) => {
     setToast(message);
   };
 
   const closeSelection = () => {
     setSelection(null);
+    setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setTranslation(null);
     setIsTranslating(false);
     window.getSelection()?.removeAllRanges();
   };
 
-  const focusPassage = (page: number, rect: { x: number; y: number; w: number; h: number } | null | undefined) => {
+  const focusPassage = (
+    page: number,
+    rect: { x: number; y: number; w: number; h: number } | null | undefined,
+    options?: { rectUnit?: 'px' | 'ratio'; color?: string | null },
+  ) => {
     if (!rect) {
       return;
     }
@@ -77,11 +135,13 @@ export function ReaderPage() {
       id: `passage:${page}:${Date.now()}`,
       page,
       rect,
+      rectUnit: options?.rectUnit ?? 'px',
+      color: options?.color,
     });
   };
 
   const handlePassageSelect = (attachment: ChatContextAttachment) => {
-    focusPassage(attachment.page, attachment.rect);
+    focusPassage(attachment.page, attachment.rect, { rectUnit: 'ratio' });
   };
 
   useEffect(() => {
@@ -160,6 +220,7 @@ export function ReaderPage() {
   const handleTextSelect = (nextSelection: ReaderTextSelection) => {
     setTranslation(null);
     setIsTranslating(false);
+    setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setSelection(nextSelection);
   };
 
@@ -172,21 +233,30 @@ export function ReaderPage() {
       id: `${note.id}:${Date.now()}`,
       page: note.page,
       rect: note.rect,
+      rectUnit: 'px',
+      color: note.color,
     });
   };
 
-  const handleSaveNote = async (payload: { note: string; quote: string }) => {
+  const handleSaveNote = async (payload: { note: string; quote: string; color: string }) => {
     if (!paperId || !selection) {
       return;
     }
 
     setIsSavingNote(true);
     try {
+      const pageElement = document.getElementById(`reader-pdf-page-${selection.page}`);
+      const pageBox = pageElement?.getBoundingClientRect();
+      const rect = pageBox
+        ? toPagePixelRect(selection.rect, pageBox.width, pageBox.height)
+        : selection.rect;
+
       const created = await createAnnotation(paperId, {
         page: selection.page,
-        rect: selection.rect,
+        rect,
         selected_text: payload.quote,
         note: payload.note,
+        color: payload.color,
       });
       setAnnotations((current) => [...current, created]);
       setActiveNoteId(created.id);
@@ -251,7 +321,10 @@ export function ReaderPage() {
   ].filter(Boolean);
 
   return (
-    <div className="reader-page">
+    <div
+      ref={readerPageRef}
+      className={`reader-page${isResizingChat ? ' reader-page--resizing' : ''}`}
+    >
       <ReaderPdfViewer
         title={paper?.title}
         meta={metaParts.join(' · ')}
@@ -261,32 +334,62 @@ export function ReaderPage() {
         onTextSelect={handleTextSelect}
         focusAnnotation={flashFocus}
         onFocusComplete={() => setFlashFocus(null)}
-        activeHighlight={selection ? { page: selection.page, rect: selection.rect } : null}
+        activeHighlight={
+          selection
+            ? { page: selection.page, rect: selection.rect, color: highlightColor }
+            : null
+        }
       />
-      <ReaderChatPanel
-        paperId={paperId}
-        annotations={annotations}
-        activeNoteId={activeNoteId}
-        contextAttachment={chatAttachment}
-        focusAssistantToken={focusAssistantToken}
-        focusNotesToken={focusNotesToken}
-        onClearContextAttachment={() => setChatAttachment(null)}
-        onNoteSelect={handleNoteSelect}
-        onPassageSelect={handlePassageSelect}
-        onNoteUpdated={(note) => {
-          setAnnotations((current) => current.map((item) => (item.id === note.id ? note : item)));
+      <div
+        className="reader-split-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Изменить ширину чата"
+        aria-valuenow={Math.round(chatWidth)}
+        tabIndex={0}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          setIsResizingChat(true);
         }}
-        onAnnotationsChange={() => {
-          if (paperId) {
-            void loadAnnotations(paperId);
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 40 : 16;
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            setChatWidth((w) => Math.min(w + step, 720));
+          } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            setChatWidth((w) => Math.max(w - step, 280));
           }
         }}
       />
+      <div className="reader-chat-shell" style={{ width: chatWidth }}>
+        <ReaderChatPanel
+          paperId={paperId}
+          annotations={annotations}
+          activeNoteId={activeNoteId}
+          contextAttachment={chatAttachment}
+          focusAssistantToken={focusAssistantToken}
+          focusNotesToken={focusNotesToken}
+          onClearContextAttachment={() => setChatAttachment(null)}
+          onNoteSelect={handleNoteSelect}
+          onPassageSelect={handlePassageSelect}
+          onNoteUpdated={(note) => {
+            setAnnotations((current) => current.map((item) => (item.id === note.id ? note : item)));
+          }}
+          onAnnotationsChange={() => {
+            if (paperId) {
+              void loadAnnotations(paperId);
+            }
+          }}
+        />
+      </div>
       <ReaderSelectionPopup
         selection={selection}
         isSaving={isSavingNote}
         isTranslating={isTranslating}
         translation={translation}
+        highlightColor={highlightColor}
+        onHighlightColorChange={setHighlightColor}
         onClose={closeSelection}
         onSave={handleSaveNote}
         onAskAssistant={handleAskAssistant}

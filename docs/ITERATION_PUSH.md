@@ -6,7 +6,7 @@ Repo: Researcher-436345/r-a
 
 ## One-liner
 
-Научная библиотека + PDF-ридер. В этом пуше: **modular monolith** Go-бэкенда (grow-ready модули, не отдельные микросервисы в проде) + фиксы upload PDF metadata / пустой library.
+Научная библиотека + PDF-ридер. В этом пуше: UX ридера — **fit-to-width** PDF, resizable чат, попап выделения не пропадает при ресайзе, **пастельные цвета** хайлайта; плюс ранее — modular monolith бэкенда и фиксы library/PDF meta.
 
 Подробнее: [HANDOFF.md](./HANDOFF.md), чеклист: [STATUS.md](./STATUS.md).
 
@@ -34,29 +34,39 @@ npm run dev -- --port 5173
 
 Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
 
+Тест-аккаунт (если сид есть): `test@researcher.local` / `testpass123`.
+
 ## Done this iteration / currently working
 
-- **Modular backend** (один деплой, границы модулей):
-  - `backend/internal/app/router.go` — composition root
-  - `backend/internal/platform/{config,db,httpx,queue,storage}`
-  - `backend/internal/modules/{identity,catalog,library,annotations,feed,assistant}`
-- HTTP-контракт без изменений (`/auth`, `/papers`, `/library`, `/annotations`, `/feed`)
-- Worker читает `catalog.Store` (PDF ingest asynq)
-- Empty library: API отдаёт `"items": []` (не `null`); фронт `?? []`
-- Local PDF upload metadata:
-  - не брать `/Title` из outline (bookmarks)
-  - UTF-16 / PDF escapes
-  - если найден arXiv id → title/authors/abstract с arXiv API
+### Reader UX (этот пуш)
+
+- **Fit-to-width**: PDF масштабируется под ширину области; `Fit` в тулбаре; `+/−` — ручной zoom
+  - `frontend/src/features/reader/components/reader-pdf-viewer.tsx`
+- **Resizable chat**: drag-handle между PDF и чатом; ширина в `localStorage` (`researcher.reader.chatWidth`)
+  - `frontend/src/pages/reader/reader-page.tsx`
+- **Selection popup**:
+  - не закрывается при ресайзе сплита
+  - rect в долях страницы (0–1) → переживает zoom/resize
+  - 5 пастельных цветов хайлайта → сохраняются в `annotations.color`
+  - `frontend/src/features/reader/components/reader-selection-popup.tsx`
+  - `frontend/src/features/reader/highlight-colors.ts`
+- Чат-баблы: chip’ы без overflow (`reader-chat-bubble__body`)
+- PDF scroll: frame-wrap `block` + `margin-inline: auto` у страниц (без обрезания слева)
+
+### Backend (уже на ветке)
+
+- Modular monolith: `internal/app` + `platform` + `modules/{identity,catalog,library,annotations,feed,assistant}`
+- Empty library: `"items": []`; PDF meta: не брать outline `/Title`, UTF-16, arXiv lookup
 
 ## Not done / known gaps
 
 - EPIC-05 проекты (sidebar моки)
-- EPIC-09 web-search — есть чужая ветка `feature/web-search` (Ilia), не смержена
+- EPIC-09 web-search — ветка `feature/web-search` (Ilia), не смержена
 - EPIC-10 теги
 - EPIC-08: нет `chat_messages` в БД; LLM из РФ нестабилен
 - Similar tab — моки
-- Ветка `papper_chat` (Gleb) — отдельный assistant-прототип от старого `main`, не влита
-- Отдельные Docker-сервисы / gateway — **намеренно не сейчас** (сначала модули)
+- Ветка `papper_chat` (Gleb) — отдельный assistant-прототип, не влита
+- Сохранённые annotation `rect` всё ещё в **px** на момент сохранения (старые заметки после сильного zoom могут «плыть»); текущее выделение — ratio
 
 ## Architecture snapshot
 
@@ -68,8 +78,7 @@ frontend → JWT → Go API (:8080)  [cmd/api + internal/app]
 worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf  [uses catalog]
 ```
 
-Правила границ: `backend/README.md`.  
-Catalog ↔ library только через `catalog.Membership` (wired in `app`).
+Правила границ: `backend/README.md`.
 
 ## Pitfalls
 
@@ -78,28 +87,31 @@ Catalog ↔ library только через `catalog.Membership` (wired in `app`
 3. Два git: пушь из `r-a/`, не из parent `researcher/`.
 4. Старый compose в parent может занять порты — `docker compose down` там перед `r-a`.
 5. Перед `git push` хук требует сегодняшний `Last refreshed` в этом файле.
+6. Parent `researcher/docs/ITERATION_PUSH.md` тоже держать в синхроне, если хук смотрит cwd parent.
 
 ## Suggested next tasks
 
 1. Смержить/перенести `feature/web-search` в `modules/research`
 2. EPIC-05: projects API + живой sidebar
 3. chat_messages + история чата в `assistant`
-4. Explain из selection popup
-5. Дочистить моки Similar / Ask-box
-6. Когда заболит LLM/SSE — вынести `assistant` в `cmd/assistant`
+4. Нормализовать annotation rect в БД (ratio) + миграция/совместимость
+5. Explain из selection popup
+6. Дочистить моки Similar / Ask-box
 
 ## API surface
 
-Без breaking changes:  
-`/auth/*`, `/papers/{arxiv,doi,upload,id,pdf-url,pdf,retry-pdf,chat,explain,translate}`, `/library/*`, `/papers/{id}/annotations`, `/annotations/{id}`, `/feed/trending`
+Без breaking changes. Annotations уже принимают `color` (default `#facc15` на бэке; UI шлёт пастельные hex).
+
+`/auth/*`, `/papers/{…}`, `/library/*`, `/papers/{id}/annotations`, `/annotations/{id}`, `/feed/trending`
 
 ## Files to look at first
 
+- `frontend/src/pages/reader/reader-page.tsx`
+- `frontend/src/features/reader/components/reader-pdf-viewer.tsx`
+- `frontend/src/features/reader/components/reader-selection-popup.tsx`
+- `frontend/src/features/reader/highlight-colors.ts`
+- `frontend/src/features/reader/components/reader-pdf-canvas-viewer.tsx`
+- `frontend/src/shared/styles/global.css`
 - `backend/internal/app/router.go`
-- `backend/internal/modules/catalog/` (http, store, pdfmeta, arxiv)
-- `backend/internal/modules/identity/`
-- `backend/internal/modules/library/`
-- `backend/cmd/api/main.go`, `backend/cmd/worker/main.go`
-- `backend/README.md`
-- `frontend/src/pages/library/library-page.tsx`
+- `backend/internal/modules/annotations/`
 - `docs/HANDOFF.md`, `docs/STATUS.md`

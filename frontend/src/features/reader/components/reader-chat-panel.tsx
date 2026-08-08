@@ -293,7 +293,7 @@ export function ReaderChatPanel({
                       : 'reader-chat-bubble reader-chat-bubble--assistant'
                   }
                 >
-                  <p>
+                  <div className="reader-chat-bubble__body">
                     {message.segments?.length
                       ? message.segments.map((segment, index) =>
                           segment.type === 'chip' ? (
@@ -307,11 +307,13 @@ export function ReaderChatPanel({
                               {segment.attachment.locationLabel}
                             </button>
                           ) : (
-                            <span key={`t-${index}`}>{segment.value}</span>
+                            <span key={`t-${index}`} className="reader-chat-bubble__text">
+                              {segment.value}
+                            </span>
                           ),
                         )
                       : message.content}
-                  </p>
+                  </div>
                 </div>
               ))}
             </div>

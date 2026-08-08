@@ -7,17 +7,18 @@ import {
   Minus,
   Plus,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useI18n } from '../../../shared/i18n/i18n-context';
 import { useTheme } from '../../../shared/theme/theme-context';
 import { readerStrings } from '../reader-data';
 import { ReaderPdfCanvasViewer, type ReaderAnnotationFocus, type ReaderTextSelection } from './reader-pdf-canvas-viewer';
 
-const DEFAULT_READER_SCALE = 1.5;
-const MIN_READER_SCALE = 0.8;
-const MAX_READER_SCALE = 1.8;
+const MIN_READER_SCALE = 0.4;
+const MAX_READER_SCALE = 2.5;
 const READER_SCALE_STEP = 0.1;
+/** Горизонтальный padding `.reader-pdf-frame-wrap` (28px с каждой стороны) */
+const FRAME_HORIZONTAL_PADDING = 56;
 
 interface ReaderPdfViewerProps {
   title?: string;
@@ -28,7 +29,24 @@ interface ReaderPdfViewerProps {
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
-  activeHighlight?: { page: number; rect: { x: number; y: number; w: number; h: number } } | null;
+  activeHighlight?: {
+    page: number;
+    rect: { x: number; y: number; w: number; h: number };
+    color?: string | null;
+  } | null;
+}
+
+function clampScale(value: number) {
+  return Math.min(MAX_READER_SCALE, Math.max(MIN_READER_SCALE, value));
+}
+
+function fitScaleForWidth(availableWidth: number, basePageWidth: number) {
+  if (availableWidth <= 0 || basePageWidth <= 0) {
+    return 1;
+  }
+
+  // Небольшой запас, чтобы не появлялся горизонтальный скролл из‑за округления
+  return clampScale(Number(((availableWidth - 4) / basePageWidth).toFixed(3)));
 }
 
 export function ReaderPdfViewer({
@@ -46,20 +64,69 @@ export function ReaderPdfViewer({
   const { readerDark } = useTheme();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [pageCount, setPageCount] = useState(0);
-  const [scale, setScale] = useState(DEFAULT_READER_SCALE);
+  const [scale, setScale] = useState(1);
+  /** Пока true — масштаб подстраивается под ширину области PDF */
+  const [fitToWidth, setFitToWidth] = useState(true);
+  const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
+  const frameWrapRef = useRef<HTMLDivElement | null>(null);
   const text = readerStrings[locale];
   const BookmarkIcon = isBookmarked ? BookmarkCheck : Bookmark;
-  const zoomLabel = `${Math.round(scale * 100)}%`;
+  const zoomLabel = fitToWidth ? 'Fit' : `${Math.round(scale * 100)}%`;
   const resolvedTitle = title || 'Статья';
   const resolvedMeta = meta || '';
 
+  const applyFitToWidth = useCallback(() => {
+    const wrap = frameWrapRef.current;
+    if (!wrap || !basePageWidth) {
+      return;
+    }
+
+    const availableWidth = wrap.clientWidth - FRAME_HORIZONTAL_PADDING;
+    setScale(fitScaleForWidth(availableWidth, basePageWidth));
+  }, [basePageWidth]);
+
+  const handleBasePageWidth = useCallback((width: number) => {
+    setBasePageWidth(width);
+  }, []);
+
+  useEffect(() => {
+    setBasePageWidth(null);
+    setFitToWidth(true);
+    setScale(1);
+  }, [pdfUrl]);
+
+  useEffect(() => {
+    if (!fitToWidth || !basePageWidth) {
+      return undefined;
+    }
+
+    applyFitToWidth();
+
+    const wrap = frameWrapRef.current;
+    if (!wrap || typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      applyFitToWidth();
+    });
+    observer.observe(wrap);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [applyFitToWidth, basePageWidth, fitToWidth, pdfUrl]);
+
   const updateScale = (direction: -1 | 1) => {
+    setFitToWidth(false);
     setScale((currentScale) => {
       const nextScale = currentScale + direction * READER_SCALE_STEP;
-      const clampedScale = Math.min(MAX_READER_SCALE, Math.max(MIN_READER_SCALE, nextScale));
-
-      return Number(clampedScale.toFixed(1));
+      return Number(clampScale(nextScale).toFixed(1));
     });
+  };
+
+  const resetFitToWidth = () => {
+    setFitToWidth(true);
   };
 
   return (
@@ -99,7 +166,15 @@ export function ReaderPdfViewer({
           >
             <Minus aria-hidden="true" size={16} strokeWidth={2} />
           </button>
-          <span className="reader-zoom__value">{zoomLabel}</span>
+          <button
+            className="reader-zoom__value reader-zoom__value--button"
+            type="button"
+            title="Вписать по ширине"
+            disabled={!pdfUrl}
+            onClick={resetFitToWidth}
+          >
+            {zoomLabel}
+          </button>
           <button
             className="reader-zoom__button"
             type="button"
@@ -144,14 +219,20 @@ export function ReaderPdfViewer({
 
       {pdfUrl ? (
         <div
-          className={
-            readerDark ? 'reader-pdf-frame-wrap reader-pdf-frame-wrap--dark' : 'reader-pdf-frame-wrap'
-          }
+          ref={frameWrapRef}
+          className={[
+            'reader-pdf-frame-wrap',
+            readerDark ? 'reader-pdf-frame-wrap--dark' : '',
+            fitToWidth ? '' : 'reader-pdf-frame-wrap--manual-zoom',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <ReaderPdfCanvasViewer
             src={pdfUrl}
             scale={scale}
             onPageCount={setPageCount}
+            onBasePageWidth={handleBasePageWidth}
             onTextSelect={onTextSelect}
             focusAnnotation={focusAnnotation}
             onFocusComplete={onFocusComplete}
