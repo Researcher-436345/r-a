@@ -24,8 +24,8 @@ export function LibraryPage() {
     setError(null);
     try {
       const data = await fetchLibrary();
-      setItems(data.items);
-      setTotal(data.total);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Не удалось загрузить библиотеку');
     } finally {
@@ -81,7 +81,7 @@ export function LibraryPage() {
 
       <div className="library-list">
         {items.map((item) => {
-          const authors = item.paper.authors.map((author) => author.name).join(', ');
+          const authors = (item.paper.authors ?? []).map((author) => author.name).join(', ');
           const version = item.paper.latest_version;
           const status = version?.status ?? 'processing';
           const statusLabel = STATUS_LABELS[status] ?? status;
