@@ -1,18 +1,19 @@
 # Iteration push notes
 
-Last refreshed: 2026-07-21
+Last refreshed: 2026-08-08
 Branch: develop-aleksandr
 Repo: Researcher-436345/r-a
 
 ## One-liner
 
-Научная библиотека + PDF-ридер (итерация 1). Бэкенд на **Go**, фронт в `frontend/`. Сквозной сценарий «регистрация → статья → PDF → заметки → trending» работает. AI из РФ нестабилен. Этот файл — точка входа перед push.
+Научная библиотека + PDF-ридер. В этом пуше: **modular monolith** Go-бэкенда (grow-ready модули, не отдельные микросервисы в проде) + фиксы upload PDF metadata / пустой library.
 
-Подробнее: [HANDOFF.md](./HANDOFF.md), краткий чеклист: [STATUS.md](./STATUS.md).
+Подробнее: [HANDOFF.md](./HANDOFF.md), чеклист: [STATUS.md](./STATUS.md).
 
 ## How to run
 
 ```bash
+cd r-a   # канон для GitHub
 cp .env.example .env
 docker compose up -d --build
 
@@ -26,70 +27,79 @@ npm run dev -- --port 5173
 |--------|-----|
 | UI | http://localhost:5173 |
 | API | http://localhost:8080/health |
-| MinIO API | http://localhost:**9002** (не 9000 — конфликт с Cursor) |
+| MinIO API | http://localhost:**9002** |
 | MinIO UI | http://localhost:9003 |
 | Postgres | localhost:5432 |
 | Redis | localhost:6379 |
 
-Compose: Go `api` + `worker`, one-shot SQL `migrate` из `migrations/`.
+Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
 
-## Done / working now
+## Done this iteration / currently working
 
-- Auth JWT (register/login/refresh/me) — Go + UI
-- Papers: upload / arXiv / DOI, dedup, asynq worker
-- Library CRUD-ish (list/patch/delete, favorite)
-- PDF reader via **`GET /papers/{id}/pdf`** → blob URL (не MinIO с хоста)
-- Annotations + selection popup (заметка / в чат / перевод)
-- Chat chips: `стр. N · слова`, клик → прыжок в PDF
-- Trending feed + Redis cache
-- Title из PDF при upload
-- Docs: HANDOFF, STATUS, iteration-1, GO_MIGRATION
-- Cursor: skill `iteration-push-notes` + hook на `git push`
+- **Modular backend** (один деплой, границы модулей):
+  - `backend/internal/app/router.go` — composition root
+  - `backend/internal/platform/{config,db,httpx,queue,storage}`
+  - `backend/internal/modules/{identity,catalog,library,annotations,feed,assistant}`
+- HTTP-контракт без изменений (`/auth`, `/papers`, `/library`, `/annotations`, `/feed`)
+- Worker читает `catalog.Store` (PDF ingest asynq)
+- Empty library: API отдаёт `"items": []` (не `null`); фронт `?? []`
+- Local PDF upload metadata:
+  - не брать `/Title` из outline (bookmarks)
+  - UTF-16 / PDF escapes
+  - если найден arXiv id → title/authors/abstract с arXiv API
 
-## Not done / gaps
+## Not done / known gaps
 
 - EPIC-05 проекты (sidebar моки)
-- EPIC-09 web-search
+- EPIC-09 web-search — есть чужая ветка `feature/web-search` (Ilia), не смержена
 - EPIC-10 теги
-- EPIC-08: нет `chat_messages` в БД; LLM часто недоступен из РФ
+- EPIC-08: нет `chat_messages` в БД; LLM из РФ нестабилен
 - Similar tab — моки
-- Миграции: SQL в `migrations/` (Python удалён)
+- Ветка `papper_chat` (Gleb) — отдельный assistant-прототип от старого `main`, не влита
+- Отдельные Docker-сервисы / gateway — **намеренно не сейчас** (сначала модули)
 
 ## Architecture snapshot
 
 ```
-frontend → JWT → Go API (:8080)
-                → Postgres / Redis(asynq+cache) / MinIO(internal)
+frontend → JWT → Go API (:8080)  [cmd/api + internal/app]
+                → modules: identity / catalog / library / annotations / feed / assistant
+                → platform: Postgres / Redis(asynq+cache) / MinIO
                 → GET /papers/{id}/pdf streams file
-worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf
+worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf  [uses catalog]
 ```
 
-Код API: `backend/internal/httpapi/server.go`.  
-Фронт ридера: `frontend/src/pages/reader/`, `frontend/src/features/reader/`, `frontend/src/features/library/api.ts`.
+Правила границ: `backend/README.md`.  
+Catalog ↔ library только через `catalog.Membership` (wired in `app`).
 
 ## Pitfalls
 
-1. Cursor слушает 9000/9002 на localhost → PDF только через API.  
-2. LLM: Gemini/OpenRouter из РФ часто блок; AITunnel/Ollama.  
-3. Не коммитить `.env`.  
-4. Перед `git push` хук требует сегодняшний `Last refreshed` в этом файле.
+1. Cursor слушает 9000/9002 → PDF только через API stream.
+2. LLM: Gemini/OpenRouter из РФ часто блок; AITunnel/Ollama.
+3. Два git: пушь из `r-a/`, не из parent `researcher/`.
+4. Старый compose в parent может занять порты — `docker compose down` там перед `r-a`.
+5. Перед `git push` хук требует сегодняшний `Last refreshed` в этом файле.
 
 ## Suggested next tasks
 
-1. EPIC-05: projects API + живой sidebar  
-2. chat_messages + история чата  
-3. При смене схемы — новый файл в `migrations/`  
-4. Explain из selection popup  
-5. Дочистить моки Similar / Ask-box  
+1. Смержить/перенести `feature/web-search` в `modules/research`
+2. EPIC-05: projects API + живой sidebar
+3. chat_messages + история чата в `assistant`
+4. Explain из selection popup
+5. Дочистить моки Similar / Ask-box
+6. Когда заболит LLM/SSE — вынести `assistant` в `cmd/assistant`
 
-## API surface (private = Bearer)
+## API surface
 
+Без breaking changes:  
 `/auth/*`, `/papers/{arxiv,doi,upload,id,pdf-url,pdf,retry-pdf,chat,explain,translate}`, `/library/*`, `/papers/{id}/annotations`, `/annotations/{id}`, `/feed/trending`
 
 ## Files to look at first
 
-- `HANDOFF.md`, `STATUS.md`, `ITERATION_PUSH.md` (этот файл)
-- `docker-compose.yml`, `.env.example`
-- `backend/cmd/api`, `backend/cmd/worker`, `backend/internal/httpapi/server.go`
-- `frontend/src/features/library/api.ts`, `frontend/src/pages/reader/reader-page.tsx`
-- `.cursor/skills/iteration-push-notes/SKILL.md`, `.cursor/hooks.json`
+- `backend/internal/app/router.go`
+- `backend/internal/modules/catalog/` (http, store, pdfmeta, arxiv)
+- `backend/internal/modules/identity/`
+- `backend/internal/modules/library/`
+- `backend/cmd/api/main.go`, `backend/cmd/worker/main.go`
+- `backend/README.md`
+- `frontend/src/pages/library/library-page.tsx`
+- `docs/HANDOFF.md`, `docs/STATUS.md`
