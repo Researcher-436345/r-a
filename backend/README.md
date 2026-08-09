@@ -8,6 +8,7 @@ Modular monolith with the same HTTP contract for `frontend/`.
 cmd/
   api/                 # composition root (HTTP)
   worker/              # PDF ingest (asynq)
+  translator/          # isolated selected-text translation service
 internal/
   app/                 # wires modules into one router
   platform/            # config, db, httpx, queue, storage
@@ -17,7 +18,8 @@ internal/
     library/           # user_library_items
     annotations/       # highlights / notes
     feed/              # trending + citation enrich (OpenAlex / optional S2)
-    assistant/         # chat / explain / translate
+    assistant/         # chat / explain + translation service client
+    translation/       # validation + OpenAI-compatible provider adapter
 ```
 
 ### Boundary rules
@@ -57,7 +59,19 @@ docker compose up -d --build
 - `migrate` — SQL in `../migrations`
 - `api` — Go HTTP on `:8080`
 - `worker` — asynq PDF jobs
+- `translator` — selected-text translation through ProxyAPI/OpenRouter
 - postgres / redis / minio
+
+## Translation
+
+`POST /papers/{id}/translate` accepts `{ "text": "...", "target_lang": "ru" }`.
+The authenticated API verifies paper access and forwards the request to the private
+`translator` service. Text is limited to `TRANSLATION_MAX_CHARS` Unicode characters
+(5000 by default); supported target languages are `ru`, `en`, `de`, `fr`, `es`,
+`it`, `pt`, `zh`, `ja`, and `ko`.
+
+Configure an OpenAI-compatible provider with `LLM_BASE_URL`, `LLM_API_KEY`, and
+`LLM_MODEL`. See the root `.env.example` for ProxyAPI and OpenRouter examples.
 
 ## Local binary
 

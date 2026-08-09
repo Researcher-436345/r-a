@@ -1,56 +1,62 @@
 package assistant
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
-	"github.com/centraluniversity/researcher/internal/modules/catalog"
+	"github.com/centraluniversity/researcher/internal/modules/translation"
+	"github.com/centraluniversity/researcher/internal/platform/config"
 )
 
-func Translate(ctx context.Context, llm LLM, paper catalog.PaperOut, text, target string) (string, *string) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "", nil
-	}
-	if llm.Config.LLMAPIKey != "" {
-		reply := llm.Explain(ctx, paper, text, "Translate the fragment into "+target+". Return only the translation, no quotes or commentary.")
-		l := strings.ToLower(reply)
-		if reply != "" && !strings.HasPrefix(l, "ошибка") && !strings.Contains(l, "не настроен") {
-			return reply, nil
-		}
-	}
-	u := "https://api.mymemory.translated.net/get?q=" + url.QueryEscape(truncate(text, 450)) + "&langpair=" + url.QueryEscape("autodetect|"+target)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "Не удалось перевести: " + err.Error(), nil
-	}
-	defer resp.Body.Close()
-	var data struct {
-		ResponseData struct {
-			TranslatedText string `json:"translatedText"`
-		} `json:"responseData"`
-		Matches []struct {
-			Source string `json:"source"`
-		} `json:"matches"`
-	}
-	if err = json.NewDecoder(resp.Body).Decode(&data); err != nil || strings.TrimSpace(data.ResponseData.TranslatedText) == "" {
-		return "Не удалось перевести: empty translation from MyMemory", nil
-	}
-	var source *string
-	if len(data.Matches) > 0 && data.Matches[0].Source != "" {
-		source = &data.Matches[0].Source
-	}
-	return strings.TrimSpace(data.ResponseData.TranslatedText), source
+type TranslationClient struct {
+	Config config.Config
+	HTTP   *http.Client
 }
 
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n])
+type TranslationServiceError struct {
+	Status int
+	Detail string
+}
+
+func (e *TranslationServiceError) Error() string { return e.Detail }
+
+func (c TranslationClient) Translate(ctx context.Context, input translation.Request) (translation.Response, error) {
+	body, err := json.Marshal(input)
+	if err != nil {
+		return translation.Response{}, fmt.Errorf("encode translation request: %w", err)
 	}
-	return s
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.Config.TranslationServiceURL, "/")+"/translate", bytes.NewReader(body))
+	if err != nil {
+		return translation.Response{}, fmt.Errorf("create translation request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: c.Config.LLMTimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return translation.Response{}, fmt.Errorf("translation service unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		var payload struct {
+			Detail string `json:"detail"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&payload)
+		if payload.Detail == "" {
+			payload.Detail = "Translation service is unavailable"
+		}
+		return translation.Response{}, &TranslationServiceError{Status: resp.StatusCode, Detail: payload.Detail}
+	}
+	var result translation.Response
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&result); err != nil || strings.TrimSpace(result.Translation) == "" {
+		return translation.Response{}, fmt.Errorf("translation service returned an invalid response")
+	}
+	return result, nil
 }

@@ -5,7 +5,7 @@
 ## Структура
 
 ```
-backend/      # Go API + worker
+backend/      # Go API + PDF worker + translation microservice
 frontend/     # React (Vite)
 docs/         # планы, статус, handoff
 migrations/   # SQL schema (без Python)

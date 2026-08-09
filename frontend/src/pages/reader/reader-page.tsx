@@ -36,7 +36,7 @@ export function ReaderPage() {
   const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'failed' | 'idle'>('idle');
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
-  const [highlightColor, setHighlightColor] = useState(DEFAULT_HIGHLIGHT_COLOR);
+  const [highlightColor, setHighlightColor] = useState<string>(DEFAULT_HIGHLIGHT_COLOR);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [flashFocus, setFlashFocus] = useState<ReaderAnnotationFocus | null>(null);
   const [chatAttachment, setChatAttachment] = useState<ChatContextAttachment | null>(null);

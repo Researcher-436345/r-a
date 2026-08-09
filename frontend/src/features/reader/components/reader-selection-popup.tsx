@@ -8,6 +8,7 @@ import {
   toPagePixelRect,
 } from '../highlight-colors';
 import { normalizeSelectedQuote } from '../normalize-quote';
+import { TRANSLATION_MAX_CHARS } from '../api';
 
 export interface ReaderSelection {
   page: number;
@@ -238,10 +239,13 @@ export function ReaderSelectionPopup({
   const startTranslate = () => {
     setMode('translate');
     const raw = selection.text.replace(/\s+/g, ' ').trim();
-    if (raw) {
+    if (raw && Array.from(raw).length <= TRANSLATION_MAX_CHARS) {
       onTranslate(raw);
     }
   };
+
+  const selectedCharCount = Array.from(selection.text.replace(/\s+/g, ' ').trim()).length;
+  const selectionTooLong = selectedCharCount > TRANSLATION_MAX_CHARS;
 
   const colorPicker = (
     <div className="reader-selection-popup__colors" role="group" aria-label="Цвет выделения">
@@ -299,7 +303,12 @@ export function ReaderSelectionPopup({
               <NotebookPen aria-hidden="true" size={15} strokeWidth={2} />
               Заметка
             </button>
-            <button type="button" className="reader-selection-popup__tool" onClick={startTranslate}>
+            <button
+              type="button"
+              className="reader-selection-popup__tool"
+              onClick={startTranslate}
+              title={selectionTooLong ? `Максимум ${TRANSLATION_MAX_CHARS} символов` : undefined}
+            >
               <Languages aria-hidden="true" size={15} strokeWidth={2} />
               Перевод
             </button>
@@ -316,7 +325,11 @@ export function ReaderSelectionPopup({
       ) : mode === 'translate' ? (
         <div className="reader-selection-popup__note">
           <div className="reader-selection-popup__translation">
-            {isTranslating ? 'Переводим…' : translation || 'Не удалось перевести'}
+            {selectionTooLong
+              ? `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
+              : isTranslating
+                ? 'Переводим…'
+                : translation || 'Не удалось перевести'}
           </div>
           <div className="reader-selection-popup__actions">
             <button type="button" onClick={() => setMode('choose')} disabled={isTranslating}>

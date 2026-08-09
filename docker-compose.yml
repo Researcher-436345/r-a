@@ -69,6 +69,7 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: papers
+      TRANSLATION_SERVICE_URL: http://translator:8090
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,6 +79,22 @@ services:
         condition: service_started
       migrate:
         condition: service_completed_successfully
+      translator:
+        condition: service_healthy
+
+  translator:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      TRANSLATION_HTTP_ADDR: ":8090"
+    entrypoint: ["translator"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   worker:
     build:

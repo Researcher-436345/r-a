@@ -1,10 +1,12 @@
 package assistant
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
+	"github.com/centraluniversity/researcher/internal/modules/translation"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
@@ -72,7 +74,7 @@ func (a API) explain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a API) translate(w http.ResponseWriter, r *http.Request) {
-	id, ok := a.Papers.RequirePaper(w, r)
+	_, ok := a.Papers.RequirePaper(w, r)
 	if !ok {
 		return
 	}
@@ -80,17 +82,30 @@ func (a API) translate(w http.ResponseWriter, r *http.Request) {
 		Text       string `json:"text"`
 		TargetLang string `json:"target_lang"`
 	}
-	if !httpx.DecodeJSON(w, r, &b) || strings.TrimSpace(b.Text) == "" {
+	if !httpx.DecodeJSON(w, r, &b) {
 		return
 	}
 	if b.TargetLang == "" {
 		b.TargetLang = "ru"
 	}
-	p, e := a.papers().GetPaperOut(r.Context(), id)
-	if e != nil {
-		httpx.Error(w, 404, "Paper not found")
+	input, err := translation.Validate(translation.Request{Text: b.Text, TargetLang: b.TargetLang}, a.Config.TranslationMaxChars)
+	if err != nil {
+		status := http.StatusBadRequest
+		if len([]rune(strings.TrimSpace(b.Text))) > a.Config.TranslationMaxChars {
+			status = http.StatusRequestEntityTooLarge
+		}
+		httpx.Error(w, status, err.Error())
 		return
 	}
-	t, d := Translate(r.Context(), a.llm(), p, b.Text, b.TargetLang)
-	httpx.JSON(w, 200, map[string]any{"translation": t, "detected_source": d})
+	result, err := (TranslationClient{Config: a.Config}).Translate(r.Context(), input)
+	if err != nil {
+		var serviceErr *TranslationServiceError
+		if errors.As(err, &serviceErr) {
+			httpx.Error(w, serviceErr.Status, serviceErr.Detail)
+			return
+		}
+		httpx.Error(w, http.StatusBadGateway, "Translation service is unavailable")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, result)
 }

@@ -117,9 +117,10 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 ### LLM
 
 - Env: `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`
-- Дефолт в примере: AITunnel (`api.aitunnel.ru`) — из РФ реалистичнее Gemini/OpenRouter
-- Эндпоинты: `/papers/{id}/chat`, `/explain`, `/translate` (translate: LLM → fallback MyMemory)
-- Без ключа или при гео-блоке ответ — текст ошибки в `reply`, не обязательно 5xx
+- В `.env.example` настроен OpenAI-compatible ProxyAPI; там же есть пример прямого OpenRouter
+- `/papers/{id}/translate` проксирует запрос в приватный сервис `translator`; лимит по умолчанию — 5000 Unicode-символов
+- Перевод возвращает корректные 4xx/5xx при ошибках валидации, конфигурации и провайдера; fallback на MyMemory удалён
+- `/papers/{id}/chat` и `/explain` пока используют прежний LLM-клиент assistant-модуля
 
 ---
 

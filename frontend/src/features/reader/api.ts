@@ -83,17 +83,23 @@ export async function chatPaper(paperId: string, request: PaperChatRequest): Pro
 
 export interface TranslateReply {
   translation: string;
-  detected_source?: string | null;
+  target_lang: string;
 }
+
+export const TRANSLATION_MAX_CHARS = 5000;
 
 export async function translateText(
   paperId: string,
   text: string,
   targetLang = 'ru',
 ): Promise<TranslateReply> {
+  const normalized = text.trim();
+  if (Array.from(normalized).length > TRANSLATION_MAX_CHARS) {
+    throw new Error(`Для перевода можно выделить не более ${TRANSLATION_MAX_CHARS} символов`);
+  }
   return apiRequest<TranslateReply>(`/papers/${paperId}/translate`, {
     method: 'POST',
     token: authToken(),
-    body: { text, target_lang: targetLang },
+    body: { text: normalized, target_lang: targetLang },
   });
 }

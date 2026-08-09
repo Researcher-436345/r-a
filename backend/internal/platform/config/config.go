@@ -36,10 +36,15 @@ type Config struct {
 	LLMHTTPReferer string
 	LLMAppTitle    string
 
+	TranslationHTTPAddr      string
+	TranslationServiceURL    string
+	TranslationMaxChars      int
+	TranslationMaxConcurrent int
+
 	// Citations — OpenAlex без ключа сейчас; S2 — когда появится ключ.
-	CitationsEnabled       bool
-	OpenAlexMailto         string
-	SemanticScholarAPIKey  string
+	CitationsEnabled      bool
+	OpenAlexMailto        string
+	SemanticScholarAPIKey string
 }
 
 func Load() Config {
@@ -72,10 +77,23 @@ func Load() Config {
 		LLMHTTPReferer: getenv("LLM_HTTP_REFERER", "http://localhost:5173"),
 		LLMAppTitle:    getenv("LLM_APP_TITLE", "Researcher"),
 
+		TranslationHTTPAddr:      getenv("TRANSLATION_HTTP_ADDR", ":8090"),
+		TranslationServiceURL:    getenv("TRANSLATION_SERVICE_URL", "http://localhost:8090"),
+		TranslationMaxChars:      positiveInt(getenv("TRANSLATION_MAX_CHARS", "5000"), 5000),
+		TranslationMaxConcurrent: positiveInt(getenv("TRANSLATION_MAX_CONCURRENT", "8"), 8),
+
 		CitationsEnabled:      getenv("CITATIONS_ENABLED", "true") != "false",
 		OpenAlexMailto:        getenv("OPENALEX_MAILTO", "researcher@localhost"),
 		SemanticScholarAPIKey: getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
 	}
+}
+
+func positiveInt(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
 }
 
 func getenv(k, def string) string {
