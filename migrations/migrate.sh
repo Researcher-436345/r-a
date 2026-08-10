@@ -20,16 +20,10 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
      applied_at timestamptz NOT NULL DEFAULT now()
    );"
 
-# Legacy DB already created by Alembic — mark baseline applied, do not re-run CREATE
+# Legacy DB already created by Alembic / 001 — mark baseline only, then apply newer files.
 if [ "$(psql "$DB_URL" -tAc "SELECT to_regclass('public.users')")" = "users" ]; then
-  for f in /migrations/*.sql; do
-    [ -f "$f" ] || continue
-    name=$(basename "$f")
-    psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
-      "INSERT INTO schema_migrations(id) VALUES ('$name') ON CONFLICT DO NOTHING;"
-  done
-  echo "existing schema detected — migrations marked applied"
-  exit 0
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+    "INSERT INTO schema_migrations(id) VALUES ('001_init.sql') ON CONFLICT DO NOTHING;"
 fi
 
 for f in /migrations/*.sql; do
