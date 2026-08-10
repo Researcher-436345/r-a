@@ -1,21 +1,22 @@
 # Iteration push notes
 
 Last refreshed: 2026-08-10
-Branch: main
+Branch: feature/reader-paper-chat
 Repo: Researcher-436345/r-a
 
 ## One-liner
 
-`main` обновлён: линия **develop-aleksandr** (modular API, reader UX, feed New/Hot/Popular, OpenAlex cites) + фича **перевода выделения** (`modules/translation`, `cmd/translator`). Дальше чат в ридере — ветка `feature/reader-paper-chat`.
+EPIC-08 paper chat: persist history, stuff **full paper text** into the LLM (TeX-first / PDF parser), rolling chat-history summary, reader UX (rich text, context meter, model picker).
 
-Подробнее: [HANDOFF.md](./HANDOFF.md), чеклист: [STATUS.md](./STATUS.md).
+Подробнее: [HANDOFF.md](./HANDOFF.md), [PARSER.md](./PARSER.md), чеклист: [STATUS.md](./STATUS.md).
 
 ## How to run
 
 ```bash
 cd r-a   # канон для GitHub
-cp .env.example .env
+cp .env.example .env   # LLM_API_KEY + опционально LLM_MODELS
 docker compose up -d --build
+# migrations 001–003 via migrate service
 
 cd frontend
 cp .env.example .env   # VITE_API_URL=http://localhost:8080
@@ -27,101 +28,101 @@ npm run dev -- --port 5173
 |--------|-----|
 | UI | http://localhost:5173 |
 | API | http://localhost:8080/health |
+| Parser | http://localhost:8091/health |
 | MinIO API | http://localhost:**9002** |
 | MinIO UI | http://localhost:9003 |
 | Postgres | localhost:5432 |
 | Redis | localhost:6379 |
 
-Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
+Compose: Go `api` + `worker` + `parser` + `translator`, SQL `migrate` из `migrations/`.
 
 Тест-аккаунт (если сид есть): `test@researcher.local` / `testpass123`.
 
 ## Done this iteration / currently working
 
-### Reader UX (этот пуш)
+### Full-text parse + chat
 
-- **Fit-to-width**: PDF масштабируется под ширину области; `Fit` в тулбаре; `+/−` — ручной zoom
-  - `frontend/src/features/reader/components/reader-pdf-viewer.tsx`
-- **Resizable chat**: drag-handle между PDF и чатом; ширина в `localStorage` (`researcher.reader.chatWidth`)
-  - `frontend/src/pages/reader/reader-page.tsx`
-- **Selection popup**:
-  - не закрывается при ресайзе сплита
-  - rect в долях страницы (0–1) → переживает zoom/resize
-  - 5 пастельных цветов хайлайта → сохраняются в `annotations.color`
-  - `frontend/src/features/reader/components/reader-selection-popup.tsx`
-  - `frontend/src/features/reader/highlight-colors.ts`
-- Чат-баблы: chip’ы без overflow (`reader-chat-bubble__body`)
-- PDF scroll: frame-wrap `block` + `margin-inline: auto` у страниц (без обрезания слева)
+- `services/parser` (PyMuPDF default; Docling optional), compose `:8091`
+- TeX-first for arXiv (`content.TryArxivTeX`), else PDF parse
+- `migrations/003_paper_documents.sql` — documents, chunks, `chat_thread_summaries`
+- Worker `process_paper_parse` after PDF ready
+- Chat: full `plain_text` in prompt + token budget; rolling history summary on overflow
+- Paths: `backend/internal/modules/content/`, `assistant/{http,llm,prompt}.go`, `cmd/worker/main.go`
 
-### Feed / citations / translate
+### Chat UX (reader)
 
-- Sort `new|hot|popular` на `GET /feed/trending?sort=`
-- Citation enrich: OpenAlex; бейдж только если count > 0
-- **Translate selection**: сервис `translation` + `cmd/translator` в compose; UI в selection popup
-- **TODO:** `SEMANTIC_SCHOLAR_API_KEY` в `.env` — см. `.env.example`
-- Web-search / papper_chat — **ещё не в main**
+- Context fill meter (`GET …/chat/context`, bar above composer)
+- Model picker (`GET /assistant/models`, `LLM_MODELS`, `localStorage`)
+- KaTeX + markdown in assistant bubbles (`shared/ui/rich-text.tsx`)
+- Plain-text paste into composer; caret/placeholder fix
+- «Уточнить» on selecting text in assistant replies
+- Humanized LLM errors (e.g. 402 insufficient balance)
 
-### Backend (уже на ветке)
+### Paper chat API (persistence)
 
-- Modular monolith: `internal/app` + `platform` + `modules/{identity,catalog,library,annotations,feed,assistant}`
-- Empty library: `"items": []`; PDF meta: не брать outline `/Title`, UTF-16, arXiv lookup
+- `migrations/002_chat_messages.sql`
+- `GET/POST /papers/{id}/chat`, explain from selection popup
+- Paths: `assistant/{http,llm,store}.go`, `frontend/.../reader-chat-panel.tsx`
+
+### Already on main (context)
+
+- Reader UX: fit-to-width, resizable chat, pastel highlights, translate selection
+- Feed New/Hot/Popular + OpenAlex cites
+- Modular monolith
 
 ## Not done / known gaps
 
 - EPIC-05 проекты (sidebar моки)
-- EPIC-09 web-search — ветка `feature/web-search` (Ilia), не смержена
+- EPIC-09 web-search — ветка `feature/web-search`, не смержена
 - EPIC-10 теги
-- EPIC-08: нет `chat_messages` в БД; LLM из РФ нестабилен
+- LLM баланс/ключ у провайдера (ProxyAPI); дорогие модели могут отдавать 402
 - Similar tab — моки
-- Ветка `papper_chat` (Gleb) — отдельный assistant-прототип, не влита
-- Сохранённые annotation `rect` всё ещё в **px** на момент сохранения (старые заметки после сильного zoom могут «плыть»); текущее выделение — ratio
-- Цитирования: без S2-ключа покрытие свежих arXiv слабое (OpenAlex часто 404) — нужен `SEMANTIC_SCHOLAR_API_KEY`
+- Streaming / RAG / multi-paper agent — вне scope
+- Annotation rect в БД всё ещё px при save (выделение — ratio)
 
 ## Architecture snapshot
 
 ```
-frontend → JWT → Go API (:8080)  [cmd/api + internal/app]
-                → modules: identity / catalog / library / annotations / feed / assistant
-                → platform: Postgres / Redis(asynq+cache) / MinIO
-                → GET /papers/{id}/pdf streams file
-worker ← asynq ← process_arxiv_pdf | finalize_uploaded_pdf  [uses catalog]
+frontend → JWT → Go API (:8080)
+                → assistant: chat_messages + full paper_documents text
+                → /assistant/models + per-request model
+worker ← asynq ← PDF ready → process_paper_parse → parser|TeX
 ```
-
-Правила границ: `backend/README.md`.
 
 ## Pitfalls
 
 1. Cursor слушает 9000/9002 → PDF только через API stream.
-2. LLM: Gemini/OpenRouter из РФ часто блок; AITunnel/Ollama.
-3. Два git: пушь из `r-a/`, не из parent `researcher/`.
-4. Старый compose в parent может занять порты — `docker compose down` там перед `r-a`.
+2. LLM: Gemini/OpenRouter из РФ часто блок; ProxyAPI/AITunnel; `LLM_MODELS` должен совпадать с тем, что реально оплачено.
+3. Пушь из `r-a/`, не из parent `researcher/`.
+4. `migrate.sh`: на legacy DB сначала помечает только `001`, затем применяет новые файлы — иначе `002` пропускается.
 5. Перед `git push` хук требует сегодняшний `Last refreshed` в этом файле.
-6. Parent `researcher/docs/ITERATION_PUSH.md` тоже держать в синхроне, если хук смотрит cwd parent.
+6. Compose читает **`r-a/.env`**, не родительский `researcher/.env`.
+7. Селект модели в узком футере: `flex-shrink: 0` — иначе схлопывается.
 
 ## Suggested next tasks
 
-1. Смержить/перенести `feature/web-search` в `modules/research`
-2. EPIC-05: projects API + живой sidebar
-3. chat_messages + история чата в `assistant`
-4. Нормализовать annotation rect в БД (ratio) + миграция/совместимость
-5. Explain из selection popup
-6. Дочистить моки Similar / Ask-box
+1. PR `feature/reader-paper-chat` → `main`
+2. Смержить/перенести `feature/web-search` в `modules/research`
+3. EPIC-05: projects API + живой sidebar
+4. Нормализовать annotation rect в БД (ratio)
+5. Дочистить моки Similar / Ask-box
+6. Опционально: per-model context limits вместо одного `LLM_CONTEXT_TOKENS`
 
 ## API surface
 
-`GET /feed/trending?category=&limit=&sort=new|hot|popular` → items с опциональным `citation_count` / `citation_source`.
-
-Annotations: `color`. Остальное без breaking changes.
-
-`/auth/*`, `/papers/{…}`, `/library/*`, `/papers/{id}/annotations`, `/annotations/{id}`, `/feed/trending`
+- `GET /assistant/models` → `{ default, items: [{id,label}] }`
+- `GET /papers/{paperID}/chat/messages` → `{ items: ChatMessage[] }`
+- `GET /papers/{paperID}/chat/context?model=` → context usage estimate
+- `POST /papers/{paperID}/chat` `{ message, context_text?, model? }` → `{ reply, …, context_usage }`
+- `POST /papers/{paperID}/explain` `{ text, question?, model? }` → `{ reply }` (не пишет в `chat_messages`)
 
 ## Files to look at first
 
-- `backend/internal/modules/feed/service.go`
-- `backend/internal/modules/feed/citations.go`
-- `frontend/src/features/papers/components/trending-papers.tsx`
-- `frontend/src/features/papers/components/paper-card.tsx`
-- `.env.example` (S2 key TODO)
-- `frontend/src/pages/reader/reader-page.tsx`
-- `frontend/src/features/reader/components/reader-selection-popup.tsx`
-- `docs/HANDOFF.md`, `docs/STATUS.md`
+- `migrations/002_chat_messages.sql`, `003_paper_documents.sql`, `migrate.sh`
+- `services/parser/`, `docs/PARSER.md`
+- `backend/internal/modules/content/`
+- `backend/internal/modules/assistant/{http,llm,prompt,store}.go`
+- `frontend/src/features/reader/api.ts`
+- `frontend/src/features/reader/components/{reader-chat-panel,chat-composer}.tsx`
+- `frontend/src/shared/ui/rich-text.tsx`
+- `docs/STATUS.md`

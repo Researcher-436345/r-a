@@ -1,8 +1,8 @@
 # Handoff — Researcher
 
 **Для кого:** любой, кто продолжает разработку.  
-**Дата:** 2026-07-20  
-**Коротко:** локальный прототип научной библиотеки + PDF-ридер. Сквозной сценарий «зарегистрироваться → добавить статью → читать → заметки» работает. AI из РФ нестабилен. Бэкенд на **Go**; схема БД — SQL в `migrations/`.
+**Дата:** 2026-08-10  
+**Коротко:** локальный прототип научной библиотеки + PDF-ридер. Сквозной сценарий «зарегистрироваться → добавить статью → читать → заметки → чат по полному тексту» работает при настроенном LLM. Бэкенд на **Go**; схема БД — SQL в `migrations/`; парсер PDF — `services/parser`.
 
 Живой чеклист эпиков: [`STATUS.md`](./STATUS.md) (эта папка `docs/`).  
 План итерации 1: [`iteration-1.md`](./iteration-1.md).  
@@ -33,9 +33,10 @@ r-a/   (GitHub: Researcher-436345/r-a)
 │   ├── cmd/api, cmd/worker
 │   ├── internal/app          # composition root (router)
 │   ├── internal/platform/    # config, db, queue, storage, httpx
-│   └── internal/modules/     # identity, catalog, library, annotations, feed, assistant
+│   └── internal/modules/     # identity, catalog, library, annotations, feed, assistant, content
+├── services/parser/  # FastAPI PDF→text (PyMuPDF; Docling optional)
 ├── frontend/         # React + Vite + PDF.js
-├── docs/             # HANDOFF, STATUS, планы, push-notes
+├── docs/             # HANDOFF, STATUS, PARSER, планы, push-notes
 ├── migrations/       # SQL schema (без Python)
 ├── docker-compose.yml
 ├── README.md

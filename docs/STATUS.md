@@ -3,7 +3,7 @@
 > Краткий чеклист. **Полный контекст для нового человека:** [`HANDOFF.md`](./HANDOFF.md).  
 > Обновлять скиллом `project-status` после значимых изменений.
 
-**Последнее обновление:** 2026-08-08
+**Последнее обновление:** 2026-08-10
 
 ## Итерация 1 — эпики
 
@@ -17,14 +17,17 @@
 | EPIC-06 Заметки | P1 | ✅ | CRUD annotations + UI |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
 | EPIC-11 Фронт без моков | P0 | 🟡 | сайдбар проектов и Similar — моки |
-| EPIC-08 AI | P1 | 🟡 | chat/explain/translate; LLM из РФ часто недоступен |
+| EPIC-08 AI | P1 | 🟡 | full-text chat + history/rolling summary + context meter + model picker; LLM зависит от ключа/баланса |
 | EPIC-05 Проекты | P2 | ❌ | не начато |
 | EPIC-09 Web-search | P2 | ❌ | не начато |
 | EPIC-10 Теги | P3 | ❌ | нет |
 
 ## Недавние изменения (changelog)
 
-- Backend: modular monolith — `internal/modules/{identity,catalog,library,annotations,feed,assistant}` + `platform` + `app` router
+- **2026-08-10 — chat UX:** метр заполнения контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown в ответах, plain-text paste, «Уточнить» по выделению в ответе, человекочитаемые ошибки LLM (402)
+- **2026-08-10 — full-text chat:** parser (`services/parser`) + TeX-first arXiv; `paper_documents` (`003`); chat кладёт полный текст в prompt; overflow истории → rolling summary. См. [PARSER.md](./PARSER.md)
+- **2026-08-10 — EPIC-08 paper chat:** `chat_messages` (`002`), `GET/POST …/chat`, история в LLM; «Спросить AI» → explain; ошибки LLM → 502/503
+- Backend: modular monolith — `internal/modules/{identity,catalog,library,annotations,feed,assistant,content}` + `platform` + `app` router
 - Структура: markdown → `docs/`, Python backend удалён, Go в `backend/`, SQL в `migrations/`
 - **HANDOFF.md** — полный контекст проекта для продолжения работы
 - PDF через API stream (MinIO порты конфликтовали с Cursor)
@@ -36,10 +39,10 @@
 
 | Этап | Статус |
 |------|--------|
-| 0 Техпрототип | 🟡 без GROBID |
+| 0 Техпрототип | 🟡 PDF parser ✅ (PyMuPDF default; Docling optional); GROBID ещё нет |
 | 1 Ядро библиотеки | 🟡 ~85% |
 | 2 Библиография и поиск | ❌ |
-| 3 Чтение и AI | 🟡 ридер+заметки ✅, AI нестабилен |
+| 3 Чтение и AI | 🟡 ридер+заметки ✅, full-text chat ✅, LLM зависит от провайдера |
 | 4 Связи / discovery | ❌ |
 | 5 Beta | ❌ |
 
