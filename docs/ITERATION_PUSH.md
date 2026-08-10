@@ -1,12 +1,12 @@
 # Iteration push notes
 
-Last refreshed: 2026-08-08
-Branch: develop-aleksandr
+Last refreshed: 2026-08-10
+Branch: main
 Repo: Researcher-436345/r-a
 
 ## One-liner
 
-Научная библиотека + PDF-ридер. В этом пуше: reader UX (fit-to-width, sticky selection, цвета), лента **New/Hot/Popular**, цитирования через **OpenAlex** (без ключа; S2 key — TODO в `.env.example`).
+`main` обновлён: линия **develop-aleksandr** (modular API, reader UX, feed New/Hot/Popular, OpenAlex cites) + фича **перевода выделения** (`modules/translation`, `cmd/translator`). Дальше чат в ридере — ветка `feature/reader-paper-chat`.
 
 Подробнее: [HANDOFF.md](./HANDOFF.md), чеклист: [STATUS.md](./STATUS.md).
 
@@ -53,16 +53,13 @@ Compose: Go `api` + `worker`, SQL `migrate` из `migrations/`.
 - Чат-баблы: chip’ы без overflow (`reader-chat-bubble__body`)
 - PDF scroll: frame-wrap `block` + `margin-inline: auto` у страниц (без обрезания слева)
 
-### Feed / citations
+### Feed / citations / translate
 
 - Sort `new|hot|popular` на `GET /feed/trending?sort=`
-  - new: arXiv `submittedDate`
-  - hot: `lastUpdatedDate` + скор от `updated`
-  - popular: rising-скор + переранжирование по `citation_count` когда есть
-- Citation enrich: OpenAlex batch (`doi:10.48550/arXiv.{id}`), Redis `cite:v1:*`
-- UI: бейдж цитирований только если count **> 0**; фейковый popularity 896 убран
-- Sort control закреплён справа, кнопки равной ширины (не прыгают от subtitle)
-- **TODO:** `SEMANTIC_SCHOLAR_API_KEY` в `.env` — см. `.env.example`, `backend/README.md`
+- Citation enrich: OpenAlex; бейдж только если count > 0
+- **Translate selection**: сервис `translation` + `cmd/translator` в compose; UI в selection popup
+- **TODO:** `SEMANTIC_SCHOLAR_API_KEY` в `.env` — см. `.env.example`
+- Web-search / papper_chat — **ещё не в main**
 
 ### Backend (уже на ветке)
 
