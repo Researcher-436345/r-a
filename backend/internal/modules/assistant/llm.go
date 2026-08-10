@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -15,32 +17,93 @@ import (
 type LLM struct {
 	Config config.Config
 	HTTP   *http.Client
+	Model  string // optional per-request override
 }
 
-func (l LLM) Chat(ctx context.Context, p catalog.PaperOut, message, contextText string) string {
-	return l.request(ctx, "You are a helpful research assistant. Answer in the same language as the user. Ground answers in supplied metadata and avoid inventing details.", paperContext(p)+"\n\nHighlighted passages:\n"+or(contextText, "None provided.")+"\n\nUser question:\n"+message)
+type ChatTurn struct {
+	Role    string
+	Content string
 }
 
-func (l LLM) Explain(ctx context.Context, p catalog.PaperOut, text, question string) string {
+type ContextUsage struct {
+	UsedTokens    int     `json:"used_tokens"`
+	LimitTokens   int     `json:"limit_tokens"`
+	Percent       float64 `json:"percent"`
+	PaperTokens   int     `json:"paper_tokens"`
+	HistoryTokens int     `json:"history_tokens"`
+	HasFullPaper  bool    `json:"has_full_paper"`
+	Model         string  `json:"model"`
+}
+
+type ChatResult struct {
+	Reply   string
+	Summary string
+	Usage   ContextUsage
+}
+
+var (
+	ErrLLMNotConfigured = errors.New("LLM is not configured")
+	ErrLLMEmpty         = errors.New("LLM returned an empty response")
+)
+
+func (l LLM) resolvedModel() string {
+	if strings.TrimSpace(l.Model) != "" {
+		return strings.TrimSpace(l.Model)
+	}
+	return l.Config.LLMModel
+}
+
+func (l LLM) Chat(
+	ctx context.Context,
+	p catalog.PaperOut,
+	history []ChatTurn,
+	message, contextText string,
+) (string, error) {
+	res, err := l.ChatWithPaper(ctx, p, "", "", history, message, contextText)
+	return res.Reply, err
+}
+
+func (l LLM) Explain(ctx context.Context, p catalog.PaperOut, text, question string) (string, error) {
 	if question == "" {
 		question = "Explain this fragment simply and in context."
 	}
-	return l.request(ctx, "You are a helpful research assistant. Explain selected paper fragments clearly, briefly, and accurately. Answer in the same language as the user.", paperContext(p)+"\n\nFragment:\n"+text+"\n\nQuestion:\n"+question)
+	system := "You are a helpful research assistant. Explain selected paper fragments clearly, briefly, and accurately. Answer in the same language as the user."
+	user := paperContext(p) + "\n\nFragment:\n" + text + "\n\nQuestion:\n" + question
+	return l.request(ctx, system, []ChatTurn{{Role: "user", Content: user}})
 }
 
-func (l LLM) request(ctx context.Context, system, user string) string {
+func (l LLM) request(ctx context.Context, system string, turns []ChatTurn) (string, error) {
 	if l.Config.LLMProvider == "gemini" {
-		return l.gemini(ctx, system, user)
+		return l.gemini(ctx, system, turns)
 	}
-	return l.openAI(ctx, system, user)
+	return l.openAI(ctx, system, turns)
 }
 
-func (l LLM) openAI(ctx context.Context, system, user string) string {
+func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (string, error) {
 	if l.Config.LLMAPIKey == "" {
-		return "LLM не настроен. Добавь `LLM_API_KEY` в `.env`. Из РФ: зарегистрируйся на aitunnel.ru, пополни баланс и вставь ключ AITunnel."
+		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
 	}
-	body, _ := json.Marshal(map[string]any{"model": l.Config.LLMModel, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}}, "temperature": 0.2})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+	messages := make([]map[string]string, 0, len(turns)+1)
+	messages = append(messages, map[string]string{"role": "system", "content": system})
+	for _, turn := range turns {
+		role := turn.Role
+		if role != "user" && role != "assistant" {
+			role = "user"
+		}
+		messages = append(messages, map[string]string{"role": role, "content": turn.Content})
+	}
+	body, err := json.Marshal(map[string]any{
+		"model":       l.resolvedModel(),
+		"messages":    messages,
+		"temperature": 0.2,
+	})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("Authorization", "Bearer "+l.Config.LLMAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 	if strings.Contains(l.Config.LLMBaseURL, "openrouter.ai") {
@@ -53,11 +116,12 @@ func (l LLM) openAI(ctx context.Context, system, user string) string {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "Ошибка LLM API: " + err.Error()
+		return "", fmt.Errorf("LLM API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
-		return "Ошибка LLM API: " + resp.Status
+		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
 	}
 	var out struct {
 		Choices []struct {
@@ -66,22 +130,43 @@ func (l LLM) openAI(ctx context.Context, system, user string) string {
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil || len(out.Choices) == 0 {
-		return "LLM API вернул пустой ответ."
+	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
+		return "", ErrLLMEmpty
 	}
 	if s := strings.TrimSpace(out.Choices[0].Message.Content); s != "" {
-		return s
+		return s, nil
 	}
-	return "LLM API вернул ответ без текста."
+	return "", ErrLLMEmpty
 }
 
-func (l LLM) gemini(ctx context.Context, system, user string) string {
+func (l LLM) gemini(ctx context.Context, system string, turns []ChatTurn) (string, error) {
 	if l.Config.LLMAPIKey == "" {
-		return "Gemini не настроен. Добавь `LLM_API_KEY` из Google AI Studio в `.env`."
+		return "", fmt.Errorf("%w: add LLM_API_KEY from Google AI Studio", ErrLLMNotConfigured)
 	}
-	body, _ := json.Marshal(map[string]any{"system_instruction": map[string]any{"parts": []map[string]string{{"text": system}}}, "contents": []map[string]any{{"role": "user", "parts": []map[string]string{{"text": user}}}}, "generationConfig": map[string]float64{"temperature": 0.2}})
-	u := fmt.Sprintf("%s/models/%s:generateContent?key=%s", strings.TrimRight(l.Config.LLMBaseURL, "/"), l.Config.LLMModel, l.Config.LLMAPIKey)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	contents := make([]map[string]any, 0, len(turns))
+	for _, turn := range turns {
+		role := "user"
+		if turn.Role == "assistant" {
+			role = "model"
+		}
+		contents = append(contents, map[string]any{
+			"role":  role,
+			"parts": []map[string]string{{"text": turn.Content}},
+		})
+	}
+	body, err := json.Marshal(map[string]any{
+		"system_instruction": map[string]any{"parts": []map[string]string{{"text": system}}},
+		"contents":           contents,
+		"generationConfig":   map[string]float64{"temperature": 0.2},
+	})
+	if err != nil {
+		return "", err
+	}
+	u := fmt.Sprintf("%s/models/%s:generateContent?key=%s", strings.TrimRight(l.Config.LLMBaseURL, "/"), l.resolvedModel(), l.Config.LLMAPIKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	client := l.HTTP
 	if client == nil {
@@ -89,11 +174,12 @@ func (l LLM) gemini(ctx context.Context, system, user string) string {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "Ошибка Gemini API: " + err.Error()
+		return "", fmt.Errorf("Gemini API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
-		return "Ошибка Gemini API: " + resp.Status
+		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
 	}
 	var out struct {
 		Candidates []struct {
@@ -104,17 +190,43 @@ func (l LLM) gemini(ctx context.Context, system, user string) string {
 			} `json:"content"`
 		} `json:"candidates"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil || len(out.Candidates) == 0 {
-		return "Gemini вернул пустой ответ."
+	if err := json.Unmarshal(raw, &out); err != nil || len(out.Candidates) == 0 {
+		return "", ErrLLMEmpty
 	}
 	var parts []string
 	for _, p := range out.Candidates[0].Content.Parts {
 		parts = append(parts, p.Text)
 	}
 	if s := strings.TrimSpace(strings.Join(parts, "")); s != "" {
-		return s
+		return s, nil
 	}
-	return "Gemini вернул ответ без текста."
+	return "", ErrLLMEmpty
+}
+
+func formatLLMHTTPError(status int, raw []byte, model string) error {
+	body := strings.TrimSpace(string(raw))
+	lower := strings.ToLower(body)
+	switch {
+	case status == http.StatusPaymentRequired ||
+		strings.Contains(lower, "insufficient balance") ||
+		strings.Contains(lower, "insufficient_quota") ||
+		strings.Contains(lower, "payment required"):
+		return fmt.Errorf("недостаточно средств на балансе LLM для модели %s — выберите другую модель или пополните счет", model)
+	case status == http.StatusTooManyRequests || strings.Contains(lower, "rate limit"):
+		return fmt.Errorf("LLM временно перегружен (rate limit) для модели %s — подождите немного или смените модель", model)
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return fmt.Errorf("LLM API ключ отклонен — проверьте LLM_API_KEY")
+	case status == http.StatusNotFound || strings.Contains(lower, "model") && strings.Contains(lower, "not found"):
+		return fmt.Errorf("модель %s недоступна у провайдера — выберите другую", model)
+	}
+	if body == "" {
+		return fmt.Errorf("LLM API error: %s", http.StatusText(status))
+	}
+	// Keep short: avoid dumping nested JSON blobs into the chat UI.
+	if len(body) > 280 {
+		body = body[:280] + "…"
+	}
+	return fmt.Errorf("LLM API error (%d): %s", status, body)
 }
 
 func paperContext(p catalog.PaperOut) string {
@@ -138,4 +250,16 @@ func or(s, f string) string {
 		return f
 	}
 	return s
+}
+
+func historyTurns(messages []Message) []ChatTurn {
+	out := make([]ChatTurn, 0, len(messages))
+	for _, m := range messages {
+		content := m.Content
+		if m.Role == "user" && m.ContextText != nil && strings.TrimSpace(*m.ContextText) != "" {
+			content = content + "\n\n[Attached context]\n" + strings.TrimSpace(*m.ContextText)
+		}
+		out = append(out, ChatTurn{Role: m.Role, Content: content})
+	}
+	return out
 }

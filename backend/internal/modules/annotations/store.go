@@ -16,7 +16,7 @@ func (s Store) List(ctx context.Context, userID, paperID uuid.UUID) ([]Out, erro
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Out
+	out := make([]Out, 0)
 	for rows.Next() {
 		var a Out
 		var raw []byte
