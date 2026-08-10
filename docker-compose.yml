@@ -96,6 +96,24 @@ services:
       timeout: 3s
       retries: 10
 
+  parser:
+    build:
+      context: ./services/parser
+    env_file:
+      - .env
+    environment:
+      PARSER_HTTP_ADDR: "0.0.0.0:8091"
+      PARSER_ENGINE: ${PARSER_ENGINE:-pymupdf}
+      PARSER_OCR: ${PARSER_OCR:-auto}
+    ports:
+      - "8091:8091"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8091/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
   worker:
     build:
       context: ./backend
@@ -109,6 +127,9 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: papers
+      PARSER_SERVICE_URL: http://parser:8091
+      PARSER_OCR: ${PARSER_OCR:-auto}
+      PARSER_TIMEOUT_SECONDS: ${PARSER_TIMEOUT_SECONDS:-180}
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,6 +139,8 @@ services:
         condition: service_started
       migrate:
         condition: service_completed_successfully
+      parser:
+        condition: service_healthy
     entrypoint: ["worker"]
 
 volumes:

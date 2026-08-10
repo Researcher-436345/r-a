@@ -10,6 +10,7 @@ import (
 const (
 	ProcessArxivPDF     = "process_arxiv_pdf"
 	FinalizeUploadedPDF = "finalize_uploaded_pdf"
+	ProcessPaperParse   = "process_paper_parse"
 )
 
 type Payload struct {

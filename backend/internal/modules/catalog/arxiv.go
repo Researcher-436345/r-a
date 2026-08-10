@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var arxivRE = regexp.MustCompile(`(?i)(?:https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/)?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?)`)
@@ -90,12 +91,72 @@ func FetchArxivMetadata(ctx context.Context, id string) (ArxivPaper, error) {
 	return p, nil
 }
 
+var pdfHTTPClient = &http.Client{
+	Timeout: 90 * time.Second,
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		TLSHandshakeTimeout:   30 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+	},
+}
+
 func DownloadPDF(ctx context.Context, url string) ([]byte, error) {
+	candidates := pdfURLCandidates(url)
+	var lastErr error
+	for _, candidate := range candidates {
+		for attempt := 1; attempt <= 3; attempt++ {
+			data, err := downloadPDFOnce(ctx, candidate)
+			if err == nil {
+				return data, nil
+			}
+			lastErr = err
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("PDF download failed")
+	}
+	return nil, lastErr
+}
+
+func pdfURLCandidates(url string) []string {
+	u := strings.TrimSpace(url)
+	out := []string{u}
+	add := func(s string) {
+		if s == "" || s == u {
+			return
+		}
+		for _, existing := range out {
+			if existing == s {
+				return
+			}
+		}
+		out = append(out, s)
+	}
+	// Common arXiv shapes: …/pdf/ID , …/pdf/ID.pdf , export mirror.
+	if strings.Contains(u, "arxiv.org/pdf/") {
+		base := strings.TrimSuffix(u, ".pdf")
+		add(base + ".pdf")
+		add(strings.Replace(base, "://arxiv.org/", "://export.arxiv.org/", 1))
+		add(strings.Replace(base, "://arxiv.org/", "://export.arxiv.org/", 1) + ".pdf")
+		add(strings.Replace(base+".pdf", "://arxiv.org/", "://export.arxiv.org/", 1))
+	}
+	return out
+}
+
+func downloadPDFOnce(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	req.Header.Set("User-Agent", "Researcher/1.0 (paper-library; +https://github.com/Researcher-436345/r-a)")
+	req.Header.Set("Accept", "application/pdf,*/*")
+	resp, err := pdfHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
