@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { fetchLibrary, retryPdf, type LibraryItem } from '../../features/library/api';
 import { ApiError } from '../../shared/api/client';
+import { RichText } from '../../shared/ui/rich-text';
 
 const STATUS_LABELS: Record<string, string> = {
   ready: 'PDF готов',
@@ -119,7 +120,9 @@ export function LibraryPage() {
                   <p className="library-card__error">{version.error_message}</p>
                 ) : null}
                 {item.paper.abstract ? (
-                  <p className="library-card__abstract">{item.paper.abstract}</p>
+                  <RichText className="library-card__abstract" compact>
+                    {item.paper.abstract}
+                  </RichText>
                 ) : null}
               </div>
             </article>

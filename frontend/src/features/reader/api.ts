@@ -33,9 +33,10 @@ function authToken() {
 }
 
 export async function fetchAnnotations(paperId: string): Promise<PaperAnnotation[]> {
-  return apiRequest<PaperAnnotation[]>(`/papers/${paperId}/annotations`, {
+  const data = await apiRequest<PaperAnnotation[] | null>(`/papers/${paperId}/annotations`, {
     token: authToken(),
   });
+  return data ?? [];
 }
 
 export async function createAnnotation(
@@ -64,13 +65,70 @@ export async function deleteAnnotation(annotationId: string): Promise<void> {
   });
 }
 
+export interface PaperChatMessage {
+  id: string;
+  paper_id: string;
+  user_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  context_text: string | null;
+  created_at: string;
+}
+
+export interface ChatContextUsage {
+  used_tokens: number;
+  limit_tokens: number;
+  percent: number;
+  paper_tokens: number;
+  history_tokens: number;
+  has_full_paper: boolean;
+  model: string;
+}
+
+export interface LLMModelOption {
+  id: string;
+  label: string;
+}
+
 export interface PaperChatReply {
   reply: string;
+  message_id?: string;
+  user_message_id?: string;
+  user_message?: PaperChatMessage;
+  assistant_message?: PaperChatMessage;
+  context_usage?: ChatContextUsage;
 }
 
 export interface PaperChatRequest {
   message: string;
   context_text?: string | null;
+  model?: string;
+}
+
+export async function fetchChatMessages(paperId: string): Promise<PaperChatMessage[]> {
+  const data = await apiRequest<{ items: PaperChatMessage[] }>(`/papers/${paperId}/chat/messages`, {
+    token: authToken(),
+  });
+  return data.items ?? [];
+}
+
+export async function fetchChatContext(
+  paperId: string,
+  model?: string,
+): Promise<ChatContextUsage> {
+  const q = model ? `?model=${encodeURIComponent(model)}` : '';
+  return apiRequest<ChatContextUsage>(`/papers/${paperId}/chat/context${q}`, {
+    token: authToken(),
+  });
+}
+
+export async function fetchAssistantModels(): Promise<{
+  default: string;
+  items: LLMModelOption[];
+}> {
+  return apiRequest<{ default: string; items: LLMModelOption[] }>('/assistant/models', {
+    token: authToken(),
+  });
 }
 
 export async function chatPaper(paperId: string, request: PaperChatRequest): Promise<PaperChatReply> {
@@ -78,6 +136,22 @@ export async function chatPaper(paperId: string, request: PaperChatRequest): Pro
     method: 'POST',
     token: authToken(),
     body: request,
+  });
+}
+
+export interface ExplainReply {
+  reply: string;
+}
+
+export async function explainPaper(
+  paperId: string,
+  text: string,
+  question?: string,
+): Promise<ExplainReply> {
+  return apiRequest<ExplainReply>(`/papers/${paperId}/explain`, {
+    method: 'POST',
+    token: authToken(),
+    body: { text, question: question || undefined },
   });
 }
 

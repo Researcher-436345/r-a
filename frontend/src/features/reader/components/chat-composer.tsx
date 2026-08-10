@@ -103,6 +103,18 @@ function placeCaretAfter(node: Node) {
   selection.addRange(range);
 }
 
+function placeCaretAtStart(editor: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 function rangeStillInEditor(editor: HTMLElement, range: Range | null): range is Range {
   if (!range) {
     return false;
@@ -150,7 +162,11 @@ function serialize(editor: HTMLElement): ComposerSnapshot {
       attachments.push(attachment);
       segments.push({ type: 'chip', attachment });
       displayText += attachment.locationLabel;
-      modelText += `\n\n[${attachment.locationLabel} · стр. ${attachment.page}]\n${attachment.text}\n`;
+      if (attachment.page > 0) {
+        modelText += `\n\n[${attachment.locationLabel} · стр. ${attachment.page}]\n${attachment.text}\n`;
+      } else {
+        modelText += `\n\n[${attachment.locationLabel}]\n${attachment.text}\n`;
+      }
       return;
     }
     if (node.tagName === 'BR') {
@@ -232,7 +248,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
       }
       editor.focus();
       if (!restoreCaret()) {
-        placeCaretAfter(editor.lastChild ?? editor);
+        if (isVisuallyEmpty(editor)) {
+          placeCaretAtStart(editor);
+        } else {
+          placeCaretAfter(editor.lastChild ?? editor);
+        }
       }
     },
     insertAttachment: (attachment) => {
@@ -403,6 +423,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
       onMouseUp={rememberCaret}
       onBlur={rememberCaret}
       onKeyDown={handleKeyDown}
+      onPaste={(event) => {
+        event.preventDefault();
+        const text = event.clipboardData.getData('text/plain').replace(/\u200B/g, '');
+        if (!text) {
+          return;
+        }
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          editorRef.current?.appendChild(document.createTextNode(text));
+          emitChange();
+          rememberCaret();
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const node = document.createTextNode(text);
+        range.insertNode(node);
+        placeCaretAfter(node);
+        rememberCaret();
+        emitChange();
+      }}
     />
   );
 });

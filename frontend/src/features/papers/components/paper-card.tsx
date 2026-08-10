@@ -9,6 +9,7 @@ import {
 } from '../../library/api';
 import { ApiError } from '../../../shared/api/client';
 import { useI18n, type Locale } from '../../../shared/i18n/i18n-context';
+import { RichText } from '../../../shared/ui/rich-text';
 import type { Paper } from '../types';
 
 interface PaperCardProps {
@@ -179,7 +180,11 @@ export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: Pap
               </>
             ) : null}
           </div>
-          {paper.description ? <p>{paper.description}</p> : null}
+          {paper.description ? (
+            <RichText className="paper-card__abstract" compact>
+              {paper.description}
+            </RichText>
+          ) : null}
           {error ? <p className="paper-card__error">{error}</p> : null}
         </div>
 

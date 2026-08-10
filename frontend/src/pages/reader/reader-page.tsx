@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchAnnotations,
   createAnnotation,
+  explainPaper,
   translateText,
   type PaperAnnotation,
 } from '../../features/reader/api';
@@ -45,6 +46,8 @@ export function ReaderPage() {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translation, setTranslation] = useState<string | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(paperId));
@@ -120,6 +123,8 @@ export function ReaderPage() {
     setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setTranslation(null);
     setIsTranslating(false);
+    setExplanation(null);
+    setIsExplaining(false);
     window.getSelection()?.removeAllRanges();
   };
 
@@ -220,6 +225,8 @@ export function ReaderPage() {
   const handleTextSelect = (nextSelection: ReaderTextSelection) => {
     setTranslation(null);
     setIsTranslating(false);
+    setExplanation(null);
+    setIsExplaining(false);
     setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setSelection(nextSelection);
   };
@@ -292,6 +299,24 @@ export function ReaderPage() {
       );
     } finally {
       setIsTranslating(false);
+    }
+  };
+
+  const handleExplain = async (text: string) => {
+    if (!paperId) {
+      return;
+    }
+    setIsExplaining(true);
+    setExplanation(null);
+    try {
+      const result = await explainPaper(paperId, text);
+      setExplanation(result.reply);
+    } catch (err) {
+      setExplanation(
+        err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Не удалось объяснить',
+      );
+    } finally {
+      setIsExplaining(false);
     }
   };
 
@@ -388,6 +413,8 @@ export function ReaderPage() {
         isSaving={isSavingNote}
         isTranslating={isTranslating}
         translation={translation}
+        isExplaining={isExplaining}
+        explanation={explanation}
         highlightColor={highlightColor}
         onHighlightColorChange={setHighlightColor}
         onClose={closeSelection}
@@ -395,6 +422,9 @@ export function ReaderPage() {
         onAskAssistant={handleAskAssistant}
         onTranslate={(text) => {
           void handleTranslate(text);
+        }}
+        onExplain={(text) => {
+          void handleExplain(text);
         }}
       />
       {toast ? <div className="reader-page__toast">{toast}</div> : null}

@@ -34,3 +34,31 @@ export function buildPassageChipLabel(page: number, text: string, maxWords = 4):
   }
   return `стр. ${page} · ${head}`;
 }
+
+/** Чип из выделенного фрагмента ответа ассистента */
+export function buildReplyChipLabel(text: string, maxWords = 4): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) {
+    return 'из ответа';
+  }
+  const words = cleaned.split(' ').filter(Boolean).slice(0, maxWords);
+  let head = words.join(' ');
+  if (cleaned.split(' ').length > maxWords) {
+    head = `${head}…`;
+  }
+  return `ответ · ${head}`;
+}
+
+export function buildReplyAttachment(text: string): ChatContextAttachment {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const preview = cleaned.length > 160 ? `${cleaned.slice(0, 157)}…` : cleaned;
+  return {
+    id: `reply-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    page: 0,
+    rect: null,
+    locationLabel: buildReplyChipLabel(cleaned),
+    preview,
+    text: cleaned,
+  };
+}
+
