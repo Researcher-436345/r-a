@@ -13,7 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-  chatPaper,
+  chatPaperStream,
   createAnnotation,
   deleteAnnotation,
   fetchAssistantModels,
@@ -45,6 +45,7 @@ import { ReaderNoteCard } from './reader-note-card';
 
 const MODEL_STORAGE_KEY = 'researcher.chat.model';
 const CHAT_NOTE_COLOR = '#cbb8de';
+const FREE_NOTE_COLOR = '#a9c7e0';
 
 interface LocalChatMessage {
   id: string;
@@ -105,6 +106,8 @@ interface ReaderChatPanelProps {
   onClearContextAttachment?: () => void;
   onNoteSelect?: (note: PaperAnnotation) => void;
   onPassageSelect?: (attachment: ChatContextAttachment) => void;
+  /** Клик по [p.N] в ответе ассистента — прыжок на страницу PDF */
+  onPageCite?: (page: number, quote?: string) => void;
   onNoteUpdated?: (note: PaperAnnotation) => void;
   onNoteCreated?: (note: PaperAnnotation) => void;
   onAnnotationsChange?: () => void;
@@ -122,6 +125,7 @@ export function ReaderChatPanel({
   onClearContextAttachment,
   onNoteSelect,
   onPassageSelect,
+  onPageCite,
   onNoteUpdated,
   onNoteCreated,
   onAnnotationsChange,
@@ -145,6 +149,9 @@ export function ReaderChatPanel({
   const [flashMessageId, setFlashMessageId] = useState<string | null>(null);
   /** Одно выделение — цитата над инпутом; несколько — чипы в композере */
   const [focusQuote, setFocusQuote] = useState<ChatContextAttachment | null>(null);
+  const [freeNoteDraft, setFreeNoteDraft] = useState('');
+  const [isSavingFreeNote, setIsSavingFreeNote] = useState(false);
+  const freeNoteRef = useRef<HTMLTextAreaElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const lastInsertedId = useRef<string | null>(null);
@@ -467,6 +474,42 @@ export function ReaderChatPanel({
     }
   };
 
+  const handleCreateFreeNote = async () => {
+    if (!paperId || isSavingFreeNote) {
+      return;
+    }
+    const body = freeNoteDraft.trim();
+    if (!body) {
+      return;
+    }
+
+    setIsSavingFreeNote(true);
+    setError(null);
+    try {
+      const created = await createAnnotation(paperId, {
+        page: 0,
+        selected_text: locale === 'ru' ? 'Свободная заметка' : 'Free note',
+        note: body,
+        color: FREE_NOTE_COLOR,
+      });
+      onNoteCreated?.(created);
+      setFreeNoteDraft('');
+      freeNoteRef.current?.blur();
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : locale === 'ru'
+              ? 'Не удалось сохранить заметку'
+              : 'Could not save note',
+      );
+    } finally {
+      setIsSavingFreeNote(false);
+    }
+  };
+
   const handleSend = async () => {
     if (isSending) {
       return;
@@ -537,11 +580,26 @@ export function ReaderChatPanel({
     setError(null);
     try {
       const requestMessage = content || defaultAsk;
-      const res = await chatPaper(paperId, {
-        message: requestMessage,
-        context_text: requestContext,
-        model: selectedModel || undefined,
-      });
+      let streamed = '';
+      const res = await chatPaperStream(
+        paperId,
+        {
+          message: requestMessage,
+          context_text: requestContext,
+          model: selectedModel || undefined,
+        },
+        {
+          onDelta: (chunk) => {
+            streamed += chunk;
+            const next = streamed;
+            setMessages((current) =>
+              current.map((msg) =>
+                msg.id === tempAssistantId ? { ...msg, content: next } : msg,
+              ),
+            );
+          },
+        },
+      );
 
       if (res.context_usage) {
         setContextUsage(res.context_usage);
@@ -559,7 +617,7 @@ export function ReaderChatPanel({
             return {
               ...msg,
               id: res.message_id || res.assistant_message?.id || msg.id,
-              content: res.reply,
+              content: res.reply || streamed,
             };
           }
           return msg;
@@ -707,7 +765,9 @@ export function ReaderChatPanel({
                             ),
                           )
                         : message.role === 'assistant' ? (
-                            <RichText className="reader-chat-bubble__rich">{message.content}</RichText>
+                            <RichText className="reader-chat-bubble__rich" onPageCite={onPageCite}>
+                              {message.content}
+                            </RichText>
                           ) : (
                             message.content
                           )}
@@ -876,23 +936,73 @@ export function ReaderChatPanel({
           {error ? <div className="auth-error">{error}</div> : null}
           {!paperId ? (
             <div className="library-page__state">Откройте статью из библиотеки</div>
-          ) : (annotations?.length ?? 0) === 0 ? (
-            <div className="library-page__state">
-              Выделите текст в PDF — появится форма для заметки
-            </div>
           ) : (
-            (annotations ?? []).map((note) => (
-              <ReaderNoteCard
-                key={note.id}
-                note={note}
-                locale={locale}
-                isActive={activeNoteId === note.id}
-                isDeleting={deletingId === note.id}
-                onOpen={(item) => onNoteSelect?.(item)}
-                onSave={handleUpdateNote}
-                onDelete={(id) => void handleDelete(id)}
-              />
-            ))
+            <>
+              <form
+                className="reader-notes-composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleCreateFreeNote();
+                }}
+              >
+                <textarea
+                  ref={freeNoteRef}
+                  className="reader-notes-composer__input"
+                  rows={3}
+                  value={freeNoteDraft}
+                  onChange={(event) => setFreeNoteDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                      event.preventDefault();
+                      void handleCreateFreeNote();
+                    }
+                  }}
+                  placeholder={
+                    locale === 'ru'
+                      ? 'Новая заметка по статье…'
+                      : 'New note about this paper…'
+                  }
+                  disabled={isSavingFreeNote}
+                />
+                <div className="reader-notes-composer__footer">
+                  <span className="reader-notes-composer__hint">
+                    {locale === 'ru' ? '⌘/Ctrl + Enter' : '⌘/Ctrl + Enter'}
+                  </span>
+                  <button
+                    type="submit"
+                    className="reader-notes-composer__submit"
+                    disabled={isSavingFreeNote || !freeNoteDraft.trim()}
+                  >
+                    {isSavingFreeNote
+                      ? '…'
+                      : locale === 'ru'
+                        ? 'Добавить'
+                        : 'Add note'}
+                  </button>
+                </div>
+              </form>
+
+              {(annotations?.length ?? 0) === 0 ? (
+                <div className="library-page__state">
+                  {locale === 'ru'
+                    ? 'Пока пусто — напишите выше или выделите текст в PDF / чате'
+                    : 'Empty so far — write above or select text in the PDF / chat'}
+                </div>
+              ) : (
+                (annotations ?? []).map((note) => (
+                  <ReaderNoteCard
+                    key={note.id}
+                    note={note}
+                    locale={locale}
+                    isActive={activeNoteId === note.id}
+                    isDeleting={deletingId === note.id}
+                    onOpen={(item) => onNoteSelect?.(item)}
+                    onSave={handleUpdateNote}
+                    onDelete={(id) => void handleDelete(id)}
+                  />
+                ))
+              )}
+            </>
           )}
         </div>
       ) : null}

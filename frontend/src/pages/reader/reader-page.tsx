@@ -135,20 +135,24 @@ export function ReaderPage() {
     rect: { x: number; y: number; w: number; h: number } | null | undefined,
     options?: { rectUnit?: 'px' | 'ratio'; color?: string | null },
   ) => {
-    if (!rect) {
+    if (!page || page < 1) {
       return;
     }
     setFlashFocus({
       id: `passage:${page}:${Date.now()}`,
       page,
-      rect,
+      rect: rect ?? null,
       rectUnit: options?.rectUnit ?? 'px',
       color: options?.color,
     });
   };
 
   const handlePassageSelect = (attachment: ChatContextAttachment) => {
-    focusPassage(attachment.page, attachment.rect, { rectUnit: 'ratio' });
+    focusPassage(attachment.page, attachment.rect ?? null, { rectUnit: 'ratio' });
+  };
+
+  const handlePageCite = (page: number, _quote?: string) => {
+    focusPassage(page, null);
   };
 
   useEffect(() => {
@@ -408,6 +412,7 @@ export function ReaderPage() {
           onClearContextAttachment={() => setChatAttachment(null)}
           onNoteSelect={handleNoteSelect}
           onPassageSelect={handlePassageSelect}
+          onPageCite={handlePageCite}
           onNoteUpdated={(note) => {
             setAnnotations((current) => current.map((item) => (item.id === note.id ? note : item)));
           }}

@@ -10,6 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const chatSystemPrompt = `You are a helpful research assistant. Answer in the same language as the user. Ground answers in the supplied full paper text and conversation. Avoid inventing details that are not supported by the paper or chat context. When helpful, format with Markdown: short headings, bullet/numbered lists, and **bold** for key terms. Prefer ## / ### over giant titles.
+
+The paper text may include page markers of the form <<<p=N>>> (PDF page N). When you refer to a specific place in the paper, cite it inline as [p.N «short quote»] using only page numbers that appear in those markers. The quote must be a short verbatim snippet (3–12 words) from that page. Plain [p.N] is allowed when a quote does not help. Do not invent page numbers or quotes. Prefer a few precise cites over many.`
+
 func EstimateTokens(s string) int {
 	n := utf8.RuneCountInString(s)
 	if n == 0 {
@@ -54,11 +58,23 @@ func (l LLM) ChatWithPaper(
 	history []ChatTurn,
 	message, contextText string,
 ) (ChatResult, error) {
+	return l.ChatWithPaperStream(ctx, p, fullPaper, threadSummary, history, message, contextText, nil)
+}
+
+func (l LLM) ChatWithPaperStream(
+	ctx context.Context,
+	p catalog.PaperOut,
+	fullPaper string,
+	threadSummary string,
+	history []ChatTurn,
+	message, contextText string,
+	onDelta func(string) error,
+) (ChatResult, error) {
 	built, err := l.buildChatPrompt(ctx, p, fullPaper, threadSummary, history, message, contextText)
 	if err != nil {
 		return ChatResult{Usage: built.Usage}, err
 	}
-	out, err := l.request(ctx, built.System, built.Turns)
+	out, err := l.requestStream(ctx, built.System, built.Turns, onDelta)
 	return ChatResult{Reply: out, Summary: built.Summary, Usage: built.Usage}, err
 }
 
@@ -86,7 +102,7 @@ func (l LLM) buildChatPrompt(
 		budget = 2000
 	}
 
-	system := "You are a helpful research assistant. Answer in the same language as the user. Ground answers in the supplied full paper text and conversation. Avoid inventing details that are not supported by the paper or chat context."
+	system := chatSystemPrompt
 	meta := paperContext(p)
 
 	remaining := budget - EstimateTokens(system) - EstimateTokens(meta) - EstimateTokens(message) - EstimateTokens(contextText) - 200
@@ -118,7 +134,7 @@ func (l LLM) buildChatPrompt(
 
 	userParts := []string{meta}
 	if paper != "" {
-		userParts = append(userParts, "Full paper text:\n"+paper)
+		userParts = append(userParts, "Full paper text (sections marked <<<p=N>>> mean PDF page N):\n"+paper)
 	} else {
 		userParts = append(userParts, "Full paper text is not available yet; rely on title/abstract only.")
 	}
@@ -183,7 +199,7 @@ func (l LLM) EstimateChatContext(
 	if budget < 2000 {
 		budget = 2000
 	}
-	system := "You are a helpful research assistant. Answer in the same language as the user. Ground answers in the supplied full paper text and conversation. Avoid inventing details that are not supported by the paper or chat context."
+	system := chatSystemPrompt
 	meta := paperContext(p)
 	remaining := budget - EstimateTokens(system) - EstimateTokens(meta) - 200
 	if remaining < 500 {
@@ -208,7 +224,7 @@ func (l LLM) EstimateChatContext(
 
 	userParts := []string{meta}
 	if paper != "" {
-		userParts = append(userParts, "Full paper text:\n"+paper)
+		userParts = append(userParts, "Full paper text (sections marked <<<p=N>>> mean PDF page N):\n"+paper)
 	} else {
 		userParts = append(userParts, "Full paper text is not available yet; rely on title/abstract only.")
 	}

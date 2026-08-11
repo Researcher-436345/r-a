@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
 	"github.com/centraluniversity/researcher/internal/platform/config"
@@ -67,7 +69,7 @@ func (l LLM) Explain(ctx context.Context, p catalog.PaperOut, text, question str
 	if question == "" {
 		question = "Explain this fragment simply and in context."
 	}
-	system := "You are a helpful research assistant. Explain selected paper fragments clearly, briefly, and accurately. Answer in the same language as the user."
+	system := "You are a helpful research assistant. Explain selected paper fragments clearly, briefly, and accurately. Answer in the same language as the user. Use light Markdown (lists, **bold**) when it helps readability."
 	user := paperContext(p) + "\n\nFragment:\n" + text + "\n\nQuestion:\n" + question
 	return l.request(ctx, system, []ChatTurn{{Role: "user", Content: user}})
 }
@@ -79,10 +81,24 @@ func (l LLM) request(ctx context.Context, system string, turns []ChatTurn) (stri
 	return l.openAI(ctx, system, turns)
 }
 
-func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (string, error) {
-	if l.Config.LLMAPIKey == "" {
-		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
+func (l LLM) requestStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (string, error) {
+	if l.Config.LLMProvider == "gemini" {
+		// Gemini path stays non-streaming for now; emit once when complete.
+		out, err := l.gemini(ctx, system, turns)
+		if err != nil {
+			return "", err
+		}
+		if onDelta != nil {
+			if err := onDelta(out); err != nil {
+				return out, err
+			}
+		}
+		return out, nil
 	}
+	return l.openAIStream(ctx, system, turns, onDelta)
+}
+
+func (l LLM) openAIMessages(system string, turns []ChatTurn) []map[string]string {
 	messages := make([]map[string]string, 0, len(turns)+1)
 	messages = append(messages, map[string]string{"role": "system", "content": system})
 	for _, turn := range turns {
@@ -92,17 +108,13 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 		}
 		messages = append(messages, map[string]string{"role": role, "content": turn.Content})
 	}
-	body, err := json.Marshal(map[string]any{
-		"model":       l.resolvedModel(),
-		"messages":    messages,
-		"temperature": 0.2,
-	})
-	if err != nil {
-		return "", err
-	}
+	return messages
+}
+
+func (l LLM) openAIRequest(ctx context.Context, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+l.Config.LLMAPIKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -114,7 +126,22 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 	if client == nil {
 		client = &http.Client{Timeout: l.Config.LLMTimeout}
 	}
-	resp, err := client.Do(req)
+	return client.Do(req)
+}
+
+func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (string, error) {
+	if l.Config.LLMAPIKey == "" {
+		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
+	}
+	body, err := json.Marshal(map[string]any{
+		"model":       l.resolvedModel(),
+		"messages":    l.openAIMessages(system, turns),
+		"temperature": 0.2,
+	})
+	if err != nil {
+		return "", err
+	}
+	resp, err := l.openAIRequest(ctx, body)
 	if err != nil {
 		return "", fmt.Errorf("LLM API request failed: %w", err)
 	}
@@ -137,6 +164,107 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 		return s, nil
 	}
 	return "", ErrLLMEmpty
+}
+
+func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (string, error) {
+	if l.Config.LLMAPIKey == "" {
+		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
+	}
+	body, err := json.Marshal(map[string]any{
+		"model":       l.resolvedModel(),
+		"messages":    l.openAIMessages(system, turns),
+		"temperature": 0.2,
+		"stream":      true,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+l.Config.LLMAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if strings.Contains(l.Config.LLMBaseURL, "openrouter.ai") {
+		req.Header.Set("HTTP-Referer", l.Config.LLMHTTPReferer)
+		req.Header.Set("X-Title", l.Config.LLMAppTitle)
+	}
+
+	// Streaming responses can exceed the non-stream request timeout.
+	client := l.HTTP
+	if client == nil {
+		timeout := l.Config.LLMTimeout
+		if timeout < 5*time.Minute {
+			timeout = 5 * time.Minute
+		}
+		client = &http.Client{Timeout: timeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("LLM API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	// Some providers send large SSE frames; default 64K is tight.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var full strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" || payload == "[DONE]" {
+			if payload == "[DONE]" {
+				break
+			}
+			continue
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			continue
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta.Content
+		if delta == "" {
+			continue
+		}
+		full.WriteString(delta)
+		if onDelta != nil {
+			if err := onDelta(delta); err != nil {
+				return full.String(), err
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if full.Len() > 0 {
+			return full.String(), nil
+		}
+		return "", fmt.Errorf("LLM stream interrupted: %w", err)
+	}
+	if full.Len() == 0 {
+		return "", ErrLLMEmpty
+	}
+	return full.String(), nil
 }
 
 func (l LLM) gemini(ctx context.Context, system string, turns []ChatTurn) (string, error) {

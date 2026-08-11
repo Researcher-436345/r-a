@@ -1,7 +1,9 @@
 package assistant
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -95,10 +97,16 @@ func (a API) loadPaperContext(w http.ResponseWriter, r *http.Request, id uuid.UU
 		return p, "", "", nil, false
 	}
 	if doc, err := a.docs().GetDocument(r.Context(), id); err == nil && doc.Status == "ready" {
-		fullPaper = strings.TrimSpace(doc.PlainText)
-		if fullPaper == "" {
-			fullPaper = strings.TrimSpace(doc.Markdown)
+		plain := strings.TrimSpace(doc.PlainText)
+		if plain == "" {
+			plain = strings.TrimSpace(doc.Markdown)
 		}
+		chunks, chunkErr := a.docs().ListChunks(r.Context(), id)
+		if chunkErr != nil {
+			httpx.Error(w, 500, chunkErr.Error())
+			return p, "", "", nil, false
+		}
+		fullPaper = FormatPaperWithPageMarkers(chunks, plain)
 	}
 	if ts, err := a.docs().GetThreadSummary(r.Context(), userID, id); err == nil {
 		threadSummary = ts.Summary
@@ -165,6 +173,11 @@ func (a API) chat(w http.ResponseWriter, r *http.Request) {
 		contextPtr = &contextText
 	}
 
+	if wantsChatStream(r) {
+		a.chatStream(w, r, id, userID, p, fullPaper, threadSummary, history, modelID, strings.TrimSpace(b.Message), contextText, contextPtr)
+		return
+	}
+
 	keep := a.Config.ChatRecentKeep
 	result, err := a.llm(modelID).ChatWithPaper(
 		r.Context(),
@@ -195,6 +208,91 @@ func (a API) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.JSON(w, 200, map[string]any{
+		"reply":             result.Reply,
+		"message_id":        assistantMsg.ID,
+		"user_message_id":   userMsg.ID,
+		"user_message":      userMsg,
+		"assistant_message": assistantMsg,
+		"context_usage":     result.Usage,
+	})
+}
+
+func wantsChatStream(r *http.Request) bool {
+	if r.URL.Query().Get("stream") == "1" {
+		return true
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+}
+
+func (a API) chatStream(
+	w http.ResponseWriter,
+	r *http.Request,
+	paperID uuid.UUID,
+	userID uuid.UUID,
+	p catalog.PaperOut,
+	fullPaper, threadSummary string,
+	history []Message,
+	modelID, message, contextText string,
+	contextPtr *string,
+) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		httpx.Error(w, 500, "streaming unsupported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	writeEvent := func(payload map[string]any) bool {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return false
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+
+	keep := a.Config.ChatRecentKeep
+	result, err := a.llm(modelID).ChatWithPaperStream(
+		r.Context(),
+		p,
+		fullPaper,
+		threadSummary,
+		historyTurns(history),
+		message,
+		contextText,
+		func(delta string) error {
+			if !writeEvent(map[string]any{"type": "delta", "text": delta}) {
+				return errors.New("client disconnected")
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		_ = writeEvent(map[string]any{"type": "error", "detail": err.Error()})
+		return
+	}
+
+	if strings.TrimSpace(result.Summary) != "" && result.Summary != threadSummary {
+		_ = a.docs().UpsertThreadSummary(r.Context(), userID, paperID, result.Summary, LastCoveredID(history, keep))
+	}
+
+	userMsg, assistantMsg, err := a.store().AppendPair(r.Context(), userID, paperID, message, contextPtr, result.Reply)
+	if err != nil {
+		_ = writeEvent(map[string]any{"type": "error", "detail": err.Error()})
+		return
+	}
+
+	_ = writeEvent(map[string]any{
+		"type":              "done",
 		"reply":             result.Reply,
 		"message_id":        assistantMsg.ID,
 		"user_message_id":   userMsg.ID,

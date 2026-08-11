@@ -17,13 +17,14 @@
 | EPIC-06 Заметки | P1 | ✅ | CRUD + notes from chat / reply selection + jump back to message |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
 | EPIC-11 Фронт без моков | P0 | 🟡 | сайдбар проектов и Similar — моки |
-| EPIC-08 AI | P1 | 🟡 | full-text chat + history/rolling summary + compact context chip + model picker; LLM зависит от ключа/баланса |
+| EPIC-08 AI | P1 | 🟡 | full-text chat + SSE stream + page cites `[p.N]`; history/summary; model picker; LLM зависит от ключа/баланса |
 | EPIC-05 Проекты | P2 | ❌ | не начато |
 | EPIC-09 Web-search | P2 | ❌ | не начато |
 | EPIC-10 Теги | P3 | ❌ | нет |
 
 ## Недавние изменения (changelog)
 
+- **2026-08-11 — stream + page cites:** SSE `POST …/chat?stream=1`; промпт с `<<<p=N>>>` из chunks; кликабельные `[p.N «quote»]` → страница PDF (без RAG/span)
 - **2026-08-11 — reader chat polish:** заметки из сообщения/выделения ответа; jump note→chat (`004`); одиночная цитата над инпутом; компактный context chip; фикс PDF selection overshoot
 - **2026-08-10 — chat UX:** метр контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown, plain-text paste, «Уточнить», ошибки LLM (402)
 - **2026-08-10 — full-text chat:** parser + TeX-first; `paper_documents` (`003`); full text in prompt + rolling summary. См. [PARSER.md](./PARSER.md)

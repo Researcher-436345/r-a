@@ -140,9 +140,13 @@ export function ReaderNoteCard({
             ? locale === 'ru'
               ? `стр. ${note.page}`
               : `p. ${note.page}`
-            : locale === 'ru'
-              ? 'чат'
-              : 'chat'}
+            : note.source_chat_message_id || note.selected_text.startsWith('Чат') || note.selected_text.startsWith('Chat')
+              ? locale === 'ru'
+                ? 'чат'
+                : 'chat'
+              : locale === 'ru'
+                ? 'заметка'
+                : 'note'}
         </span>
         <div className="reader-note-card__meta-actions">
           {!isEditing ? (

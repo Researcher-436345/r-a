@@ -1,4 +1,4 @@
-import { apiRequest } from '../../shared/api/client';
+import { apiRequest, ApiError } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
 
 export interface AnnotationRect {
@@ -139,6 +139,136 @@ export async function chatPaper(paperId: string, request: PaperChatRequest): Pro
     token: authToken(),
     body: request,
   });
+}
+
+type ChatStreamEvent =
+  | { type: 'delta'; text?: string }
+  | {
+      type: 'done';
+      reply: string;
+      message_id?: string;
+      user_message_id?: string;
+      user_message?: PaperChatMessage;
+      assistant_message?: PaperChatMessage;
+      context_usage?: ChatContextUsage;
+    }
+  | { type: 'error'; detail?: string };
+
+export async function chatPaperStream(
+  paperId: string,
+  request: PaperChatRequest,
+  handlers: {
+    onDelta?: (text: string) => void;
+  } = {},
+): Promise<PaperChatReply> {
+  const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  });
+  const token = authToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let response = await fetch(`${API_URL}/papers/${paperId}/chat?stream=1`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(request),
+  });
+
+  if (response.status === 401) {
+    const { tryRefreshSession } = await import('../auth/refresh-session');
+    const { getAccessToken, clearTokens } = await import('../auth/token-storage');
+    const refreshed = await tryRefreshSession();
+    if (refreshed) {
+      headers.set('Authorization', `Bearer ${getAccessToken()}`);
+      response = await fetch(`${API_URL}/papers/${paperId}/chat?stream=1`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request),
+      });
+    } else {
+      clearTokens();
+      throw new ApiError(401, 'Session expired');
+    }
+  }
+
+  if (!response.ok) {
+    let detail = `Request failed with status ${response.status}`;
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === 'string') {
+        detail = data.detail;
+      }
+    } catch {
+      // ignore
+    }
+    throw new ApiError(response.status, detail);
+  }
+
+  if (!response.body) {
+    throw new ApiError(502, 'Empty stream body');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let donePayload: Extract<ChatStreamEvent, { type: 'done' }> | null = null;
+
+  const handleDataLine = (raw: string) => {
+    const payload = raw.trim();
+    if (!payload || payload === '[DONE]') {
+      return;
+    }
+    let event: ChatStreamEvent;
+    try {
+      event = JSON.parse(payload) as ChatStreamEvent;
+    } catch {
+      return;
+    }
+    if (event.type === 'delta' && event.text) {
+      handlers.onDelta?.(event.text);
+      return;
+    }
+    if (event.type === 'error') {
+      throw new ApiError(502, event.detail || 'LLM stream error');
+    }
+    if (event.type === 'done') {
+      donePayload = event;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n');
+    buffer = parts.pop() ?? '';
+    for (const line of parts) {
+      if (line.startsWith('data:')) {
+        handleDataLine(line.slice(5));
+      }
+    }
+  }
+  if (buffer.startsWith('data:')) {
+    handleDataLine(buffer.slice(5));
+  }
+
+  if (!donePayload) {
+    throw new ApiError(502, 'Stream ended without completion');
+  }
+
+  return {
+    reply: donePayload.reply,
+    message_id: donePayload.message_id,
+    user_message_id: donePayload.user_message_id,
+    user_message: donePayload.user_message,
+    assistant_message: donePayload.assistant_message,
+    context_usage: donePayload.context_usage,
+  };
 }
 
 export interface ExplainReply {

@@ -1174,11 +1174,13 @@ textarea:focus-visible {
 }
 
 .reader-chat-row--assistant {
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
 }
 
 .reader-chat-row--user {
-  align-self: flex-end;
+  align-self: stretch;
+  width: 100%;
 }
 
 .reader-chat-row--flash .reader-chat-bubble {
@@ -1203,7 +1205,7 @@ textarea:focus-visible {
   justify-content: center;
   width: 28px;
   height: 28px;
-  margin-top: 6px;
+  margin-top: 4px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -1241,35 +1243,40 @@ textarea:focus-visible {
 }
 
 .reader-chat-bubble {
-  max-width: min(100%, 100%);
   min-width: 0;
   padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
 .reader-chat-row--assistant .reader-chat-bubble {
+  flex: 1;
   max-width: calc(100% - 32px);
+  padding: 4px 2px 6px;
 }
 
 .reader-chat-row--user .reader-chat-bubble {
+  flex: 1;
+  width: 100%;
   max-width: calc(100% - 32px);
 }
 
 .reader-chat-bubble__body {
   margin: 0;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.reader-chat-bubble__text {
+.reader-chat-bubble--user .reader-chat-bubble__body {
   white-space: pre-wrap;
 }
 
-.reader-chat-bubble p {
-  margin: 0;
+.reader-chat-bubble--assistant .reader-chat-bubble__body {
+  white-space: normal;
+}
+
+.reader-chat-bubble__text {
   white-space: pre-wrap;
 }
 
@@ -1281,13 +1288,14 @@ textarea:focus-visible {
 }
 
 .reader-chat-bubble--user {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
   color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .reader-chat-bubble--assistant {
-  border: 1px solid var(--border);
-  background: var(--card);
+  border: none;
+  background: transparent;
   color: var(--text);
 }
 
@@ -1296,7 +1304,9 @@ textarea:focus-visible {
 }
 
 .rich-text {
-  line-height: 1.45;
+  color: inherit;
+  font-size: inherit;
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
@@ -1304,12 +1314,153 @@ textarea:focus-visible {
   margin: 0;
 }
 
+.rich-text > *:first-child {
+  margin-top: 0;
+}
+
+.rich-text > *:last-child {
+  margin-bottom: 0;
+}
+
 .rich-text p {
-  margin: 0 0 0.65em;
+  margin: 0 0 0.7em;
 }
 
 .rich-text p:last-child {
   margin-bottom: 0;
+}
+
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+  margin: 1em 0 0.4em;
+  color: var(--text);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.rich-text h1 {
+  font-size: 1.2em;
+}
+
+.rich-text h2 {
+  font-size: 1.1em;
+}
+
+.rich-text h3,
+.rich-text h4 {
+  font-size: 1.02em;
+}
+
+.rich-text h1:first-child,
+.rich-text h2:first-child,
+.rich-text h3:first-child,
+.rich-text h4:first-child {
+  margin-top: 0.15em;
+}
+
+.rich-text ul,
+.rich-text ol {
+  margin: 0.35em 0 0.75em;
+  padding-left: 1.25em;
+}
+
+.rich-text li {
+  margin: 0.2em 0;
+}
+
+.rich-text li > p {
+  margin: 0.15em 0;
+}
+
+.rich-text strong {
+  font-weight: 650;
+}
+
+.rich-text__page-cite {
+  display: inline;
+  margin: 0 0.1em;
+  padding: 0.05em 0.35em;
+  border: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 35%, transparent);
+  border-radius: 0.35em;
+  background: color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent);
+  color: var(--accent, #2563eb);
+  font: inherit;
+  font-size: 0.92em;
+  font-weight: 600;
+  line-height: inherit;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.rich-text__page-cite:hover {
+  background: color-mix(in srgb, var(--accent, #3b82f6) 22%, transparent);
+}
+
+.rich-text em {
+  font-style: italic;
+}
+
+.rich-text a {
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rich-text blockquote {
+  margin: 0.55em 0;
+  padding: 0.15em 0 0.15em 0.85em;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--sub);
+}
+
+.rich-text hr {
+  margin: 0.9em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.rich-text code {
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--hover) 85%, var(--border));
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+.rich-text pre {
+  margin: 0.55em 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--hover) 70%, transparent);
+}
+
+.rich-text pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.88em;
+}
+
+.rich-text table {
+  width: 100%;
+  margin: 0.55em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.rich-text th,
+.rich-text td {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.rich-text th {
+  background: var(--hover);
+  font-weight: 650;
 }
 
 .rich-text .katex {
@@ -1700,6 +1851,68 @@ textarea:focus-visible {
 
 .reader-notes {
   gap: 12px;
+}
+
+.reader-notes-composer {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.reader-notes-composer__input {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.reader-notes-composer__input::placeholder {
+  color: var(--faint);
+}
+
+.reader-notes-composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reader-notes-composer__hint {
+  color: var(--faint);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.reader-notes-composer__submit {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reader-notes-composer__submit:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.reader-notes-composer__submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .reader-similar {

@@ -132,6 +132,30 @@ func (s Store) GetDocument(ctx context.Context, paperID uuid.UUID) (Document, er
 	return d, err
 }
 
+func (s Store) ListChunks(ctx context.Context, paperID uuid.UUID) ([]Chunk, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT id, paper_id, version_id, chunk_index, page_start, page_end, section, text, token_estimate
+		FROM paper_chunks
+		WHERE paper_id = $1
+		ORDER BY chunk_index ASC`, paperID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Chunk, 0)
+	for rows.Next() {
+		var c Chunk
+		if err := rows.Scan(
+			&c.ID, &c.PaperID, &c.VersionID, &c.ChunkIndex, &c.PageStart, &c.PageEnd,
+			&c.Section, &c.Text, &c.TokenEstimate,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 func (s Store) GetThreadSummary(ctx context.Context, userID, paperID uuid.UUID) (ThreadSummary, error) {
 	var t ThreadSummary
 	err := s.DB.QueryRow(ctx, `
