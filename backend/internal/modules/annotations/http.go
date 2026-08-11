@@ -48,23 +48,33 @@ func (a API) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Page         int    `json:"page"`
-		Rect         *Rect  `json:"rect"`
-		SelectedText string `json:"selected_text"`
-		Note         string `json:"note"`
-		Color        string `json:"color"`
+		Page                int     `json:"page"`
+		Rect                *Rect   `json:"rect"`
+		SelectedText        string  `json:"selected_text"`
+		Note                string  `json:"note"`
+		Color               string  `json:"color"`
+		SourceChatMessageID *string `json:"source_chat_message_id"`
 	}
 	if !httpx.DecodeJSON(w, r, &b) {
 		return
 	}
-	if b.Page < 1 || strings.TrimSpace(b.SelectedText) == "" {
+	if b.Page < 0 || strings.TrimSpace(b.SelectedText) == "" {
 		httpx.Error(w, 400, "Invalid annotation")
 		return
 	}
 	if b.Color == "" {
 		b.Color = "#facc15"
 	}
-	ann, e := a.Store.Create(r.Context(), identity.UserID(r), id, b.Page, b.Rect, strings.TrimSpace(b.SelectedText), strings.TrimSpace(b.Note), b.Color)
+	var sourceMsg *uuid.UUID
+	if b.SourceChatMessageID != nil && strings.TrimSpace(*b.SourceChatMessageID) != "" {
+		parsed, err := uuid.Parse(strings.TrimSpace(*b.SourceChatMessageID))
+		if err != nil {
+			httpx.Error(w, 400, "Invalid source_chat_message_id")
+			return
+		}
+		sourceMsg = &parsed
+	}
+	ann, e := a.Store.Create(r.Context(), identity.UserID(r), id, b.Page, b.Rect, strings.TrimSpace(b.SelectedText), strings.TrimSpace(b.Note), b.Color, sourceMsg)
 	if e != nil {
 		httpx.Error(w, 500, e.Error())
 		return

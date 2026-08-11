@@ -16,6 +16,7 @@ export interface PaperAnnotation {
   selected_text: string;
   note: string;
   color: string;
+  source_chat_message_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +27,7 @@ export interface CreateAnnotationInput {
   selected_text: string;
   note?: string;
   color?: string;
+  source_chat_message_id?: string | null;
 }
 
 function authToken() {

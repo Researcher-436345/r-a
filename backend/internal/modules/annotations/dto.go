@@ -15,15 +15,16 @@ type Rect struct {
 }
 
 type Out struct {
-	ID           uuid.UUID `json:"id"`
-	PaperID      uuid.UUID `json:"paper_id"`
-	Page         int       `json:"page"`
-	Rect         *Rect     `json:"rect"`
-	SelectedText string    `json:"selected_text"`
-	Note         string    `json:"note"`
-	Color        string    `json:"color"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                  uuid.UUID  `json:"id"`
+	PaperID             uuid.UUID  `json:"paper_id"`
+	Page                int        `json:"page"`
+	Rect                *Rect      `json:"rect"`
+	SelectedText        string     `json:"selected_text"`
+	Note                string     `json:"note"`
+	Color               string     `json:"color"`
+	SourceChatMessageID *uuid.UUID `json:"source_chat_message_id"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 func RectFromJSON(raw []byte) *Rect {
