@@ -3,7 +3,7 @@
 > Краткий чеклист. **Полный контекст для нового человека:** [`HANDOFF.md`](./HANDOFF.md).  
 > Обновлять скиллом `project-status` после значимых изменений.
 
-**Последнее обновление:** 2026-08-10
+**Последнее обновление:** 2026-08-11
 
 ## Итерация 1 — эпики
 
@@ -14,19 +14,20 @@
 | EPIC-03 Статьи | P0 | ✅ | upload / arXiv / DOI, asynq worker; title из PDF |
 | EPIC-04 Библиотека + PDF | P0 | ✅ | library, ридер; PDF через API stream `GET /papers/{id}/pdf` (blob) |
 | EPIC-12 Дедуп | P1 | ✅ | unique DOI/arXiv, SHA-256 |
-| EPIC-06 Заметки | P1 | ✅ | CRUD annotations + UI |
+| EPIC-06 Заметки | P1 | ✅ | CRUD + notes from chat / reply selection + jump back to message |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
 | EPIC-11 Фронт без моков | P0 | 🟡 | сайдбар проектов и Similar — моки |
-| EPIC-08 AI | P1 | 🟡 | full-text chat + history/rolling summary + context meter + model picker; LLM зависит от ключа/баланса |
+| EPIC-08 AI | P1 | 🟡 | full-text chat + history/rolling summary + compact context chip + model picker; LLM зависит от ключа/баланса |
 | EPIC-05 Проекты | P2 | ❌ | не начато |
 | EPIC-09 Web-search | P2 | ❌ | не начато |
 | EPIC-10 Теги | P3 | ❌ | нет |
 
 ## Недавние изменения (changelog)
 
-- **2026-08-10 — chat UX:** метр заполнения контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown в ответах, plain-text paste, «Уточнить» по выделению в ответе, человекочитаемые ошибки LLM (402)
-- **2026-08-10 — full-text chat:** parser (`services/parser`) + TeX-first arXiv; `paper_documents` (`003`); chat кладёт полный текст в prompt; overflow истории → rolling summary. См. [PARSER.md](./PARSER.md)
-- **2026-08-10 — EPIC-08 paper chat:** `chat_messages` (`002`), `GET/POST …/chat`, история в LLM; «Спросить AI» → explain; ошибки LLM → 502/503
+- **2026-08-11 — reader chat polish:** заметки из сообщения/выделения ответа; jump note→chat (`004`); одиночная цитата над инпутом; компактный context chip; фикс PDF selection overshoot
+- **2026-08-10 — chat UX:** метр контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown, plain-text paste, «Уточнить», ошибки LLM (402)
+- **2026-08-10 — full-text chat:** parser + TeX-first; `paper_documents` (`003`); full text in prompt + rolling summary. См. [PARSER.md](./PARSER.md)
+- **2026-08-10 — EPIC-08 paper chat:** `chat_messages` (`002`), `GET/POST …/chat`, explain; LLM → 502/503
 - Backend: modular monolith — `internal/modules/{identity,catalog,library,annotations,feed,assistant,content}` + `platform` + `app` router
 - Структура: markdown → `docs/`, Python backend удалён, Go в `backend/`, SQL в `migrations/`
 - **HANDOFF.md** — полный контекст проекта для продолжения работы

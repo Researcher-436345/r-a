@@ -1,12 +1,12 @@
 # Iteration push notes
 
-Last refreshed: 2026-08-10
+Last refreshed: 2026-08-11
 Branch: feature/reader-paper-chat
 Repo: Researcher-436345/r-a
 
 ## One-liner
 
-EPIC-08 paper chat: persist history, stuff **full paper text** into the LLM (TeX-first / PDF parser), rolling chat-history summary, reader UX (rich text, context meter, model picker).
+EPIC-08 paper chat: full-text LLM context, model picker, notes↔chat deep links, single-passage quote UI, compact context chip, tighter PDF text selection.
 
 Подробнее: [HANDOFF.md](./HANDOFF.md), [PARSER.md](./PARSER.md), чеклист: [STATUS.md](./STATUS.md).
 
@@ -16,7 +16,7 @@ EPIC-08 paper chat: persist history, stuff **full paper text** into the LLM (TeX
 cd r-a   # канон для GitHub
 cp .env.example .env   # LLM_API_KEY + опционально LLM_MODELS
 docker compose up -d --build
-# migrations 001–003 via migrate service
+# migrations 001–004 via migrate service
 
 cd frontend
 cp .env.example .env   # VITE_API_URL=http://localhost:8080
@@ -49,20 +49,20 @@ Compose: Go `api` + `worker` + `parser` + `translator`, SQL `migrate` из `migr
 - Chat: full `plain_text` in prompt + token budget; rolling history summary on overflow
 - Paths: `backend/internal/modules/content/`, `assistant/{http,llm,prompt}.go`, `cmd/worker/main.go`
 
-### Chat UX (reader)
+### Chat UX (reader) — 2026-08-11
 
-- Context fill meter (`GET …/chat/context`, bar above composer)
-- Model picker (`GET /assistant/models`, `LLM_MODELS`, `localStorage`)
-- KaTeX + markdown in assistant bubbles (`shared/ui/rich-text.tsx`)
-- Plain-text paste into composer; caret/placeholder fix
-- «Уточнить» on selecting text in assistant replies
-- Humanized LLM errors (e.g. 402 insufficient balance)
+- Compact context chip next to model picker (tooltip for details)
+- Single selection → quote card above composer; multiple → inline chips
+- Save whole chat message or selected reply excerpt → notes
+- Notes with `source_chat_message_id` jump back to the chat bubble
+- PDF text selection: pointer-events + `.endOfContent` DOM placement (less “select all”)
+- Model picker, KaTeX/markdown, plain-text paste, humanized LLM errors
 
 ### Paper chat API (persistence)
 
-- `migrations/002_chat_messages.sql`
+- `migrations/002_chat_messages.sql`, `004_annotation_chat_source.sql`
 - `GET/POST /papers/{id}/chat`, explain from selection popup
-- Paths: `assistant/{http,llm,store}.go`, `frontend/.../reader-chat-panel.tsx`
+- Annotations may store `source_chat_message_id` (page `0` = chat note)
 
 ### Already on main (context)
 
@@ -79,6 +79,7 @@ Compose: Go `api` + `worker` + `parser` + `translator`, SQL `migrate` из `migr
 - Similar tab — моки
 - Streaming / RAG / multi-paper agent — вне scope
 - Annotation rect в БД всё ещё px при save (выделение — ratio)
+- Старые заметки из чата без `source_chat_message_id` не прыгают назад
 
 ## Architecture snapshot
 
@@ -86,6 +87,7 @@ Compose: Go `api` + `worker` + `parser` + `translator`, SQL `migrate` из `migr
 frontend → JWT → Go API (:8080)
                 → assistant: chat_messages + full paper_documents text
                 → /assistant/models + per-request model
+                → annotations.source_chat_message_id ↔ chat bubble
 worker ← asynq ← PDF ready → process_paper_parse → parser|TeX
 ```
 
@@ -114,15 +116,15 @@ worker ← asynq ← PDF ready → process_paper_parse → parser|TeX
 - `GET /papers/{paperID}/chat/messages` → `{ items: ChatMessage[] }`
 - `GET /papers/{paperID}/chat/context?model=` → context usage estimate
 - `POST /papers/{paperID}/chat` `{ message, context_text?, model? }` → `{ reply, …, context_usage }`
-- `POST /papers/{paperID}/explain` `{ text, question?, model? }` → `{ reply }` (не пишет в `chat_messages`)
+- `POST /papers/{paperID}/explain` `{ text, question?, model? }` → `{ reply }`
+- `POST /papers/{paperID}/annotations` may include `source_chat_message_id`, `page: 0` for chat notes
 
 ## Files to look at first
 
-- `migrations/002_chat_messages.sql`, `003_paper_documents.sql`, `migrate.sh`
+- `migrations/002_chat_messages.sql`, `003_paper_documents.sql`, `004_annotation_chat_source.sql`
 - `services/parser/`, `docs/PARSER.md`
 - `backend/internal/modules/content/`
 - `backend/internal/modules/assistant/{http,llm,prompt,store}.go`
-- `frontend/src/features/reader/api.ts`
-- `frontend/src/features/reader/components/{reader-chat-panel,chat-composer}.tsx`
-- `frontend/src/shared/ui/rich-text.tsx`
+- `backend/internal/modules/annotations/{http,store,dto}.go`
+- `frontend/src/features/reader/components/{reader-chat-panel,chat-composer,assistant-reply-selection-bar,reader-pdf-canvas-viewer}.tsx`
 - `docs/STATUS.md`
