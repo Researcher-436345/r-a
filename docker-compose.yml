@@ -33,7 +33,6 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
       MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:5173,http://127.0.0.1:5173"
     ports:
-      # Host 9000/9002 often clash with Cursor — keep 9002 for API
       - "9002:9000"
       - "9003:9001"
     volumes:
@@ -52,35 +51,6 @@ services:
         condition: service_healthy
     entrypoint: ["/bin/sh", "/migrations/migrate.sh"]
     restart: "no"
-
-  api:
-    build:
-      context: ./backend
-    ports:
-      - "8080:8000"
-    env_file:
-      - .env
-    environment:
-      HTTP_ADDR: ":8000"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_PUBLIC_ENDPOINT_URL: http://localhost:9002
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
-      S3_BUCKET: papers
-      TRANSLATION_SERVICE_URL: http://translator:8090
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_started
-      migrate:
-        condition: service_completed_successfully
-      translator:
-        condition: service_healthy
 
   translator:
     build:
@@ -113,6 +83,169 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+
+  identity:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8101"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+    entrypoint: ["identity"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8101/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  catalog:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8102"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:9002
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: papers
+    entrypoint: ["catalog"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8102/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  library:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8103"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+    entrypoint: ["library"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8103/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  annotations:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8104"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      CATALOG_URL: http://catalog:8102
+    entrypoint: ["annotations"]
+    depends_on:
+      catalog:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8104/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  assistant:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8105"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      CATALOG_URL: http://catalog:8102
+      TRANSLATION_SERVICE_URL: http://translator:8090
+    entrypoint: ["assistant"]
+    depends_on:
+      catalog:
+        condition: service_healthy
+      translator:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8105/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  feed:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8106"
+      REDIS_URL: redis://redis:6379/0
+    entrypoint: ["feed"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8106/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    build:
+      context: ./backend
+    ports:
+      - "8080:8000"
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8000"
+      IDENTITY_URL: http://identity:8101
+      CATALOG_URL: http://catalog:8102
+      LIBRARY_URL: http://library:8103
+      ANNOTATIONS_URL: http://annotations:8104
+      ASSISTANT_URL: http://assistant:8105
+      FEED_URL: http://feed:8106
+    entrypoint: ["gateway"]
+    depends_on:
+      identity:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+      library:
+        condition: service_healthy
+      annotations:
+        condition: service_healthy
+      assistant:
+        condition: service_healthy
+      feed:
+        condition: service_healthy
 
   worker:
     build:

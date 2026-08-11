@@ -32,11 +32,12 @@ r-a/   (GitHub: Researcher-436345/r-a)
 ├── backend/          # Go modular monolith (api + worker)
 │   ├── cmd/api, cmd/worker
 │   ├── internal/app          # composition root (router)
-│   ├── internal/platform/    # config, db, queue, storage, httpx
-│   └── internal/modules/     # identity, catalog, library, annotations, feed, assistant, content
+│   ├── cmd/                  # gateway, identity, catalog, library, annotations, assistant, feed, worker, translator
+│   ├── internal/platform/    # config, db, queue, storage, httpx, gateway
+│   └── internal/modules/     # domain packages used by cmd/*
 ├── services/parser/  # FastAPI PDF→text (PyMuPDF; Docling optional)
 ├── frontend/         # React + Vite + PDF.js
-├── docs/             # HANDOFF, STATUS, PARSER, планы, push-notes
+├── docs/             # HANDOFF, STATUS, SERVICES, PARSER, планы, push-notes
 ├── migrations/       # SQL schema (без Python)
 ├── docker-compose.yml
 ├── README.md

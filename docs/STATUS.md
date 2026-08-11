@@ -24,13 +24,14 @@
 
 ## Недавние изменения (changelog)
 
+- **2026-08-11 — API split:** gateway + identity/catalog/library/annotations/assistant/feed как отдельные контейнеры; фронт по-прежнему `:8080`
 - **2026-08-11 — notes UX:** Markdown в карточках заметок; длинные сворачиваются с «Показать ещё»
 - **2026-08-11 — stream + page cites:** SSE `POST …/chat?stream=1`; промпт с `<<<p=N>>>` из chunks; кликабельные `[p.N «quote»]` → страница PDF (без RAG/span)
 - **2026-08-11 — reader chat polish:** заметки из сообщения/выделения ответа; jump note→chat (`004`); одиночная цитата над инпутом; компактный context chip; фикс PDF selection overshoot
 - **2026-08-10 — chat UX:** метр контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown, plain-text paste, «Уточнить», ошибки LLM (402)
 - **2026-08-10 — full-text chat:** parser + TeX-first; `paper_documents` (`003`); full text in prompt + rolling summary. См. [PARSER.md](./PARSER.md)
 - **2026-08-10 — EPIC-08 paper chat:** `chat_messages` (`002`), `GET/POST …/chat`, explain; LLM → 502/503
-- Backend: modular monolith — `internal/modules/{identity,catalog,library,annotations,feed,assistant,content}` + `platform` + `app` router
+- Backend: **microservices** behind gateway — identity, catalog, library, annotations, assistant, feed (+ parser, translator, worker). See [SERVICES.md](./SERVICES.md)
 - Структура: markdown → `docs/`, Python backend удалён, Go в `backend/`, SQL в `migrations/`
 - **HANDOFF.md** — полный контекст проекта для продолжения работы
 - PDF через API stream (MinIO порты конфликтовали с Cursor)

@@ -21,9 +21,17 @@ func (a API) store() Store { return Store{DB: a.DB} }
 
 type userKey struct{}
 
+// UserIDHeader is set by the gateway after validating the access token.
+const UserIDHeader = "X-User-Id"
+
 // UserID returns the authenticated user id from request context.
 func UserID(r *http.Request) uuid.UUID {
 	return r.Context().Value(userKey{}).(uuid.UUID)
+}
+
+// WithUserID stores user id in context (tests / gateway adapters).
+func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, userKey{}, id)
 }
 
 // Middleware validates Bearer access tokens.
@@ -39,7 +47,20 @@ func (a API) Middleware(next http.Handler) http.Handler {
 			httpx.Error(w, 401, "Could not validate credentials")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, id)))
+		next.ServeHTTP(w, r.WithContext(WithUserID(r.Context(), id)))
+	})
+}
+
+// MiddlewareFromGateway trusts X-User-Id set by the API gateway (no JWT re-check).
+func MiddlewareFromGateway(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := strings.TrimSpace(r.Header.Get(UserIDHeader))
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httpx.Error(w, 401, "Not authenticated")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(WithUserID(r.Context(), id)))
 	})
 }
 

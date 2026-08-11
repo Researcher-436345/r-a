@@ -54,6 +54,15 @@ type Config struct {
 	CitationsEnabled      bool
 	OpenAlexMailto        string
 	SemanticScholarAPIKey string
+
+	// Service discovery (gateway + inter-service).
+	IdentityURL     string
+	CatalogURL      string
+	LibraryURL      string
+	AnnotationsURL  string
+	AssistantURL    string
+	FeedURL         string
+	InternalToken   string
 }
 
 type LLMModelOption struct {
@@ -108,6 +117,14 @@ func Load() Config {
 		CitationsEnabled:      getenv("CITATIONS_ENABLED", "true") != "false",
 		OpenAlexMailto:        getenv("OPENALEX_MAILTO", "researcher@localhost"),
 		SemanticScholarAPIKey: getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
+
+		IdentityURL:    strings.TrimRight(getenv("IDENTITY_URL", "http://localhost:8101"), "/"),
+		CatalogURL:     strings.TrimRight(getenv("CATALOG_URL", "http://localhost:8102"), "/"),
+		LibraryURL:     strings.TrimRight(getenv("LIBRARY_URL", "http://localhost:8103"), "/"),
+		AnnotationsURL: strings.TrimRight(getenv("ANNOTATIONS_URL", "http://localhost:8104"), "/"),
+		AssistantURL:   strings.TrimRight(getenv("ASSISTANT_URL", "http://localhost:8105"), "/"),
+		FeedURL:        strings.TrimRight(getenv("FEED_URL", "http://localhost:8106"), "/"),
+		InternalToken:  getenv("INTERNAL_TOKEN", ""),
 	}
 }
 
