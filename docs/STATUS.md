@@ -24,6 +24,7 @@
 
 ## Недавние изменения (changelog)
 
+- **2026-08-11 — notes UX:** Markdown в карточках заметок; длинные сворачиваются с «Показать ещё»
 - **2026-08-11 — stream + page cites:** SSE `POST …/chat?stream=1`; промпт с `<<<p=N>>>` из chunks; кликабельные `[p.N «quote»]` → страница PDF (без RAG/span)
 - **2026-08-11 — reader chat polish:** заметки из сообщения/выделения ответа; jump note→chat (`004`); одиночная цитата над инпутом; компактный context chip; фикс PDF selection overshoot
 - **2026-08-10 — chat UX:** метр контекста, выбор модели (`LLM_MODELS`), KaTeX/markdown, plain-text paste, «Уточнить», ошибки LLM (402)

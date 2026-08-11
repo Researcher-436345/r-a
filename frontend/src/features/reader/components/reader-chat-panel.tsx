@@ -999,6 +999,7 @@ export function ReaderChatPanel({
                     onOpen={(item) => onNoteSelect?.(item)}
                     onSave={handleUpdateNote}
                     onDelete={(id) => void handleDelete(id)}
+                    onPageCite={onPageCite}
                   />
                 ))
               )}

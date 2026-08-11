@@ -63,6 +63,7 @@ Compose: Go `api` + `worker` + `parser` + `translator`, SQL `migrate` из `migr
 - Single selection → quote card above composer; multiple → inline chips
 - Save chat message / reply excerpt → notes; jump note→chat (`004`)
 - Free notes composer on Notes tab; chat bubble restyle + markdown CSS
+- **Notes render Markdown** via `RichText` (same as chat); long notes collapse (~140px) with «Показать ещё» / «Свернуть»
 - PDF selection overshoot fixes; model picker; KaTeX; humanized LLM errors
 
 ### Paper chat API (persistence)
@@ -128,8 +129,7 @@ worker ← asynq ← PDF ready → process_paper_parse → parser|TeX
 
 - `backend/internal/modules/assistant/{http,llm,prompt,pages}.go`
 - `backend/internal/modules/content/store.go` (`ListChunks`)
-- `frontend/src/features/reader/api.ts` (`chatPaperStream`)
-- `frontend/src/features/reader/components/reader-chat-panel.tsx`
+- `frontend/src/features/reader/components/{reader-chat-panel,reader-note-card,chat-composer}.tsx`
 - `frontend/src/shared/ui/rich-text.tsx` (`linkifyPageCites`)
 - `migrations/002–004_*.sql`, `services/parser/`, `docs/PARSER.md`
 - `docs/STATUS.md`
