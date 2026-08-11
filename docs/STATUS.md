@@ -9,21 +9,22 @@
 
 | Эпик | Приоритет | Статус | Комментарий |
 |------|-----------|--------|-------------|
-| EPIC-01 Инфра | P0 | ✅ | Docker Compose: Go API/worker + SQL migrations |
-| EPIC-02 Auth | P0 | ✅ | register/login/refresh, JWT (Go) |
+| EPIC-01 Инфра | P0 | ✅ | Compose: gateway + domain services + worker/parser/translator + SQL migrations |
+| EPIC-02 Auth | P0 | ✅ | register/login/refresh, JWT (identity service) |
 | EPIC-03 Статьи | P0 | ✅ | upload / arXiv / DOI, asynq worker; title из PDF |
 | EPIC-04 Библиотека + PDF | P0 | ✅ | library, ридер; PDF через API stream `GET /papers/{id}/pdf` (blob) |
 | EPIC-12 Дедуп | P1 | ✅ | unique DOI/arXiv, SHA-256 |
 | EPIC-06 Заметки | P1 | ✅ | CRUD + notes from chat / reply selection + jump back to message |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
 | EPIC-11 Фронт без моков | P0 | 🟡 | сайдбар проектов и Similar — моки |
-| EPIC-08 AI | P1 | 🟡 | full-text chat + SSE stream + page cites `[p.N]`; history/summary; model picker; LLM зависит от ключа/баланса |
-| EPIC-05 Проекты | P2 | ❌ | не начато |
-| EPIC-09 Web-search | P2 | ❌ | не начато |
+| EPIC-08 AI | P1 | 🟡 | full-text chat + SSE + cites; LLM зависит от ключа/баланса; нет RAG/span-highlight |
+| EPIC-05 Проекты | P2 | ❌ | не начато (sidebar моки) |
+| EPIC-09 Web-search | P2 | ❌ | ветка `feature/web-search`, не в main |
 | EPIC-10 Теги | P3 | ❌ | нет |
 
 ## Недавние изменения (changelog)
 
+- **2026-08-11 — notes scroll:** длинный список заметок скроллится, карточки не сжимаются
 - **2026-08-11 — API split:** gateway + identity/catalog/library/annotations/assistant/feed как отдельные контейнеры; фронт по-прежнему `:8080`
 - **2026-08-11 — notes UX:** Markdown в карточках заметок; длинные сворачиваются с «Показать ещё»
 - **2026-08-11 — stream + page cites:** SSE `POST …/chat?stream=1`; промпт с `<<<p=N>>>` из chunks; кликабельные `[p.N «quote»]` → страница PDF (без RAG/span)

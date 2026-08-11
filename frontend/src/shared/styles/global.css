@@ -1845,12 +1845,20 @@ textarea:focus-visible {
   flex: 1;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px 16px 24px;
 }
 
 .reader-notes {
   gap: 12px;
+}
+
+/* Иначе flex сжимает карточки вместо скролла панели */
+.reader-notes > *,
+.reader-similar > * {
+  flex-shrink: 0;
 }
 
 .reader-notes-composer {
@@ -1920,6 +1928,7 @@ textarea:focus-visible {
 }
 
 .reader-note-card {
+  flex-shrink: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-left-width: 3px;
