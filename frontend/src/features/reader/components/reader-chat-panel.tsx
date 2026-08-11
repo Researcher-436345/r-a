@@ -1,5 +1,6 @@
 import {
   ArrowUp,
+  Check,
   CornerDownRight,
   GitCompare,
   Highlighter,
@@ -7,11 +8,13 @@ import {
   NotebookPen,
   Paperclip,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   chatPaper,
+  createAnnotation,
   deleteAnnotation,
   fetchAssistantModels,
   fetchChatContext,
@@ -41,6 +44,17 @@ import { AssistantReplySelectionBar } from './assistant-reply-selection-bar';
 import { ReaderNoteCard } from './reader-note-card';
 
 const MODEL_STORAGE_KEY = 'researcher.chat.model';
+const CHAT_NOTE_COLOR = '#cbb8de';
+
+interface LocalChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  attachments?: ChatContextAttachment[];
+  segments?: ComposerSegment[];
+  /** Полный текст для будущей модели */
+  modelPayload?: string;
+}
 
 function formatTokens(n: number): string {
   if (n >= 10000) {
@@ -50,6 +64,28 @@ function formatTokens(n: number): string {
     return `${(n / 1000).toFixed(1)}k`;
   }
   return String(n);
+}
+
+function messageNoteBody(message: LocalChatMessage): string {
+  return (message.content || message.modelPayload || '').trim();
+}
+
+function canSaveMessageAsNote(message: LocalChatMessage): boolean {
+  const body = messageNoteBody(message);
+  if (!body) {
+    return false;
+  }
+  if (body === 'Думаю…' || body === 'Thinking…') {
+    return false;
+  }
+  if (body.startsWith('Ошибка:') || body.startsWith('Error:')) {
+    return false;
+  }
+  return true;
+}
+
+function isPersistedMessageId(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 }
 
 const readerTabs = [
@@ -70,17 +106,10 @@ interface ReaderChatPanelProps {
   onNoteSelect?: (note: PaperAnnotation) => void;
   onPassageSelect?: (attachment: ChatContextAttachment) => void;
   onNoteUpdated?: (note: PaperAnnotation) => void;
+  onNoteCreated?: (note: PaperAnnotation) => void;
   onAnnotationsChange?: () => void;
-}
-
-interface LocalChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  attachments?: ChatContextAttachment[];
-  segments?: ComposerSegment[];
-  /** Полный текст для будущей модели */
-  modelPayload?: string;
+  focusChatMessageId?: string | null;
+  focusChatMessageToken?: number;
 }
 
 export function ReaderChatPanel({
@@ -94,7 +123,10 @@ export function ReaderChatPanel({
   onNoteSelect,
   onPassageSelect,
   onNoteUpdated,
+  onNoteCreated,
   onAnnotationsChange,
+  focusChatMessageId = null,
+  focusChatMessageToken = 0,
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
   const text = readerStrings[locale];
@@ -108,9 +140,16 @@ export function ReaderChatPanel({
   const [models, setModels] = useState<LLMModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null);
+  const [savingNoteMessageId, setSavingNoteMessageId] = useState<string | null>(null);
+  const [savedNoteMessageId, setSavedNoteMessageId] = useState<string | null>(null);
+  const [flashMessageId, setFlashMessageId] = useState<string | null>(null);
+  /** Одно выделение — цитата над инпутом; несколько — чипы в композере */
+  const [focusQuote, setFocusQuote] = useState<ChatContextAttachment | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const lastInsertedId = useRef<string | null>(null);
+  const focusQuoteRef = useRef<ChatContextAttachment | null>(null);
+  focusQuoteRef.current = focusQuote;
 
   const tabs = useMemo(
     () =>
@@ -260,13 +299,55 @@ export function ReaderChatPanel({
   }, [focusNotesToken, activeNoteId]);
 
   useEffect(() => {
+    if (!focusChatMessageToken || !focusChatMessageId) {
+      return;
+    }
+    setActiveTab('assistant');
+    window.setTimeout(() => {
+      const row = document.querySelector(`[data-chat-message-id="${focusChatMessageId}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFlashMessageId(focusChatMessageId);
+      window.setTimeout(() => {
+        setFlashMessageId((current) => (current === focusChatMessageId ? null : current));
+      }, 1600);
+    }, 60);
+  }, [focusChatMessageToken, focusChatMessageId]);
+
+  const syncComposerEmpty = () => {
+    const emptyComposer = composerRef.current?.isEmpty() ?? true;
+    setComposerEmpty(emptyComposer && !focusQuoteRef.current);
+  };
+
+  const addContextAttachment = (attachment: ChatContextAttachment) => {
+    setActiveTab('assistant');
+    const chipCount = composerRef.current?.getSnapshot().attachments.length ?? 0;
+    const currentQuote = focusQuoteRef.current;
+
+    if (currentQuote && chipCount === 0) {
+      composerRef.current?.insertAttachment(currentQuote);
+      composerRef.current?.insertAttachment(attachment);
+      setFocusQuote(null);
+    } else if (!currentQuote && chipCount === 0) {
+      setFocusQuote(attachment);
+    } else {
+      composerRef.current?.insertAttachment(attachment);
+    }
+
+    setComposerEmpty(false);
+    composerRef.current?.focus();
+  };
+
+  useEffect(() => {
+    syncComposerEmpty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when quote pin changes
+  }, [focusQuote]);
+
+  useEffect(() => {
     if (!contextAttachment || contextAttachment.id === lastInsertedId.current) {
       return;
     }
     lastInsertedId.current = contextAttachment.id;
-    setActiveTab('assistant');
-    // Composer всегда смонтирован (скрыт на других вкладках) — вставка не теряется
-    composerRef.current?.insertAttachment(contextAttachment);
+    addContextAttachment(contextAttachment);
     onClearContextAttachment?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- insert once per attachment id
   }, [contextAttachment?.id]);
@@ -289,6 +370,103 @@ export function ReaderChatPanel({
     onNoteUpdated?.(updated);
   };
 
+  const handleSaveMessageAsNote = async (message: LocalChatMessage) => {
+    if (!paperId || !canSaveMessageAsNote(message) || savingNoteMessageId) {
+      return;
+    }
+    const body = messageNoteBody(message);
+    const quote =
+      message.role === 'assistant'
+        ? locale === 'ru'
+          ? 'Чат · ответ AI'
+          : 'Chat · AI reply'
+        : locale === 'ru'
+          ? 'Чат · вопрос'
+          : 'Chat · question';
+
+    setSavingNoteMessageId(message.id);
+    setError(null);
+    try {
+      const created = await createAnnotation(paperId, {
+        page: 0,
+        selected_text: quote,
+        note: body,
+        color: CHAT_NOTE_COLOR,
+        source_chat_message_id: isPersistedMessageId(message.id) ? message.id : null,
+      });
+      onNoteCreated?.(created);
+      setSavedNoteMessageId(message.id);
+      setActiveTab('notes');
+      window.setTimeout(() => {
+        setSavedNoteMessageId((current) => (current === message.id ? null : current));
+      }, 1800);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : locale === 'ru'
+              ? 'Не удалось сохранить в заметки'
+              : 'Could not save to notes',
+      );
+    } finally {
+      setSavingNoteMessageId(null);
+    }
+  };
+
+  const handleSaveSelectionAsNote = async (payload: {
+    text: string;
+    messageId: string | null;
+  }) => {
+    if (!paperId || savingNoteMessageId) {
+      return;
+    }
+    const body = payload.text.trim();
+    if (body.length < 2) {
+      return;
+    }
+    const quote = locale === 'ru' ? 'Чат · фрагмент ответа' : 'Chat · reply excerpt';
+    const trackingId = payload.messageId || `selection-${Date.now()}`;
+
+    setSavingNoteMessageId(trackingId);
+    setError(null);
+    try {
+      const created = await createAnnotation(paperId, {
+        page: 0,
+        selected_text: quote,
+        note: body,
+        color: CHAT_NOTE_COLOR,
+        source_chat_message_id:
+          payload.messageId && isPersistedMessageId(payload.messageId)
+            ? payload.messageId
+            : null,
+      });
+      onNoteCreated?.(created);
+      if (payload.messageId) {
+        setSavedNoteMessageId(payload.messageId);
+        window.setTimeout(() => {
+          setSavedNoteMessageId((current) =>
+            current === payload.messageId ? null : current,
+          );
+        }, 1800);
+      }
+      setActiveTab('notes');
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : locale === 'ru'
+              ? 'Не удалось сохранить в заметки'
+              : 'Could not save to notes',
+      );
+    } finally {
+      setSavingNoteMessageId(null);
+    }
+  };
+
   const handleSend = async () => {
     if (isSending) {
       return;
@@ -297,25 +475,41 @@ export function ReaderChatPanel({
       return;
     }
     const snapshot = composerRef.current?.getSnapshot();
-    if (!snapshot || (composerRef.current?.isEmpty() ?? true)) {
+    if (!snapshot) {
       return;
     }
 
-    const attachments = snapshot.attachments;
+    const attachments = focusQuote
+      ? [focusQuote, ...snapshot.attachments]
+      : snapshot.attachments;
     const hasText = Boolean(snapshot.plainText);
     const defaultAsk = locale === 'ru' ? 'Объясни этот фрагмент' : 'Explain this passage';
     const content = hasText ? snapshot.plainText : attachments.length ? defaultAsk : '';
-    const segments: ComposerSegment[] =
-      hasText || !attachments.length
-        ? snapshot.segments
-        : [
-            ...snapshot.segments,
-            { type: 'text', value: ` ${defaultAsk}` },
-          ];
 
     if (!content && !attachments.length) {
       return;
     }
+
+    const quoteSegments: ComposerSegment[] = focusQuote
+      ? [{ type: 'chip', attachment: focusQuote }]
+      : [];
+    const segments: ComposerSegment[] =
+      hasText || !attachments.length
+        ? [...quoteSegments, ...snapshot.segments]
+        : [
+            ...quoteSegments,
+            ...snapshot.segments,
+            { type: 'text', value: ` ${defaultAsk}` },
+          ];
+
+    const contextParts = [
+      ...(focusQuote ? [focusQuote.text] : []),
+      snapshot.modelText,
+      !snapshot.modelText && !focusQuote ? snapshot.plainText : '',
+    ]
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const requestContext = contextParts.join('\n\n') || null;
 
     const tempUserId = `u-${Date.now()}`;
     const tempAssistantId = `a-${Date.now()}`;
@@ -325,7 +519,7 @@ export function ReaderChatPanel({
       content,
       attachments: attachments.length ? attachments : undefined,
       segments,
-      modelPayload: snapshot.modelText || content,
+      modelPayload: requestContext || content,
     };
 
     const assistantMessage: LocalChatMessage = {
@@ -336,13 +530,13 @@ export function ReaderChatPanel({
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
     composerRef.current?.clear();
+    setFocusQuote(null);
     setComposerEmpty(true);
 
     setIsSending(true);
     setError(null);
     try {
       const requestMessage = content || defaultAsk;
-      const requestContext = snapshot.modelText || snapshot.plainText || null;
       const res = await chatPaper(paperId, {
         message: requestMessage,
         context_text: requestContext,
@@ -454,47 +648,102 @@ export function ReaderChatPanel({
               {messages.map((message) => (
                 <div
                   key={message.id}
+                  data-chat-message-id={message.id}
                   className={
-                    message.role === 'user'
-                      ? 'reader-chat-bubble reader-chat-bubble--user'
-                      : 'reader-chat-bubble reader-chat-bubble--assistant'
+                    [
+                      message.role === 'user'
+                        ? 'reader-chat-row reader-chat-row--user'
+                        : 'reader-chat-row reader-chat-row--assistant',
+                      flashMessageId === message.id ? 'reader-chat-row--flash' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
                   }
                 >
-                  <div className="reader-chat-bubble__body">
-                    {message.segments?.length
-                      ? message.segments.map((segment, index) =>
-                          segment.type === 'chip' ? (
-                            <button
-                              type="button"
-                              key={segment.attachment.id}
-                              className="reader-chat-token reader-chat-token--clickable"
-                              title={segment.attachment.preview}
-                              onClick={() => onPassageSelect?.(segment.attachment)}
-                            >
-                              {segment.attachment.locationLabel}
-                            </button>
+                  {message.role === 'user' && canSaveMessageAsNote(message) ? (
+                    <button
+                      type="button"
+                      className={
+                        savedNoteMessageId === message.id || savingNoteMessageId === message.id
+                          ? 'reader-chat-row__note-btn reader-chat-row__note-btn--visible'
+                          : 'reader-chat-row__note-btn'
+                      }
+                      title={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
+                      aria-label={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
+                      disabled={savingNoteMessageId === message.id}
+                      onClick={() => void handleSaveMessageAsNote(message)}
+                    >
+                      {savedNoteMessageId === message.id ? (
+                        <Check aria-hidden="true" size={14} strokeWidth={2.2} />
+                      ) : (
+                        <NotebookPen aria-hidden="true" size={14} strokeWidth={2} />
+                      )}
+                    </button>
+                  ) : null}
+                  <div
+                    className={
+                      message.role === 'user'
+                        ? 'reader-chat-bubble reader-chat-bubble--user'
+                        : 'reader-chat-bubble reader-chat-bubble--assistant'
+                    }
+                  >
+                    <div className="reader-chat-bubble__body">
+                      {message.segments?.length
+                        ? message.segments.map((segment, index) =>
+                            segment.type === 'chip' ? (
+                              <button
+                                type="button"
+                                key={segment.attachment.id}
+                                className="reader-chat-token reader-chat-token--clickable"
+                                title={segment.attachment.preview}
+                                onClick={() => onPassageSelect?.(segment.attachment)}
+                              >
+                                {segment.attachment.locationLabel}
+                              </button>
+                            ) : (
+                              <span key={`t-${index}`} className="reader-chat-bubble__text">
+                                {segment.value}
+                              </span>
+                            ),
+                          )
+                        : message.role === 'assistant' ? (
+                            <RichText className="reader-chat-bubble__rich">{message.content}</RichText>
                           ) : (
-                            <span key={`t-${index}`} className="reader-chat-bubble__text">
-                              {segment.value}
-                            </span>
-                          ),
-                        )
-                      : message.role === 'assistant' ? (
-                          <RichText className="reader-chat-bubble__rich">{message.content}</RichText>
-                        ) : (
-                          message.content
-                        )}
+                            message.content
+                          )}
+                    </div>
                   </div>
+                  {message.role === 'assistant' && canSaveMessageAsNote(message) ? (
+                    <button
+                      type="button"
+                      className={
+                        savedNoteMessageId === message.id || savingNoteMessageId === message.id
+                          ? 'reader-chat-row__note-btn reader-chat-row__note-btn--visible'
+                          : 'reader-chat-row__note-btn'
+                      }
+                      title={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
+                      aria-label={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
+                      disabled={savingNoteMessageId === message.id}
+                      onClick={() => void handleSaveMessageAsNote(message)}
+                    >
+                      {savedNoteMessageId === message.id ? (
+                        <Check aria-hidden="true" size={14} strokeWidth={2.2} />
+                      ) : (
+                        <NotebookPen aria-hidden="true" size={14} strokeWidth={2} />
+                      )}
+                    </button>
+                  ) : null}
                 </div>
               ))}
               <AssistantReplySelectionBar
                 containerRef={threadRef}
                 locale={locale}
+                isSavingNote={Boolean(savingNoteMessageId)}
                 onAsk={(attachment) => {
-                  setActiveTab('assistant');
-                  composerRef.current?.insertAttachment(attachment);
-                  setComposerEmpty(false);
-                  composerRef.current?.focus();
+                  addContextAttachment(attachment);
+                }}
+                onSaveNote={(payload) => {
+                  void handleSaveSelectionAsNote(payload);
                 }}
               />
             </div>
@@ -502,47 +751,51 @@ export function ReaderChatPanel({
         </div>
 
         <div className="reader-chat-input-wrap">
-          {contextUsage ? (
-            <div
-              className={`reader-context-meter reader-context-meter--${contextTone}`}
-              title={
-                locale === 'ru'
-                  ? `Контекст: ${contextUsage.used_tokens.toLocaleString('ru-RU')} / ${contextUsage.limit_tokens.toLocaleString('ru-RU')} токенов` +
-                    (contextUsage.has_full_paper
-                      ? ` · статья ≈ ${formatTokens(contextUsage.paper_tokens)}`
-                      : ' · полный текст статьи ещё не готов')
-                  : `Context: ${contextUsage.used_tokens.toLocaleString('en-US')} / ${contextUsage.limit_tokens.toLocaleString('en-US')} tokens` +
-                    (contextUsage.has_full_paper
-                      ? ` · paper ≈ ${formatTokens(contextUsage.paper_tokens)}`
-                      : ' · full paper text not ready yet')
-              }
-            >
-              <div className="reader-context-meter__track" aria-hidden="true">
-                <div
-                  className="reader-context-meter__fill"
-                  style={{ width: `${Math.min(100, Math.max(0, contextUsage.percent))}%` }}
-                />
-              </div>
-              <div className="reader-context-meter__meta">
-                <span>
-                  {locale === 'ru' ? 'Контекст' : 'Context'}{' '}
-                  {Math.round(contextUsage.percent)}%
+          {focusQuote ? (
+            <div className="reader-chat-focus-quote">
+              <button
+                type="button"
+                className="reader-chat-focus-quote__body"
+                title={focusQuote.preview || focusQuote.text}
+                onClick={() => onPassageSelect?.(focusQuote)}
+              >
+                <span className="reader-chat-focus-quote__marks" aria-hidden="true">
+                  “”
                 </span>
-                <span>
-                  {formatTokens(contextUsage.used_tokens)} / {formatTokens(contextUsage.limit_tokens)}
+                <span className="reader-chat-focus-quote__content">
+                  <span className="reader-chat-focus-quote__label">{focusQuote.locationLabel}</span>
+                  <span className="reader-chat-focus-quote__text">
+                    {focusQuote.preview || focusQuote.text}
+                  </span>
                 </span>
-              </div>
+              </button>
+              <button
+                type="button"
+                className="reader-chat-focus-quote__close"
+                title={locale === 'ru' ? 'Убрать фрагмент' : 'Remove passage'}
+                aria-label={locale === 'ru' ? 'Убрать фрагмент' : 'Remove passage'}
+                onClick={() => {
+                  setFocusQuote(null);
+                  setComposerEmpty(composerRef.current?.isEmpty() ?? true);
+                }}
+              >
+                <X aria-hidden="true" size={14} strokeWidth={2} />
+              </button>
             </div>
           ) : null}
           <div className="reader-chat-input">
             <ChatComposer
               ref={composerRef}
               placeholder={
-                locale === 'ru'
-                  ? 'Спроси или добавь фрагменты из PDF…'
-                  : 'Ask or add passages from the PDF…'
+                focusQuote
+                  ? locale === 'ru'
+                    ? 'Спроси об этом фрагменте…'
+                    : 'Ask about this passage…'
+                  : locale === 'ru'
+                    ? 'Спроси или добавь фрагменты из PDF…'
+                    : 'Ask or add passages from the PDF…'
               }
-              onChange={() => setComposerEmpty(composerRef.current?.isEmpty() ?? true)}
+              onChange={syncComposerEmpty}
               onSubmit={handleSend}
               onChipClick={(attachment) => onPassageSelect?.(attachment)}
             />
@@ -576,6 +829,32 @@ export function ReaderChatPanel({
                       : 'model…'}
                 </span>
               )}
+              {contextUsage ? (
+                <div
+                  className={`reader-context-chip reader-context-chip--${contextTone}`}
+                  title={
+                    locale === 'ru'
+                      ? `Контекст: ${contextUsage.used_tokens.toLocaleString('ru-RU')} / ${contextUsage.limit_tokens.toLocaleString('ru-RU')} токенов` +
+                        (contextUsage.has_full_paper
+                          ? ` · статья ≈ ${formatTokens(contextUsage.paper_tokens)}`
+                          : ' · полный текст статьи ещё не готов')
+                      : `Context: ${contextUsage.used_tokens.toLocaleString('en-US')} / ${contextUsage.limit_tokens.toLocaleString('en-US')} tokens` +
+                        (contextUsage.has_full_paper
+                          ? ` · paper ≈ ${formatTokens(contextUsage.paper_tokens)}`
+                          : ' · full paper text not ready yet')
+                  }
+                >
+                  <span className="reader-context-chip__track" aria-hidden="true">
+                    <span
+                      className="reader-context-chip__fill"
+                      style={{ width: `${Math.min(100, Math.max(0, contextUsage.percent))}%` }}
+                    />
+                  </span>
+                  <span className="reader-context-chip__label">
+                    {Math.round(contextUsage.percent)}%
+                  </span>
+                </div>
+              ) : null}
               <div className="reader-chat-input__spacer" />
               <span>{text.sendHint}</span>
               <button

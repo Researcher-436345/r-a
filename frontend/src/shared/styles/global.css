@@ -741,9 +741,9 @@ textarea:focus-visible {
   transform-origin: 0 0;
   -webkit-text-size-adjust: none;
   text-size-adjust: none;
-  /* пустые поля страницы не участвуют в selection — только спаны */
+  /* пустые поля не ловят pointer — иначе Chrome раздувает selection на всю страницу */
+  pointer-events: none;
   user-select: none;
-  pointer-events: auto;
   forced-color-adjust: none;
 }
 
@@ -753,14 +753,15 @@ textarea:focus-visible {
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  pointer-events: auto;
   user-select: text;
 }
 
 .textLayer span.markedContent {
   top: 0;
   height: 0;
-  user-select: none;
   pointer-events: none;
+  user-select: none;
 }
 
 .textLayer ::selection {
@@ -771,18 +772,27 @@ textarea:focus-visible {
   background: transparent;
 }
 
-/* Ключ к «нормальному» выделению: ловит drag ниже строки, не цепляя весь документ */
+/*
+  PDF.js trick: во время drag пустое место должно попадать в .endOfContent,
+  а не в контейнер .textLayer — иначе selection прыгает на весь слой.
+*/
 .textLayer .endOfContent {
   display: block;
   position: absolute;
-  inset: 100% 0 0;
-  z-index: -1;
+  inset: 0;
+  z-index: 0;
   cursor: default;
   user-select: none;
+  pointer-events: none;
 }
 
-.textLayer .endOfContent.active {
-  top: 0;
+.textLayer.selecting .endOfContent {
+  pointer-events: auto;
+  user-select: text;
+}
+
+.textLayer.selecting :is(span, br) {
+  z-index: 1;
 }
 
 .reader-pdf-page__highlight {
@@ -1156,12 +1166,95 @@ textarea:focus-visible {
   padding: 4px 2px 8px;
 }
 
+.reader-chat-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 2px);
+}
+
+.reader-chat-row--assistant {
+  align-self: flex-start;
+}
+
+.reader-chat-row--user {
+  align-self: flex-end;
+}
+
+.reader-chat-row--flash .reader-chat-bubble {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  animation: reader-chat-flash 1.4s ease;
+}
+
+@keyframes reader-chat-flash {
+  0% {
+    outline-color: color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+.reader-chat-row__note-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.reader-chat-row:hover .reader-chat-row__note-btn,
+.reader-chat-row:focus-within .reader-chat-row__note-btn,
+.reader-chat-row__note-btn--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.reader-chat-row__note-btn:hover {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--sub);
+}
+
+.reader-chat-row__note-btn:disabled {
+  cursor: wait;
+}
+
+.reader-chat-row__note-btn--visible {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
 .reader-chat-bubble {
-  max-width: 100%;
+  max-width: min(100%, 100%);
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.reader-chat-row--assistant .reader-chat-bubble {
+  max-width: calc(100% - 32px);
+}
+
+.reader-chat-row--user .reader-chat-bubble {
+  max-width: calc(100% - 32px);
 }
 
 .reader-chat-bubble__body {
@@ -1188,13 +1281,11 @@ textarea:focus-visible {
 }
 
 .reader-chat-bubble--user {
-  align-self: flex-end;
   background: var(--accent-soft);
   color: var(--text);
 }
 
 .reader-chat-bubble--assistant {
-  align-self: flex-start;
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--text);
@@ -1323,41 +1414,149 @@ textarea:focus-visible {
   border-top: 1px solid var(--border);
 }
 
-.reader-context-meter {
-  display: grid;
-  gap: 6px;
+.reader-chat-focus-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  animation: reader-focus-quote-in 180ms ease;
 }
 
-.reader-context-meter__track {
-  height: 4px;
+@keyframes reader-focus-quote-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reader-chat-focus-quote__body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reader-chat-focus-quote__marks {
+  flex: none;
+  margin-top: -2px;
+  color: color-mix(in srgb, var(--accent) 55%, var(--faint));
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.08em;
+  opacity: 0.72;
+}
+
+.reader-chat-focus-quote__content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.reader-chat-focus-quote__label {
+  color: var(--accent-text, var(--accent));
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.reader-chat-focus-quote__text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 78%, var(--sub));
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.reader-chat-focus-quote__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.reader-chat-focus-quote__close:hover {
+  background: color-mix(in srgb, var(--hover) 80%, transparent);
+  color: var(--sub);
+}
+
+.reader-context-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--faint);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+}
+
+.reader-context-chip__track {
+  display: block;
+  width: 28px;
+  height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--border) 85%, transparent);
 }
 
-.reader-context-meter__fill {
+.reader-context-chip__fill {
+  display: block;
   height: 100%;
   border-radius: inherit;
   background: color-mix(in srgb, var(--accent) 72%, #7a8ea8);
   transition: width 280ms ease;
 }
 
-.reader-context-meter--warn .reader-context-meter__fill {
+.reader-context-chip--warn {
+  color: #a67a2a;
+}
+
+.reader-context-chip--warn .reader-context-chip__fill {
   background: #c4923a;
 }
 
-.reader-context-meter--critical .reader-context-meter__fill {
+.reader-context-chip--critical {
+  color: #b04a3c;
+}
+
+.reader-context-chip--critical .reader-context-chip__fill {
   background: #c45a4a;
 }
 
-.reader-context-meter__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--faint);
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.01em;
+.reader-context-chip__label {
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
 }
 
 .reader-chat-input {

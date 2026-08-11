@@ -79,7 +79,19 @@ export function ReaderNoteCard({
         type="button"
         className="reader-note-card__open"
         onClick={() => onOpen(note)}
-        title="Перейти к месту в PDF"
+        title={
+          note.source_chat_message_id
+            ? locale === 'ru'
+              ? 'Перейти к сообщению в чате'
+              : 'Jump to chat message'
+            : note.rect
+              ? locale === 'ru'
+                ? 'Перейти к месту в PDF'
+                : 'Jump to PDF'
+              : locale === 'ru'
+                ? 'Заметка из чата'
+                : 'Note from chat'
+        }
         disabled={isEditing}
       >
         <div className="reader-note-card__quote">
@@ -123,7 +135,15 @@ export function ReaderNoteCard({
       </div>
 
       <div className="reader-note-card__meta">
-        <span>{locale === 'ru' ? `стр. ${note.page}` : `p. ${note.page}`}</span>
+        <span>
+          {note.page > 0
+            ? locale === 'ru'
+              ? `стр. ${note.page}`
+              : `p. ${note.page}`
+            : locale === 'ru'
+              ? 'чат'
+              : 'chat'}
+        </span>
         <div className="reader-note-card__meta-actions">
           {!isEditing ? (
             <button

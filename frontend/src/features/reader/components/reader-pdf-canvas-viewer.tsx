@@ -211,13 +211,61 @@ export function ReaderPdfCanvasViewer({
     }
 
     const selection = window.getSelection();
-    const text = selection?.toString().trim() ?? '';
-    if (!text || !selection || selection.rangeCount === 0) {
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       return;
     }
 
-    const range = selection.getRangeAt(0);
-    const pageElement = range.commonAncestorContainer.parentElement?.closest('.reader-pdf-page');
+    let range = selection.getRangeAt(0);
+    const startPage = (
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.startContainer as Element)
+        : range.startContainer.parentElement
+    )?.closest('.reader-pdf-page');
+    const endPage = (
+      range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.endContainer as Element)
+        : range.endContainer.parentElement
+    )?.closest('.reader-pdf-page');
+
+    // Чуть уехали на соседнюю страницу — обрезаем конец до текста стартовой страницы
+    if (startPage && endPage && startPage !== endPage) {
+      const clamped = document.createRange();
+      clamped.setStart(range.startContainer, range.startOffset);
+      let endNode: Node | null = null;
+      const walker = document.createTreeWalker(startPage, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        try {
+          if (range.intersectsNode(node)) {
+            endNode = node;
+          }
+        } catch {
+          // ignore
+        }
+        node = walker.nextNode();
+      }
+      if (endNode?.textContent != null) {
+        clamped.setEnd(endNode, endNode.textContent.length);
+        selection.removeAllRanges();
+        selection.addRange(clamped);
+        range = clamped;
+      } else {
+        return;
+      }
+    }
+
+    const text = selection.toString().replace(/\s+/g, ' ').trim();
+    if (!text) {
+      return;
+    }
+
+    const pageElement =
+      startPage ||
+      (
+        range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+          ? (range.commonAncestorContainer as Element)
+          : range.commonAncestorContainer.parentElement
+      )?.closest('.reader-pdf-page');
     if (!pageElement || !documentRef.current?.contains(pageElement)) {
       return;
     }
@@ -227,6 +275,9 @@ export function ReaderPdfCanvasViewer({
     const page = pageMatch ? Number(pageMatch[1]) : 1;
     const pageRect = pageElement.getBoundingClientRect();
     const selectionRect = range.getBoundingClientRect();
+    if (selectionRect.width <= 0 && selectionRect.height <= 0) {
+      return;
+    }
     const rect = toNormalizedRect(selectionRect, pageRect);
 
     onTextSelect({
@@ -553,62 +604,96 @@ function ReaderPdfPage({
             return;
           }
 
-          // Mozilla: блок под текстом, чтобы drag мимо строки не цеплял весь документ
+          // Mozilla: .endOfContent ограничивает selection в Chrome/Safari при drag по пустоте
           const endOfContent = document.createElement('div');
           endOfContent.className = 'endOfContent';
           textLayer.append(endOfContent);
 
-          // Запас вокруг глифов — курсор чуть мимо не «вываливается» из спана
-          const padX = Math.max(5, Math.round(viewport.scale * 3.5));
-          const padY = Math.max(2, Math.round(viewport.scale * 1.5));
-          textLayer.querySelectorAll(':scope > span').forEach((node) => {
-            const span = node as HTMLElement;
-            if (span.classList.contains('markedContent')) {
-              return;
-            }
-            span.style.padding = `${padY}px ${padX}px`;
-            span.style.margin = `-${padY}px -${padX}px`;
-            span.style.boxSizing = 'content-box';
-          });
-
           let selecting = false;
 
-          const updateEndOfContent = (clientY: number) => {
-            const end = textLayer.querySelector('.endOfContent') as HTMLElement | null;
-            if (!end) {
+          const resetEndOfContent = () => {
+            if (endOfContent.parentElement !== textLayer) {
+              textLayer.append(endOfContent);
+            } else if (textLayer.lastElementChild !== endOfContent) {
+              textLayer.append(endOfContent);
+            }
+            endOfContent.classList.remove('active');
+            endOfContent.style.top = '';
+          };
+
+          const getLayerSpans = () =>
+            [...textLayer.querySelectorAll(':scope > span')].filter(
+              (node) =>
+                !(node as HTMLElement).classList.contains('markedContent') &&
+                !(node as HTMLElement).classList.contains('endOfContent'),
+            ) as HTMLElement[];
+
+          const updateEndOfContent = () => {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+              resetEndOfContent();
               return;
             }
-            const bounds = textLayer.getBoundingClientRect();
-            const slackPx = Math.max(10, padY * 3);
-            const ratio = Math.max(0, (clientY - bounds.top - slackPx) / bounds.height);
-            end.style.top = `${(ratio * 100).toFixed(2)}%`;
-            end.classList.add('active');
+
+            const range = selection.getRangeAt(0);
+            if (!textLayer.contains(range.commonAncestorContainer)) {
+              return;
+            }
+
+            // Chrome: ставим .endOfContent сразу после последнего выбранного спана —
+            // иначе selection «дотягивается» до конца textLayer.
+            const spans = getLayerSpans();
+            let lastSelected: HTMLElement | null = null;
+            for (const span of spans) {
+              try {
+                if (selection.containsNode(span, true)) {
+                  lastSelected = span;
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            textLayer.classList.add('selecting');
+            if (lastSelected) {
+              lastSelected.after(endOfContent);
+              endOfContent.classList.add('active');
+              endOfContent.style.top = '';
+              return;
+            }
+
+            // Fallback: закрыть пустоту ниже курсора (как в старом viewer)
+            resetEndOfContent();
+            endOfContent.classList.add('active');
           };
 
           const onMouseDown = (event: MouseEvent) => {
+            if (event.button !== 0) {
+              return;
+            }
             selecting = true;
-            updateEndOfContent(event.clientY);
+            textLayer.classList.add('selecting');
+            resetEndOfContent();
           };
 
-          const onMouseMove = (event: MouseEvent) => {
+          const onSelectionChange = () => {
             if (!selecting) {
               return;
             }
-            updateEndOfContent(event.clientY);
+            updateEndOfContent();
           };
 
           const onMouseUp = () => {
-            selecting = false;
-            const end = textLayer.querySelector('.endOfContent') as HTMLElement | null;
-            if (!end) {
+            if (!selecting) {
               return;
             }
-            end.style.top = '';
-            end.classList.remove('active');
+            selecting = false;
+            textLayer.classList.remove('selecting');
+            resetEndOfContent();
           };
 
           textLayer.addEventListener('mousedown', onMouseDown);
-          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('selectionchange', onSelectionChange);
           document.addEventListener('mouseup', onMouseUp);
           textLayer.dataset.selectionBound = '1';
           (
@@ -616,9 +701,12 @@ function ReaderPdfPage({
               __selectionCleanup?: () => void;
             }
           ).__selectionCleanup = () => {
+            selecting = false;
+            textLayer.classList.remove('selecting');
             textLayer.removeEventListener('mousedown', onMouseDown);
-            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('selectionchange', onSelectionChange);
             document.removeEventListener('mouseup', onMouseUp);
+            resetEndOfContent();
           };
         }
       } catch {

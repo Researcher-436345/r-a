@@ -1,21 +1,33 @@
-import { MessageSquareText, X } from 'lucide-react';
+import { MessageSquareText, NotebookPen, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 import { buildReplyAttachment, type ChatContextAttachment } from '../chat-context';
+
+export interface AssistantReplySelectionPayload {
+  text: string;
+  messageId: string | null;
+}
 
 interface AssistantReplySelectionBarProps {
   containerRef: RefObject<HTMLElement | null>;
   locale: 'ru' | 'en';
   onAsk: (attachment: ChatContextAttachment) => void;
+  onSaveNote: (payload: AssistantReplySelectionPayload) => void;
+  isSavingNote?: boolean;
 }
 
 interface BarState {
   text: string;
+  messageId: string | null;
   left: number;
   top: number;
 }
 
-function selectionInside(container: HTMLElement): { text: string; rect: DOMRect } | null {
+function selectionInside(container: HTMLElement): {
+  text: string;
+  rect: DOMRect;
+  messageId: string | null;
+} | null {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     return null;
@@ -34,13 +46,17 @@ function selectionInside(container: HTMLElement): { text: string; rect: DOMRect 
   if (text.length < 2) {
     return null;
   }
-  return { text, rect: range.getBoundingClientRect() };
+  const messageId =
+    node.closest('[data-chat-message-id]')?.getAttribute('data-chat-message-id') ?? null;
+  return { text, rect: range.getBoundingClientRect(), messageId };
 }
 
 export function AssistantReplySelectionBar({
   containerRef,
   locale,
   onAsk,
+  onSaveNote,
+  isSavingNote = false,
 }: AssistantReplySelectionBarProps) {
   const [bar, setBar] = useState<BarState | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -56,7 +72,7 @@ export function AssistantReplySelectionBar({
       setBar(null);
       return;
     }
-    const width = rootRef.current?.offsetWidth ?? 168;
+    const width = rootRef.current?.offsetWidth ?? 280;
     const height = rootRef.current?.offsetHeight ?? 36;
     const pad = 8;
     const left = Math.min(
@@ -67,12 +83,11 @@ export function AssistantReplySelectionBar({
     if (top < pad) {
       top = hit.rect.bottom + 8;
     }
-    setBar({ text: hit.text, left, top });
+    setBar({ text: hit.text, messageId: hit.messageId, left, top });
   };
 
   useEffect(() => {
     const onSel = () => {
-      // wait a tick so selection is committed after mouseup
       window.requestAnimationFrame(refresh);
     };
     document.addEventListener('selectionchange', onSel);
@@ -99,7 +114,8 @@ export function AssistantReplySelectionBar({
     return null;
   }
 
-  const askLabel = locale === 'ru' ? 'Уточнить' : 'Ask about this';
+  const askLabel = locale === 'ru' ? 'Уточнить' : 'Ask';
+  const noteLabel = locale === 'ru' ? 'В заметки' : 'To notes';
   const closeLabel = locale === 'ru' ? 'Закрыть' : 'Close';
 
   return (
@@ -108,13 +124,12 @@ export function AssistantReplySelectionBar({
       className="assistant-reply-selection"
       style={{ left: bar.left, top: bar.top }}
       role="toolbar"
-      aria-label={askLabel}
+      aria-label={locale === 'ru' ? 'Действия с выделением' : 'Selection actions'}
     >
       <button
         type="button"
         className="assistant-reply-selection__btn"
         onMouseDown={(event) => {
-          // keep selection until we read it
           event.preventDefault();
         }}
         onClick={() => {
@@ -126,6 +141,22 @@ export function AssistantReplySelectionBar({
       >
         <MessageSquareText aria-hidden="true" size={14} strokeWidth={2} />
         {askLabel}
+      </button>
+      <button
+        type="button"
+        className="assistant-reply-selection__btn"
+        disabled={isSavingNote}
+        onMouseDown={(event) => {
+          event.preventDefault();
+        }}
+        onClick={() => {
+          onSaveNote({ text: bar.text, messageId: bar.messageId });
+          window.getSelection()?.removeAllRanges();
+          setBar(null);
+        }}
+      >
+        <NotebookPen aria-hidden="true" size={14} strokeWidth={2} />
+        {isSavingNote ? '…' : noteLabel}
       </button>
       <button
         type="button"

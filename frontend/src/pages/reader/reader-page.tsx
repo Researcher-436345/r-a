@@ -43,6 +43,8 @@ export function ReaderPage() {
   const [chatAttachment, setChatAttachment] = useState<ChatContextAttachment | null>(null);
   const [focusAssistantToken, setFocusAssistantToken] = useState(0);
   const [focusNotesToken, setFocusNotesToken] = useState(0);
+  const [focusChatMessageId, setFocusChatMessageId] = useState<string | null>(null);
+  const [focusChatMessageToken, setFocusChatMessageToken] = useState(0);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translation, setTranslation] = useState<string | null>(null);
@@ -233,6 +235,12 @@ export function ReaderPage() {
 
   const handleNoteSelect = (note: PaperAnnotation) => {
     setActiveNoteId(note.id);
+    if (note.source_chat_message_id) {
+      setFocusChatMessageId(note.source_chat_message_id);
+      setFocusChatMessageToken((token) => token + 1);
+      setFocusAssistantToken((token) => token + 1);
+      return;
+    }
     if (!note.rect) {
       return;
     }
@@ -395,11 +403,20 @@ export function ReaderPage() {
           contextAttachment={chatAttachment}
           focusAssistantToken={focusAssistantToken}
           focusNotesToken={focusNotesToken}
+          focusChatMessageId={focusChatMessageId}
+          focusChatMessageToken={focusChatMessageToken}
           onClearContextAttachment={() => setChatAttachment(null)}
           onNoteSelect={handleNoteSelect}
           onPassageSelect={handlePassageSelect}
           onNoteUpdated={(note) => {
             setAnnotations((current) => current.map((item) => (item.id === note.id ? note : item)));
+          }}
+          onNoteCreated={(note) => {
+            setAnnotations((current) =>
+              current.some((item) => item.id === note.id) ? current : [...current, note],
+            );
+            setActiveNoteId(note.id);
+            setFocusNotesToken((token) => token + 1);
           }}
           onAnnotationsChange={() => {
             if (paperId) {
