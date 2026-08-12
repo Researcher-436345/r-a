@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator
+from datetime import date
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -15,9 +16,14 @@ ResearchMode = Literal["web", "deep"]
 
 app = FastAPI(title="researcher-websearch", version="0.1.0")
 
-LLM_BASE_URL = os.getenv("WEBSEARCH_LLM_BASE_URL", "https://api.aitunnel.ru/v1").rstrip("/")
+LLM_BASE_URL = os.getenv(
+    "WEBSEARCH_LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1"
+).rstrip("/")
 LLM_API_KEY = os.getenv("WEBSEARCH_LLM_API_KEY", "") or os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("WEBSEARCH_LLM_MODEL", "").strip()
+LLM_MODEL = os.getenv("WEBSEARCH_LLM_MODEL", "deepseek/deepseek-v4-flash").strip()
+DEEP_LLM_MODEL = os.getenv(
+    "WEBSEARCH_DEEP_LLM_MODEL", "perplexity/sonar-deep-research"
+).strip()
 LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_TIMEOUT_SECONDS", "180"))
 LLM_HTTP_REFERER = os.getenv("LLM_HTTP_REFERER", "http://localhost:5173")
 LLM_APP_TITLE = os.getenv("LLM_APP_TITLE", "Researcher")
@@ -33,7 +39,7 @@ RESEARCH_SYSTEM_PROMPT = """
 - Выполни достаточно широкий поиск, чтобы выявить основные подходы, а затем проверь важные утверждения по первичным источникам.
 - Отдавай приоритет рецензируемым статьям, оригинальным препринтам, страницам издательств, официальным страницам проектов, датасетам, бенчмаркам и документации. 
 - Используй вторичные источники только для полезного дополнительного контекста.
-- Отдавай приоритет свежим работам, вышедшим за последние 1-3 месяца, и только потом ищи поздние работы, если пользователь ничего не говорит о датах.
+- Текущая дата: {current_date}. Отдавай приоритет свежим работам, вышедшим за последние 1-3 месяца относительно этой даты, и только потом ищи более ранние работы, если пользователь ничего не говорит о датах.
 - Указывай даты публикации и явно отличай рецензируемые работы от препринтов.
 - Перепроверяй важные и потенциально спорные утверждения. 
 - Описывай разногласия, ограничения, отрицательные результаты и неопределённость; не выдавай слабые доказательства за установленный факт.
@@ -48,9 +54,8 @@ RESEARCH_SYSTEM_PROMPT = """
 Требования к ответу:
 - Верни только законченный ответ в Markdown.
 - Давай именно статьи по порядку, а не просто другие различные факты.
-- Используй ясную иерархию заголовков (##, ###), короткие абзацы, **жирное выделение**, цитаты и Markdown-таблицы, когда они улучшают восприятие.
-- Не используй маркированные или нумерованные списки, больше используй абзацы, не делай сильно большие заголовки.
-- Давай небольшой, но подробный и емкий ответ. 
+- Используй ясную иерархию заголовков, короткие абзацы, **жирное выделение**, цитаты и Markdown-таблицы, когда они улучшают восприятие.
+- Не используй маркированные или нумерованные списки, больше используй абзацы, не делай большие заголовки.
 - Оформляй источники как кликабельные Markdown-ссылки с понятными названиями: [название статьи или источника](https://...).
 - Размещай ссылки на источники рядом с фактическими, актуальными и количественными утверждениями. Не выводи непроверяемые голые URL.
 - Заверши ответ таблицей с найденными работами и ссылками на уникальные источники на языке ответа, если API-цитаты уже не образуют эквивалентный список ссылок.
@@ -81,15 +86,34 @@ def require_internal_token(x_internal_token: str | None = Header(default=None)) 
         raise HTTPException(status_code=401, detail="invalid internal token")
 
 
-def system_prompt(mode: ResearchMode) -> str:
+def system_prompt(mode: ResearchMode, current_date: date | None = None) -> str:
+    prompt_date = current_date or date.today()
     if mode == "deep":
-        suffix = "Режим глубокого исследования: проведи более полный многоэтапный поиск, сопоставь несколько независимых источников, оформи ответ как подробный исследовательский отчёт и добавь конкретные рекомендации для дальнейшего чтения."
+        suffix = """
+Режим глубокого исследования:
+- Проведи полный многоэтапный поиск и сопоставь несколько независимых первичных источников.
+- Подготовь очень подробный исследовательский отчёт. Не сокращай материал ради краткости: полнота и глубина важнее объёма ответа.
+- Последовательно раскрой контекст и терминологию, основные подходы и методологии, доказательства и результаты, сравнение работ, противоречия, ограничения и открытые вопросы.
+- Подкрепляй источниками каждое существенное фактическое утверждение и явно отделяй подтверждённые выводы от интерпретаций.
+- Заверши содержательными выводами и конкретными рекомендациями для дальнейшего чтения.
+""".strip()
     else:
-        suffix = "Режим веб-поиска: ответь эффективно и по существу, проверив наиболее важные утверждения и добавив прямые ссылки на источники."
-    return f"{RESEARCH_SYSTEM_PROMPT}\n\n{suffix}"
+        suffix = """
+Режим веб-поиска:
+- Ответь эффективно и по существу, проверив наиболее важные утверждения и добавив прямые ссылки на источники.
+- Дай небольшой, но подробный и ёмкий ответ.
+""".strip()
+    prompt = RESEARCH_SYSTEM_PROMPT.format(current_date=prompt_date.isoformat())
+    return f"{prompt}\n\n{suffix}"
+
+
+def model_for_mode(mode: ResearchMode) -> str:
+    return DEEP_LLM_MODEL if mode == "deep" else LLM_MODEL
 
 
 def normalize_source(raw: Any) -> Source | None:
+    if isinstance(raw, dict) and raw.get("type") == "url_citation":
+        raw = raw.get("url_citation")
     if isinstance(raw, str):
         url = raw.strip()
         title = ""
@@ -140,24 +164,47 @@ def sse(event: str, payload: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def provider_body(payload: SearchRequest) -> dict[str, Any]:
+    return {
+        "model": model_for_mode(payload.mode),
+        "messages": [
+            {"role": "system", "content": system_prompt(payload.mode)},
+            *(message.model_dump() for message in payload.messages),
+        ],
+        "tools": [
+            {
+                "type": "openrouter:web_search",
+                "parameters": {
+                    "engine": "auto",
+                    "max_results": 5,
+                    "max_total_results": 20,
+                },
+            },
+            {
+                "type": "openrouter:web_fetch",
+                "parameters": {
+                    "max_uses": 10,
+                    "max_content_tokens": 50_000,
+                },
+            },
+        ],
+        "stream": True,
+    }
+
+
 async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
     if not LLM_API_KEY:
         raise RuntimeError("веб-поиск не настроен: добавь WEBSEARCH_LLM_API_KEY или LLM_API_KEY")
-    if not LLM_MODEL:
-        raise RuntimeError("веб-поиск не настроен: добавь WEBSEARCH_LLM_MODEL")
+    model = model_for_mode(payload.mode)
+    if not model:
+        variable = "WEBSEARCH_DEEP_LLM_MODEL" if payload.mode == "deep" else "WEBSEARCH_LLM_MODEL"
+        raise RuntimeError(f"веб-поиск не настроен: добавь {variable}")
 
     headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
     if "openrouter.ai" in LLM_BASE_URL:
         headers["HTTP-Referer"] = LLM_HTTP_REFERER
         headers["X-Title"] = LLM_APP_TITLE
-    body = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt(payload.mode)},
-            *(message.model_dump() for message in payload.messages),
-        ],
-        "stream": True,
-    }
+    body = provider_body(payload)
     timeout = httpx.Timeout(LLM_TIMEOUT_SECONDS, connect=20.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream(
@@ -187,13 +234,22 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
                 raw_sources: list[Any] = []
                 raw_sources.extend(chunk.get("citations") or [])
                 raw_sources.extend(chunk.get("search_results") or [])
+                for choice in choices:
+                    raw_sources.extend((choice.get("delta") or {}).get("annotations") or [])
+                    raw_sources.extend((choice.get("message") or {}).get("annotations") or [])
                 if raw_sources:
                     yield "sources", raw_sources
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "websearch", "model": LLM_MODEL, "version": "0.1.0"}
+    return {
+        "status": "ok",
+        "service": "websearch",
+        "model": LLM_MODEL,
+        "models": {"web": LLM_MODEL, "deep": DEEP_LLM_MODEL},
+        "version": "0.1.0",
+    }
 
 
 @app.post("/v1/search/stream", dependencies=[Depends(require_internal_token)])

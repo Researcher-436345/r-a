@@ -1,7 +1,17 @@
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 import app.main as main
-from app.main import Source, has_linked_sources_section, markdown_sources, merge_sources
+from app.main import (
+    SearchRequest,
+    Source,
+    has_linked_sources_section,
+    markdown_sources,
+    merge_sources,
+    provider_body,
+    system_prompt,
+)
 
 
 def test_sources_are_normalized_and_deduplicated() -> None:
@@ -12,14 +22,67 @@ def test_sources_are_normalized_and_deduplicated() -> None:
             "https://arxiv.org/abs/1234.5678",
             {"url": "https://arxiv.org/abs/1234.5678", "title": "Duplicate"},
             {"url": "https://example.com/paper", "title": "Paper", "date": "2026-01-02"},
+            {
+                "type": "url_citation",
+                "url_citation": {
+                    "url": "https://example.org/cited-paper",
+                    "title": "Cited paper",
+                },
+            },
             "not-a-url",
         ],
     )
     assert [source.url for source in sources] == [
         "https://arxiv.org/abs/1234.5678",
         "https://example.com/paper",
+        "https://example.org/cited-paper",
     ]
     assert sources[1].published_at == "2026-01-02"
+
+
+def test_provider_body_uses_openrouter_web_tools() -> None:
+    body = provider_body(
+        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
+    )
+
+    assert body["model"] == "deepseek/deepseek-v4-flash"
+    assert body["stream"] is True
+    assert body["tools"] == [
+        {
+            "type": "openrouter:web_search",
+            "parameters": {"engine": "auto", "max_results": 5, "max_total_results": 20},
+        },
+        {
+            "type": "openrouter:web_fetch",
+            "parameters": {"max_uses": 10, "max_content_tokens": 50_000},
+        },
+    ]
+
+
+def test_provider_body_uses_deep_research_model() -> None:
+    body = provider_body(
+        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="deep")
+    )
+
+    assert body["model"] == "perplexity/sonar-deep-research"
+
+
+def test_system_prompt_contains_current_date_for_recency_window() -> None:
+    prompt = system_prompt("web", current_date=date(2026, 8, 12))
+
+    assert "Текущая дата: 2026-08-12" in prompt
+    assert "последние 1-3 месяца относительно этой даты" in prompt
+
+
+def test_deep_prompt_requests_full_report_without_compactness() -> None:
+    web_prompt = system_prompt("web", current_date=date(2026, 8, 12))
+    deep_prompt = system_prompt("deep", current_date=date(2026, 8, 12))
+
+    assert "небольшой, но подробный и ёмкий ответ" in web_prompt
+    assert "небольшой, но подробный и ёмкий ответ" not in deep_prompt
+    assert "ёмк" not in deep_prompt
+    assert "очень подробный исследовательский отчёт" in deep_prompt
+    assert "Не сокращай материал ради краткости" in deep_prompt
 
 
 def test_markdown_fallback_is_only_needed_without_linked_section() -> None:
