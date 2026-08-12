@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Flame, Sparkles, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { fetchLibrary } from '../../library/api';
+import { fetchLibrary, prefetchArxiv } from '../../library/api';
 import { useI18n } from '../../../shared/i18n/i18n-context';
 import { SegmentedControl } from '../../../shared/ui/segmented-control';
 import { trendingPapersQuery } from '../queries';
@@ -11,6 +11,7 @@ import { PaperCard } from './paper-card';
 
 const skeletons = ['one', 'two', 'three'] as const;
 const SORT_STORAGE_KEY = 'researcher.feed.sort';
+const PREFETCH_AFTER_VIEWPORT = 3;
 
 function readStoredSort(): TrendingSort {
   if (typeof window === 'undefined') {
@@ -28,6 +29,7 @@ export function TrendingPapers() {
   const [sort, setSort] = useState<TrendingSort>(readStoredSort);
   const { data: papers = [], isLoading, isError, isFetching } = useQuery(trendingPapersQuery(sort));
   const [libraryByArxiv, setLibraryByArxiv] = useState<Record<string, string>>({});
+  const [visibleArxivIds, setVisibleArxivIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const sortOptions = useMemo(
     () =>
@@ -68,6 +70,49 @@ export function TrendingPapers() {
   useEffect(() => {
     window.localStorage.setItem(SORT_STORAGE_KEY, sort);
   }, [sort]);
+
+  const handleVisibilityChange = useCallback((arxivId: string, visible: boolean) => {
+    setVisibleArxivIds((current) => {
+      const hasArxivId = current.has(arxivId);
+      if (hasArxivId === visible) {
+        return current;
+      }
+      const next = new Set(current);
+      if (visible) {
+        next.add(arxivId);
+      } else {
+        next.delete(arxivId);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const visibleIndexes = papers
+      .map((paper, index) => (visibleArxivIds.has(paper.arxivId) ? index : -1))
+      .filter((index) => index >= 0);
+    if (visibleIndexes.length === 0) {
+      return;
+    }
+
+    const indexesToPrefetch = new Set(visibleIndexes);
+    const lastVisibleIndex = Math.max(...visibleIndexes);
+    for (let offset = 1; offset <= PREFETCH_AFTER_VIEWPORT; offset += 1) {
+      const index = lastVisibleIndex + offset;
+      if (index < papers.length) {
+        indexesToPrefetch.add(index);
+      }
+    }
+
+    [...indexesToPrefetch]
+      .sort((left, right) => left - right)
+      .forEach((index) => {
+        const paper = papers[index];
+        if (!libraryByArxiv[paper.arxivId]) {
+          prefetchArxiv(paper.arxivId);
+        }
+      });
+  }, [libraryByArxiv, papers, visibleArxivIds]);
 
   return (
     <section className="trending-papers" aria-labelledby="trending-papers-title">
@@ -110,6 +155,7 @@ export function TrendingPapers() {
               key={paper.id}
               paper={paper}
               libraryPaperId={libraryByArxiv[paper.arxivId] ?? null}
+              onVisibilityChange={handleVisibilityChange}
               onLibraryChange={(arxivId, libraryPaperId) => {
                 setLibraryByArxiv((current) => {
                   const next = { ...current };

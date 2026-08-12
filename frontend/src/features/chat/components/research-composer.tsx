@@ -68,7 +68,11 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.altKey && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
               event.preventDefault();
               submit();
             }

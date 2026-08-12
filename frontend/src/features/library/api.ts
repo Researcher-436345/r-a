@@ -57,13 +57,64 @@ export function addByArxiv(arxivId: string): Promise<LibraryPaper> {
   });
 }
 
+const openByArxivRequests = new Map<string, Promise<LibraryPaper>>();
+const arxivPrefetchQueue: string[] = [];
+const queuedArxivIds = new Set<string>();
+const MAX_CONCURRENT_ARXIV_PREFETCHES = 3;
+let activeArxivPrefetches = 0;
+
 /** Открывает публичную arXiv-статью, не добавляя её в список чтения. */
 export function openByArxiv(arxivId: string): Promise<LibraryPaper> {
-  return apiRequest<LibraryPaper>('/papers/arxiv', {
+  const key = arxivId.trim();
+  const cached = openByArxivRequests.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const request = apiRequest<LibraryPaper>('/papers/arxiv', {
     method: 'POST',
     token: authToken(),
-    body: { arxiv_id: arxivId, add_to_library: false },
+    body: { arxiv_id: key, add_to_library: false },
   });
+
+  openByArxivRequests.set(key, request);
+  void request.catch(() => {
+    if (openByArxivRequests.get(key) === request) {
+      openByArxivRequests.delete(key);
+    }
+  });
+  return request;
+}
+
+function drainArxivPrefetchQueue() {
+  while (activeArxivPrefetches < MAX_CONCURRENT_ARXIV_PREFETCHES) {
+    const arxivId = arxivPrefetchQueue.shift();
+    if (!arxivId) {
+      return;
+    }
+    queuedArxivIds.delete(arxivId);
+    activeArxivPrefetches += 1;
+    void openByArxiv(arxivId)
+      .catch(() => {
+        // Фоновая подготовка не должна показывать ошибку пользователю.
+        // Обычный клик повторит неуспешный запрос.
+      })
+      .finally(() => {
+        activeArxivPrefetches -= 1;
+        drainArxivPrefetchQueue();
+      });
+  }
+}
+
+/** Ставит публичную статью в ограниченную фоновую очередь подготовки reader. */
+export function prefetchArxiv(arxivId: string) {
+  const key = arxivId.trim();
+  if (!key || openByArxivRequests.has(key) || queuedArxivIds.has(key)) {
+    return;
+  }
+  queuedArxivIds.add(key);
+  arxivPrefetchQueue.push(key);
+  window.setTimeout(drainArxivPrefetchQueue, 0);
 }
 
 export function addByDoi(doi: string): Promise<LibraryPaper> {

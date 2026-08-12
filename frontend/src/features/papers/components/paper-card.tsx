@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, BookmarkCheck, ExternalLink, LoaderCircle, Quote } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   addByArxiv,
@@ -18,6 +18,7 @@ interface PaperCardProps {
   /** paper.id из нашей БД, если уже в библиотеке */
   libraryPaperId?: string | null;
   onLibraryChange?: (arxivId: string, libraryPaperId: string | null) => void;
+  onVisibilityChange?: (arxivId: string, visible: boolean) => void;
 }
 
 const months: Record<Locale, string[]> = {
@@ -78,9 +79,15 @@ function hashHue(input: string): number {
   return hash % 360;
 }
 
-export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: PaperCardProps) {
+export function PaperCard({
+  paper,
+  libraryPaperId = null,
+  onLibraryChange,
+  onVisibilityChange,
+}: PaperCardProps) {
   const { locale, t } = useI18n();
   const navigate = useNavigate();
+  const cardRef = useRef<HTMLElement>(null);
   const [savedPaperId, setSavedPaperId] = useState<string | null>(libraryPaperId);
   const [isOpening, setIsOpening] = useState(false);
   const [isBookmarking, setIsBookmarking] = useState(false);
@@ -89,6 +96,36 @@ export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: Pap
   useEffect(() => {
     setSavedPaperId(libraryPaperId);
   }, [libraryPaperId]);
+
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node || !onVisibilityChange) {
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      onVisibilityChange(paper.arxivId, true);
+      return () => onVisibilityChange(paper.arxivId, false);
+    }
+
+    let visible = false;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const nextVisible = entry.isIntersecting;
+        if (nextVisible !== visible) {
+          visible = nextVisible;
+          onVisibilityChange(paper.arxivId, visible);
+        }
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (visible) {
+        onVisibilityChange(paper.arxivId, false);
+      }
+    };
+  }, [onVisibilityChange, paper.arxivId]);
 
   const isSaved = Boolean(savedPaperId);
   const SaveIcon = isSaved ? BookmarkCheck : Bookmark;
@@ -147,7 +184,7 @@ export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: Pap
   };
 
   return (
-    <article className="paper-card">
+    <article ref={cardRef} className="paper-card">
       <div className="paper-card__content">
         <div className="paper-card__main">
           <button
