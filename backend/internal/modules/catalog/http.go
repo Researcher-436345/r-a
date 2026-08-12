@@ -55,12 +55,24 @@ func (a API) requirePaper(w http.ResponseWriter, r *http.Request) (uuid.UUID, bo
 	if !ok {
 		return id, false
 	}
-	in, e := a.Membership.Has(r.Context(), identity.UserID(r), id)
-	if e != nil || !in {
+	allowed, e := a.canAccessPaper(r.Context(), identity.UserID(r), id)
+	if e != nil || !allowed {
 		httpx.Error(w, 404, "Paper not found")
 		return id, false
 	}
 	return id, true
+}
+
+func (a API) canAccessPaper(ctx context.Context, userID, paperID uuid.UUID) (bool, error) {
+	inLibrary, err := a.Membership.Has(ctx, userID, paperID)
+	if err != nil || inLibrary {
+		return inLibrary, err
+	}
+	return a.store().IsPublic(ctx, paperID)
+}
+
+func addToLibrary(value *bool) bool {
+	return value == nil || *value
 }
 
 func (a API) paperResponse(w http.ResponseWriter, r *http.Request, id uuid.UUID, status int) {
@@ -74,7 +86,8 @@ func (a API) paperResponse(w http.ResponseWriter, r *http.Request, id uuid.UUID,
 
 func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		ArxivID string `json:"arxiv_id"`
+		ArxivID      string `json:"arxiv_id"`
+		AddToLibrary *bool  `json:"add_to_library"`
 	}
 	if !httpx.DecodeJSON(w, r, &b) {
 		return
@@ -87,7 +100,10 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 	id := CanonicalArxivID(raw)
 	p, e := a.store().FindByArxiv(r.Context(), id)
 	if e == nil && p != nil {
-		if e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID); e != nil {
+		if addToLibrary(b.AddToLibrary) {
+			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
+		}
+		if e != nil {
 			httpx.Error(w, 500, e.Error())
 			return
 		}
@@ -109,11 +125,11 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 	if e = a.store().AttachAuthors(r.Context(), p.ID, m.Authors); e == nil {
 		v, e2 := a.store().CreateVersion(r.Context(), p.ID, 1, "arxiv", &m.PDFURL, nil, nil, nil, "processing")
 		e = e2
-		if e == nil {
+		if e == nil && addToLibrary(b.AddToLibrary) {
 			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
-			if e == nil && a.Queue != nil {
-				e = queue.Enqueue(a.Queue, queue.ProcessArxivPDF, v.ID.String())
-			}
+		}
+		if e == nil && a.Queue != nil {
+			e = queue.Enqueue(a.Queue, queue.ProcessArxivPDF, v.ID.String())
 		}
 	}
 	if e != nil {
@@ -125,7 +141,8 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 
 func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		DOI string `json:"doi"`
+		DOI          string `json:"doi"`
+		AddToLibrary *bool  `json:"add_to_library"`
 	}
 	if !httpx.DecodeJSON(w, r, &b) {
 		return
@@ -137,7 +154,10 @@ func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 	}
 	p, e := a.store().FindByDOI(r.Context(), doi)
 	if e == nil && p != nil {
-		if e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID); e != nil {
+		if addToLibrary(b.AddToLibrary) {
+			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
+		}
+		if e != nil {
 			httpx.Error(w, 500, e.Error())
 			return
 		}
@@ -158,7 +178,7 @@ func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 		sourceURL := "https://doi.org/" + m.DOI
 		_, e = a.store().CreateVersion(r.Context(), p.ID, 1, "doi", &sourceURL, nil, nil, nil, "ready")
 	}
-	if e == nil {
+	if e == nil && addToLibrary(b.AddToLibrary) {
 		e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
 	}
 	if e != nil {
@@ -379,7 +399,7 @@ func (a API) enrichUploadMeta(ctx context.Context, meta PDFInfo, fallback string
 	return
 }
 
-// RequirePaper is used by sibling modules (assistant, annotations) via shared membership check.
+// RequirePaper is used by sibling modules (assistant, annotations) via the shared access check.
 func (a API) RequirePaper(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	return a.requirePaper(w, r)
 }

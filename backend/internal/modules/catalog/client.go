@@ -27,8 +27,8 @@ func (a API) internalAccess(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 401, "Not authenticated")
 		return
 	}
-	in, e := a.Membership.Has(r.Context(), userID, id)
-	if e != nil || !in {
+	allowed, e := a.canAccessPaper(r.Context(), userID, id)
+	if e != nil || !allowed {
 		httpx.Error(w, 404, "Paper not found")
 		return
 	}

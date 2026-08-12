@@ -57,6 +57,15 @@ export function addByArxiv(arxivId: string): Promise<LibraryPaper> {
   });
 }
 
+/** Открывает публичную arXiv-статью, не добавляя её в список чтения. */
+export function openByArxiv(arxivId: string): Promise<LibraryPaper> {
+  return apiRequest<LibraryPaper>('/papers/arxiv', {
+    method: 'POST',
+    token: authToken(),
+    body: { arxiv_id: arxivId, add_to_library: false },
+  });
+}
+
 export function addByDoi(doi: string): Promise<LibraryPaper> {
   return apiRequest<LibraryPaper>('/papers/doi', {
     method: 'POST',

@@ -32,6 +32,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := s3.EnsureBucket(ctx); err != nil {
+		log.Fatalf("ensure S3 bucket %q: %v", cfg.S3Bucket, err)
+	}
 	qclient, err := queue.NewClient(cfg.RedisURL)
 	if err != nil {
 		log.Fatal(err)

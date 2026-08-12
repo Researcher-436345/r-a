@@ -37,7 +37,7 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 
 ## Internal
 
-- `GET /internal/papers/{id}/access` on **catalog** — `X-User-Id`, `204` if in library
+- `GET /internal/papers/{id}/access` on **catalog** — `X-User-Id`, `204` for a public catalog paper or a paper in the user's library
 - Downstream services trust `X-User-Id` from gateway (`identity.MiddlewareFromGateway`)
 
 ## Env (gateway)

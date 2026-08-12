@@ -11,6 +11,18 @@ import (
 
 type Store struct{ DB *pgxpool.Pool }
 
+// IsPublic reports whether the paper originates from a public catalog source.
+// User-uploaded PDFs remain private and require library membership.
+func (s Store) IsPublic(ctx context.Context, paperID uuid.UUID) (bool, error) {
+	var public bool
+	err := s.DB.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM paper_versions
+			WHERE paper_id=$1 AND source IN ('arxiv', 'doi')
+		)`, paperID).Scan(&public)
+	return public, err
+}
+
 func (s Store) GetPaperOut(ctx context.Context, id uuid.UUID) (PaperOut, error) {
 	var p PaperOut
 	err := s.DB.QueryRow(ctx, `SELECT id,title,abstract,year,venue,doi,arxiv_id,created_at FROM papers WHERE id=$1`, id).

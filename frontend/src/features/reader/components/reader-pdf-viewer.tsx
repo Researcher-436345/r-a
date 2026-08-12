@@ -205,9 +205,12 @@ export function ReaderPdfViewer({
       </div>
 
       {pdfLoading ? (
-        <div className="library-page__state reader-pdf-waiting">
+        <div
+          className="library-page__state reader-pdf-waiting"
+          role="status"
+          aria-label="Загрузка PDF"
+        >
           <LoaderCircle className="spin" size={18} strokeWidth={2} />
-          Загружаем PDF… обычно несколько секунд
         </div>
       ) : null}
 

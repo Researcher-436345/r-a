@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   addByArxiv,
+  openByArxiv,
   patchLibraryItem,
   removeFromLibrary,
 } from '../../library/api';
@@ -108,10 +109,12 @@ export function PaperCard({ paper, libraryPaperId = null, onLibraryChange }: Pap
     setIsOpening(true);
     setError(null);
     try {
-      const created = await addByArxiv(paper.arxivId);
-      setSavedPaperId(created.id);
-      onLibraryChange?.(paper.arxivId, created.id);
-      await navigate({ to: '/reader/$paperId', params: { paperId: created.id } });
+      if (savedPaperId) {
+        await navigate({ to: '/reader/$paperId', params: { paperId: savedPaperId } });
+        return;
+      }
+      const opened = await openByArxiv(paper.arxivId);
+      await navigate({ to: '/reader/$paperId', params: { paperId: opened.id } });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Ошибка');
     } finally {
