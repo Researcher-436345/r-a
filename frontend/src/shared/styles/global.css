@@ -375,13 +375,13 @@ textarea:focus-visible {
   overflow-y: auto;
 }
 
-.app-shell--reader {
+.app-shell--workspace {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
 }
 
-.main-content--reader {
+.main-content--workspace {
   display: flex;
   height: 100vh;
   min-width: 0;
@@ -2330,8 +2330,14 @@ textarea:focus-visible {
   box-shadow: 0 1px 3px rgba(94, 130, 194, 0.4);
 }
 
-.icon-button--send:hover {
+.icon-button--send:hover:not(:disabled) {
   background: var(--accent-strong);
+}
+
+.icon-button--send:disabled {
+  opacity: 0.42;
+  cursor: default;
+  box-shadow: none;
 }
 
 .icon-button--modal {
@@ -2882,6 +2888,17 @@ textarea:focus-visible {
     height: auto;
     min-height: 0;
     overflow-y: visible;
+  }
+
+  .app-shell--workspace {
+    height: 100dvh;
+  }
+
+  .main-content--workspace {
+    width: 100%;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
   }
 
   .home-page {

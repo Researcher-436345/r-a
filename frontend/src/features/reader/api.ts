@@ -257,17 +257,19 @@ export async function chatPaperStream(
     handleDataLine(buffer.slice(5));
   }
 
-  if (!donePayload) {
+  // TypeScript cannot see assignments performed inside the SSE line handler.
+  const completed = donePayload as Extract<ChatStreamEvent, { type: 'done' }> | null;
+  if (!completed) {
     throw new ApiError(502, 'Stream ended without completion');
   }
 
   return {
-    reply: donePayload.reply,
-    message_id: donePayload.message_id,
-    user_message_id: donePayload.user_message_id,
-    user_message: donePayload.user_message,
-    assistant_message: donePayload.assistant_message,
-    context_usage: donePayload.context_usage,
+    reply: completed.reply,
+    message_id: completed.message_id,
+    user_message_id: completed.user_message_id,
+    user_message: completed.user_message,
+    assistant_message: completed.assistant_message,
+    context_usage: completed.context_usage,
   };
 }
 
