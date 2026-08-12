@@ -12,7 +12,7 @@ export type Locale = 'ru' | 'en';
 type TranslationKey =
   | 'app.logo'
   | 'nav.search'
-  | 'nav.projects'
+  | 'nav.assistant'
   | 'nav.settings'
   | 'nav.feedback'
   | 'nav.theme'
@@ -23,8 +23,6 @@ type TranslationKey =
   | 'nav.expand'
   | 'nav.darkMode'
   | 'nav.lightMode'
-  | 'projects.multimodal'
-  | 'projects.reasoning'
   | 'ask.title'
   | 'ask.placeholder'
   | 'ask.send'
@@ -65,7 +63,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
   ru: {
     'app.logo': 'r-a',
     'nav.search': 'Исследовать',
-    'nav.projects': 'Проекты',
+    'nav.assistant': 'Ассистент',
     'nav.settings': 'Настройки',
     'nav.feedback': 'Обратная связь',
     'nav.theme': 'Тема',
@@ -76,8 +74,6 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'nav.expand': 'Развернуть панель',
     'nav.darkMode': 'Тёмная тема',
     'nav.lightMode': 'Светлая тема',
-    'projects.multimodal': 'Multimodal Papers',
-    'projects.reasoning': 'Reasoning Benchmarks',
     'ask.title': 'Что исследуем сегодня?',
     'ask.placeholder': 'Спросите о статьях, идеях или направлениях исследований…',
     'ask.send': 'Отправить',
@@ -117,7 +113,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
   en: {
     'app.logo': 'r-a',
     'nav.search': 'Explore',
-    'nav.projects': 'Projects',
+    'nav.assistant': 'Assistant',
     'nav.settings': 'Settings',
     'nav.feedback': 'Feedback',
     'nav.theme': 'Theme',
@@ -128,8 +124,6 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'nav.expand': 'Expand sidebar',
     'nav.darkMode': 'Dark mode',
     'nav.lightMode': 'Light mode',
-    'projects.multimodal': 'Multimodal Papers',
-    'projects.reasoning': 'Reasoning Benchmarks',
     'ask.title': 'What are we researching today?',
     'ask.placeholder': 'Ask AI about papers, ideas, or research directions…',
     'ask.send': 'Send',

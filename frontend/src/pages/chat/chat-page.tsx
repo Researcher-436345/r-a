@@ -1,5 +1,7 @@
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
+  Check,
+  Copy,
   CornerDownRight,
   Loader2,
   PanelLeftClose,
@@ -40,6 +42,7 @@ interface ChatRouteSearch {
 }
 
 type ChatScreen = 'conversation' | 'new';
+const PENDING_STATUS_INTERVAL_MS = 2_400;
 
 const chatCopy = {
   ru: {
@@ -52,8 +55,16 @@ const chatCopy = {
     historyLabel: 'История диалогов',
     collapseHistory: 'Свернуть список чатов',
     expandHistory: 'Развернуть список чатов',
-    preparing: 'Готовлю ответ…',
+    pendingStatuses: [
+      'Формулирую поисковые запросы…',
+      'Ищу релевантные статьи…',
+      'Проверяю свежие публикации…',
+      'Читаю первоисточники…',
+      'Сопоставляю результаты…',
+    ],
     requestFailed: 'Не удалось выполнить исследовательский поиск',
+    copyMarkdown: 'Копировать Markdown',
+    copiedMarkdown: 'Скопировано',
     inputLabel: 'Сообщение',
     modeLabel: 'Режим исследования',
     suggestions: [
@@ -72,8 +83,16 @@ const chatCopy = {
     historyLabel: 'Conversation history',
     collapseHistory: 'Collapse chat list',
     expandHistory: 'Expand chat list',
-    preparing: 'Preparing an answer…',
+    pendingStatuses: [
+      'Formulating search queries…',
+      'Finding relevant papers…',
+      'Checking recent publications…',
+      'Reading primary sources…',
+      'Comparing the findings…',
+    ],
     requestFailed: 'The research search could not be completed',
+    copyMarkdown: 'Copy Markdown',
+    copiedMarkdown: 'Copied',
     inputLabel: 'Message',
     modeLabel: 'Research mode',
     suggestions: [
@@ -94,8 +113,10 @@ const chatCopy = {
     historyLabel: string;
     collapseHistory: string;
     expandHistory: string;
-    preparing: string;
+    pendingStatuses: string[];
     requestFailed: string;
+    copyMarkdown: string;
+    copiedMarkdown: string;
     inputLabel: string;
     modeLabel: string;
     suggestions: string[];
@@ -128,6 +149,105 @@ function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function PendingResearchMessage({ locale }: { locale: Locale }) {
+  const [statusIndex, setStatusIndex] = useState(0);
+  const statuses = chatCopy[locale].pendingStatuses;
+
+  useEffect(() => {
+    setStatusIndex(0);
+    const interval = window.setInterval(() => {
+      setStatusIndex((current) => (current + 1) % statuses.length);
+    }, PENDING_STATUS_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [locale, statuses.length]);
+
+  return (
+    <div
+      className="chat-message chat-message--assistant chat-message--pending"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2
+        className="chat-message__loader"
+        aria-hidden="true"
+        size={17}
+        strokeWidth={2}
+      />
+      <span className="chat-message__pending-status" key={statusIndex}>
+        {statuses[statusIndex]}
+      </span>
+    </div>
+  );
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) {
+    throw new Error('Clipboard copy failed');
+  }
+}
+
+function AssistantMessage({ content, locale }: { content: string; locale: Locale }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setCopied(false), 2_000);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+
+  const handleCopy = async () => {
+    try {
+      await copyText(content);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const label = copied
+    ? chatCopy[locale].copiedMarkdown
+    : chatCopy[locale].copyMarkdown;
+
+  return (
+    <article className="chat-message chat-message--assistant" aria-live="polite">
+      <MarkdownMessage content={content} />
+      <div className="chat-message__actions">
+        <button
+          className="chat-message__copy"
+          type="button"
+          onClick={() => void handleCopy()}
+          aria-label={label}
+          title={label}
+        >
+          {copied ? (
+            <Check aria-hidden="true" size={14} strokeWidth={2} />
+          ) : (
+            <Copy aria-hidden="true" size={14} strokeWidth={2} />
+          )}
+          <span>{label}</span>
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function ChatMessageView({
   message,
   locale,
@@ -136,21 +256,7 @@ function ChatMessageView({
   locale: Locale;
 }) {
   if (message.pending) {
-    return (
-      <div
-        className="chat-message chat-message--assistant chat-message--pending"
-        role="status"
-        aria-live="polite"
-      >
-        <Loader2
-          className="chat-message__loader"
-          aria-hidden="true"
-          size={17}
-          strokeWidth={2}
-        />
-        <span>{chatCopy[locale].preparing}</span>
-      </div>
-    );
+    return <PendingResearchMessage locale={locale} />;
   }
 
   if (message.role === 'user') {
@@ -161,14 +267,7 @@ function ChatMessageView({
     );
   }
 
-  return (
-    <article
-      className="chat-message chat-message--assistant"
-      aria-live="polite"
-    >
-      <MarkdownMessage content={message.content} />
-    </article>
-  );
+  return <AssistantMessage content={message.content} locale={locale} />;
 }
 
 export function ChatPage() {

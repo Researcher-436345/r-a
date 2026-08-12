@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { useTheme } from '../../shared/theme/theme-context';
 import { SettingsModal } from './settings-modal';
-import { readerSidebarProjects, Sidebar } from './sidebar';
+import { Sidebar } from './sidebar';
 
 export type { ThemeMode } from '../../shared/theme/theme-context';
 
@@ -11,7 +11,8 @@ export function AppLayout() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const isReader = pathname === '/reader' || pathname.startsWith('/reader/');
   const isChat = pathname.startsWith('/chat/');
-  const isWorkspace = isReader || isChat;
+  const isLibrary = pathname === '/library' || pathname.startsWith('/library/');
+  const isWorkspace = isReader || isChat || isLibrary;
   const { theme, setTheme } = useTheme();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -22,8 +23,6 @@ export function AppLayout() {
         onThemeChange={setTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
         defaultCollapsed={isWorkspace}
-        defaultProjectsOpen={!isWorkspace}
-        projects={isReader ? readerSidebarProjects : undefined}
       />
       <main
         className={isWorkspace ? 'main-content main-content--workspace' : 'main-content'}

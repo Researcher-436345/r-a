@@ -1,13 +1,20 @@
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
-import { addByArxiv, addByDoi, uploadPdf } from '../../features/library/api';
+import {
+  addByArxiv,
+  addByDoi,
+  patchLibraryItem,
+  uploadPdf,
+} from '../../features/library/api';
 import { ApiError } from '../../shared/api/client';
 
 type Mode = 'arxiv' | 'doi' | 'pdf';
 
 export function AddPaperPage() {
   const navigate = useNavigate();
+  const routeSearch = useSearch({ strict: false }) as { folder?: string };
+  const targetFolderId = routeSearch.folder?.trim() ?? '';
   const [mode, setMode] = useState<Mode>('arxiv');
   const [arxivId, setArxivId] = useState('');
   const [doi, setDoi] = useState('');
@@ -36,6 +43,10 @@ export function AddPaperPage() {
         paperId = paper.id;
       }
 
+      if (targetFolderId) {
+        await patchLibraryItem(paperId, { folder_id: targetFolderId });
+      }
+
       await navigate({ to: '/reader/$paperId', params: { paperId } });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -57,7 +68,7 @@ export function AddPaperPage() {
           <h1>Добавить статью</h1>
           <p>PDF, arXiv ID/URL или DOI</p>
         </div>
-        <Link to="/library">К библиотеке</Link>
+        <Link to="/library" search={{ folder: targetFolderId }}>К библиотеке</Link>
       </div>
 
       <form className="add-paper-form" onSubmit={onSubmit}>

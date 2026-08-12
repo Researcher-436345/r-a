@@ -327,6 +327,42 @@
   width: 100%;
 }
 
+.chat-message__actions {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  margin-top: 8px;
+}
+
+.chat-message__copy {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-message__copy:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.chat-message__copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-message__copy svg {
+  flex: 0 0 auto;
+}
+
 .chat-message--pending {
   display: inline-flex;
   width: auto;
@@ -341,8 +377,25 @@
 }
 
 .chat-message__loader {
+  flex: 0 0 auto;
   animation: spin 0.9s linear infinite;
   color: var(--accent);
+}
+
+.chat-message__pending-status {
+  animation: pending-status-in 180ms ease-out;
+}
+
+@keyframes pending-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-thinking {

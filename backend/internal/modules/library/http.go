@@ -1,14 +1,17 @@
 package library
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type API struct {
@@ -17,6 +20,8 @@ type API struct {
 
 func (a API) Mount(r chi.Router) {
 	r.Get("/library", a.list)
+	r.Get("/library/folders", a.folders)
+	r.Post("/library/folders", a.createFolder)
 	r.Patch("/library/{paperID}", a.patch)
 	r.Delete("/library/{paperID}", a.delete)
 }
@@ -37,7 +42,16 @@ func (a API) list(w http.ResponseWriter, r *http.Request) {
 	if x := r.URL.Query().Get("status"); x != "" {
 		status = &x
 	}
-	items, total, e := a.Store.List(r.Context(), identity.UserID(r), page, limit, status)
+	var folderID *uuid.UUID
+	if raw := r.URL.Query().Get("folder_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			httpx.Error(w, 400, "Invalid folder id")
+			return
+		}
+		folderID = &parsed
+	}
+	items, total, e := a.Store.List(r.Context(), identity.UserID(r), page, limit, status, folderID)
 	if e != nil {
 		httpx.Error(w, 500, e.Error())
 		return
@@ -52,8 +66,9 @@ func (a API) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Status   *string `json:"status"`
-		Favorite *bool   `json:"favorite"`
+		Status   *string    `json:"status"`
+		Favorite *bool      `json:"favorite"`
+		FolderID *uuid.UUID `json:"folder_id"`
 	}
 	if !httpx.DecodeJSON(w, r, &b) {
 		return
@@ -62,7 +77,7 @@ func (a API) patch(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, "Invalid status")
 		return
 	}
-	out, e := a.Store.Patch(r.Context(), identity.UserID(r), id, b.Status, b.Favorite)
+	out, e := a.Store.Patch(r.Context(), identity.UserID(r), id, b.Status, b.Favorite, b.FolderID)
 	if e == pgx.ErrNoRows {
 		httpx.Error(w, 404, "Library item not found")
 		return
@@ -72,6 +87,45 @@ func (a API) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, 200, out)
+}
+
+func (a API) folders(w http.ResponseWriter, r *http.Request) {
+	folders, err := a.Store.Folders(r.Context(), identity.UserID(r))
+	if err != nil {
+		httpx.Error(w, 500, err.Error())
+		return
+	}
+	httpx.JSON(w, 200, map[string]any{"items": folders})
+}
+
+func (a API) createFolder(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Name     string     `json:"name"`
+		ParentID *uuid.UUID `json:"parent_id"`
+	}
+	if !httpx.DecodeJSON(w, r, &b) {
+		return
+	}
+	b.Name = strings.TrimSpace(b.Name)
+	if b.Name == "" || len([]rune(b.Name)) > 120 {
+		httpx.Error(w, 400, "Folder name must contain 1 to 120 characters")
+		return
+	}
+	folder, err := a.Store.CreateFolder(r.Context(), identity.UserID(r), b.Name, b.ParentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		httpx.Error(w, 404, "Parent folder not found")
+		return
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		httpx.Error(w, 409, "A folder with this name already exists here")
+		return
+	}
+	if err != nil {
+		httpx.Error(w, 500, err.Error())
+		return
+	}
+	httpx.JSON(w, 201, folder)
 }
 
 func (a API) delete(w http.ResponseWriter, r *http.Request) {

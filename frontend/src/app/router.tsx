@@ -91,12 +91,18 @@ const libraryRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library',
   component: LibraryPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    folder: typeof search.folder === 'string' ? search.folder : '',
+  }),
 });
 
 const addPaperRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library/add',
   component: AddPaperPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    folder: typeof search.folder === 'string' ? search.folder : '',
+  }),
 });
 
 const readerRoute = createRoute({

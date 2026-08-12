@@ -95,9 +95,10 @@ services:
     env_file:
       - .env
     environment:
-      WEBSEARCH_LLM_BASE_URL: ${WEBSEARCH_LLM_BASE_URL:-https://api.aitunnel.ru/v1}
+      WEBSEARCH_LLM_BASE_URL: ${WEBSEARCH_LLM_BASE_URL:-https://api.proxyapi.ru/openrouter/v1}
       WEBSEARCH_LLM_API_KEY: ${WEBSEARCH_LLM_API_KEY:-}
-      WEBSEARCH_LLM_MODEL: ${WEBSEARCH_LLM_MODEL:?WEBSEARCH_LLM_MODEL must be set in .env}
+      WEBSEARCH_LLM_MODEL: ${WEBSEARCH_LLM_MODEL:-deepseek/deepseek-v4-flash}
+      WEBSEARCH_DEEP_LLM_MODEL: ${WEBSEARCH_DEEP_LLM_MODEL:-perplexity/sonar-deep-research}
       WEBSEARCH_TIMEOUT_SECONDS: ${WEBSEARCH_TIMEOUT_SECONDS:-180}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     ports:

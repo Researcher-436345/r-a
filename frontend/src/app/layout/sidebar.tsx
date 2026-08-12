@@ -1,10 +1,6 @@
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   BookMarked,
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  Folder,
   Globe,
   LogOut,
   MessageSquare,
@@ -13,6 +9,7 @@ import {
   PanelLeftOpen,
   Settings,
   Sun,
+  Telescope,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -27,28 +24,14 @@ interface SidebarProps {
   onThemeChange: (theme: ThemeMode) => void;
   onOpenSettings: () => void;
   defaultCollapsed?: boolean;
-  defaultProjectsOpen?: boolean;
-  projects?: readonly SidebarProject[];
-}
-
-export interface SidebarProject {
-  id: string;
-  name: string;
-  items: readonly string[];
 }
 
 interface SidebarPrimaryNavProps {
   isCollapsed: boolean;
-  isExploreActive: boolean;
   isExploreCurrent: boolean;
-  areProjectsOpen: boolean;
-  projects: readonly SidebarProject[];
-  openProjects: Record<string, boolean>;
+  isAssistantActive: boolean;
   searchLabel: string;
-  projectsLabel: string;
-  onExpandSidebar: () => void;
-  onToggleProjects: () => void;
-  onToggleProject: (id: string) => void;
+  assistantLabel: string;
 }
 
 interface SidebarFooterProps {
@@ -63,50 +46,16 @@ interface SidebarFooterProps {
   onLogout: () => void;
 }
 
-const homeSidebarProjects = [
-  {
-    id: 'multimodal-papers',
-    name: 'Multimodal Papers',
-    items: [
-      'Visual Grounding in Multimodal Foundation Models',
-      'CLIP-Beyond: Unified Embeddings',
-      'Audio-Visual Pretraining Survey',
-    ],
-  },
-  {
-    id: 'reasoning-benchmarks',
-    name: 'Reasoning Benchmarks',
-    items: ['RAG-Bench v2', 'Chain-of-Agents Eval Harness'],
-  },
-] as const;
-
-export const readerSidebarProjects = [
-  {
-    id: 'rl',
-    name: 'Reinforcement Learning',
-    items: ['Q-Guided Flow Policies', 'IDQL as Actor-Critic', 'Diffusion Policy'],
-  },
-  {
-    id: 'mm',
-    name: 'Multimodal',
-    items: ['Visual Grounding at Scale', 'CLIP-Beyond'],
-  },
-] as const;
-
 export function Sidebar({
   theme,
   onThemeChange,
   onOpenSettings,
   defaultCollapsed = false,
-  defaultProjectsOpen = true,
-  projects = homeSidebarProjects,
 }: SidebarProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
-  const [areProjectsOpen, setAreProjectsOpen] = useState(defaultProjectsOpen);
-  const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({});
 
   const nextTheme = theme === 'light' ? 'dark' : 'light';
   const ThemeIcon = theme === 'light' ? Moon : Sun;
@@ -121,17 +70,6 @@ export function Sidebar({
   useEffect(() => {
     setIsCollapsed(defaultCollapsed);
   }, [defaultCollapsed]);
-
-  useEffect(() => {
-    setAreProjectsOpen(defaultProjectsOpen);
-  }, [defaultProjectsOpen]);
-
-  const toggleProject = (id: string) => {
-    setOpenProjects((current) => ({
-      ...current,
-      [id]: !current[id],
-    }));
-  };
 
   return (
     <aside
@@ -156,16 +94,10 @@ export function Sidebar({
 
       <SidebarPrimaryNav
         isCollapsed={isCollapsed}
-        isExploreActive={pathname === '/' || pathname.startsWith('/chat/')}
         isExploreCurrent={pathname === '/'}
-        areProjectsOpen={areProjectsOpen}
-        projects={projects}
-        openProjects={openProjects}
+        isAssistantActive={pathname.startsWith('/chat/')}
         searchLabel={t('nav.search')}
-        projectsLabel={t('nav.projects')}
-        onExpandSidebar={() => setIsCollapsed(false)}
-        onToggleProjects={() => setAreProjectsOpen((value) => !value)}
-        onToggleProject={toggleProject}
+        assistantLabel={t('nav.assistant')}
       />
 
       <SidebarFooter
@@ -185,23 +117,17 @@ export function Sidebar({
 
 function SidebarPrimaryNav({
   isCollapsed,
-  isExploreActive,
   isExploreCurrent,
-  areProjectsOpen,
-  projects,
-  openProjects,
+  isAssistantActive,
   searchLabel,
-  projectsLabel,
-  onExpandSidebar,
-  onToggleProjects,
-  onToggleProject,
+  assistantLabel,
 }: SidebarPrimaryNavProps) {
   return (
     <nav className="sidebar__nav" aria-label="Primary navigation">
       <Link
         to="/"
         className={
-          isExploreActive
+          isExploreCurrent
             ? 'sidebar__nav-button sidebar__nav-button--active'
             : 'sidebar__nav-button'
         }
@@ -214,7 +140,25 @@ function SidebarPrimaryNav({
       </Link>
 
       <Link
+        to="/chat/$chatId"
+        params={{ chatId: 'new' }}
+        search={{ q: '', mode: 'web' }}
+        className={
+          isAssistantActive
+            ? 'sidebar__nav-button sidebar__nav-button--active'
+            : 'sidebar__nav-button'
+        }
+        title={assistantLabel}
+        aria-label={assistantLabel}
+        aria-current={isAssistantActive ? 'page' : undefined}
+      >
+        <Telescope aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{assistantLabel}</span> : null}
+      </Link>
+
+      <Link
         to="/library"
+        search={{ folder: '' }}
         className="sidebar__nav-button"
         title="Библиотека"
         aria-label="Библиотека"
@@ -223,86 +167,7 @@ function SidebarPrimaryNav({
         <BookMarked aria-hidden="true" size={18} strokeWidth={2} />
         {!isCollapsed ? <span>Библиотека</span> : null}
       </Link>
-
-      <div className="sidebar__group">
-        <button
-          className="sidebar__nav-button"
-          type="button"
-          title={projectsLabel}
-          aria-expanded={!isCollapsed && areProjectsOpen}
-          onClick={() => {
-            if (isCollapsed) {
-              onExpandSidebar();
-              return;
-            }
-
-            onToggleProjects();
-          }}
-        >
-          <Folder aria-hidden="true" size={18} strokeWidth={2} />
-          {!isCollapsed ? (
-            <>
-              <span>{projectsLabel}</span>
-              {areProjectsOpen ? (
-                <ChevronDown className="sidebar__chevron" aria-hidden="true" size={16} />
-              ) : (
-                <ChevronRight className="sidebar__chevron" aria-hidden="true" size={16} />
-              )}
-            </>
-          ) : null}
-        </button>
-
-        {!isCollapsed && areProjectsOpen ? (
-          <div className="sidebar__project-tree">
-            {projects.map((project) => (
-              <SidebarProjectGroup
-                key={project.id}
-                project={project}
-                isOpen={!!openProjects[project.id]}
-                onToggle={() => onToggleProject(project.id)}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
     </nav>
-  );
-}
-
-function SidebarProjectGroup({
-  project,
-  isOpen,
-  onToggle,
-}: {
-  project: SidebarProject;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  const ProjectChevron = isOpen ? ChevronDown : ChevronRight;
-
-  return (
-    <div className="sidebar__project-group">
-      <button
-        className="sidebar__project-button"
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-      >
-        <ProjectChevron aria-hidden="true" size={14} strokeWidth={2} />
-        <span>{project.name}</span>
-        <span className="sidebar__project-count">{project.items.length}</span>
-      </button>
-      {isOpen ? (
-        <div className="sidebar__project-items">
-          {project.items.map((item) => (
-            <Link className="sidebar__project-item" to="/reader" key={item}>
-              <FileText aria-hidden="true" size={13} strokeWidth={2} />
-              <span>{item}</span>
-            </Link>
-          ))}
-        </div>
-      ) : null}
-    </div>
   );
 }
 

@@ -28,8 +28,20 @@ export interface LibraryItem {
   id: string;
   status: ReadingStatus;
   favorite: boolean;
+  folder_id: string | null;
   added_at: string;
   paper: LibraryPaper;
+}
+
+export type LibrarySystemFolder = 'want_to_read' | 'reading' | 'other';
+
+export interface LibraryFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  system_key: LibrarySystemFolder | null;
+  article_count: number;
+  created_at: string;
 }
 
 export interface LibraryListResponse {
@@ -43,9 +55,34 @@ function authToken() {
   return getAccessToken();
 }
 
-export function fetchLibrary(page = 1, limit = 20): Promise<LibraryListResponse> {
-  return apiRequest<LibraryListResponse>(`/library?page=${page}&limit=${limit}`, {
+export function fetchLibrary(
+  page = 1,
+  limit = 100,
+  folderId?: string,
+): Promise<LibraryListResponse> {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (folderId) {
+    params.set('folder_id', folderId);
+  }
+  return apiRequest<LibraryListResponse>(`/library?${params.toString()}`, {
     token: authToken(),
+  });
+}
+
+export function fetchLibraryFolders(): Promise<{ items: LibraryFolder[] }> {
+  return apiRequest<{ items: LibraryFolder[] }>('/library/folders', {
+    token: authToken(),
+  });
+}
+
+export function createLibraryFolder(
+  name: string,
+  parentId: string | null,
+): Promise<LibraryFolder> {
+  return apiRequest<LibraryFolder>('/library/folders', {
+    method: 'POST',
+    token: authToken(),
+    body: { name, parent_id: parentId },
   });
 }
 
@@ -249,7 +286,7 @@ export function removeFromLibrary(paperId: string): Promise<void> {
 
 export function patchLibraryItem(
   paperId: string,
-  body: { status?: ReadingStatus; favorite?: boolean },
+  body: { status?: ReadingStatus; favorite?: boolean; folder_id?: string },
 ): Promise<LibraryItem> {
   return apiRequest<LibraryItem>(`/library/${paperId}`, {
     method: 'PATCH',
