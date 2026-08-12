@@ -22,9 +22,15 @@ func Handler(cfg config.Config) http.Handler {
 	annotationsProxy := mustProxy(cfg.AnnotationsURL)
 	assistantProxy := mustProxy(cfg.AssistantURL)
 	feedProxy := mustProxy(cfg.FeedURL)
+	searchProxy := mustProxy(cfg.SearchAPIURL)
 
 	assistantProxy.FlushInterval = -1
 	assistantProxy.Transport = &http.Transport{
+		ResponseHeaderTimeout: 10 * time.Minute,
+		IdleConnTimeout:       90 * time.Second,
+	}
+	searchProxy.FlushInterval = -1
+	searchProxy.Transport = &http.Transport{
 		ResponseHeaderTimeout: 10 * time.Minute,
 		IdleConnTimeout:       90 * time.Second,
 	}
@@ -68,6 +74,8 @@ func Handler(cfg config.Config) http.Handler {
 			libraryProxy.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/feed"):
 			feedProxy.ServeHTTP(w, r)
+		case strings.HasPrefix(path, "/search"):
+			searchProxy.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/papers"):
 			catalogProxy.ServeHTTP(w, r)
 		default:

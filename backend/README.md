@@ -76,7 +76,7 @@ Configure an OpenAI-compatible provider with `LLM_BASE_URL`, `LLM_API_KEY`, and
 ## Local binary
 
 ```bash
-export DATABASE_URL=postgres://researcher:researcher@localhost:5432/researcher
+export DATABASE_URL=postgres://researcher:researcher@localhost:5433/researcher
 export REDIS_URL=redis://localhost:6379/0
 go run ./cmd/api
 go run ./cmd/worker

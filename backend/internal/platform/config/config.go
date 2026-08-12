@@ -56,13 +56,15 @@ type Config struct {
 	SemanticScholarAPIKey string
 
 	// Service discovery (gateway + inter-service).
-	IdentityURL     string
-	CatalogURL      string
-	LibraryURL      string
-	AnnotationsURL  string
-	AssistantURL    string
-	FeedURL         string
-	InternalToken   string
+	IdentityURL         string
+	CatalogURL          string
+	LibraryURL          string
+	AnnotationsURL      string
+	AssistantURL        string
+	FeedURL             string
+	SearchAPIURL        string
+	WebSearchServiceURL string
+	InternalToken       string
 }
 
 type LLMModelOption struct {
@@ -76,7 +78,7 @@ func Load() Config {
 		Environment: getenv("ENVIRONMENT", "local"),
 		HTTPAddr:    getenv("HTTP_ADDR", ":8000"),
 
-		DatabaseURL: normalizeDBURL(getenv("DATABASE_URL", "postgresql://researcher:researcher@localhost:5432/researcher")),
+		DatabaseURL: normalizeDBURL(getenv("DATABASE_URL", "postgresql://researcher:researcher@localhost:5433/researcher")),
 		RedisURL:    getenv("REDIS_URL", "redis://localhost:6379/0"),
 
 		JWTSecret:       getenv("JWT_SECRET", "dev-only-change-me-in-production"),
@@ -118,13 +120,15 @@ func Load() Config {
 		OpenAlexMailto:        getenv("OPENALEX_MAILTO", "researcher@localhost"),
 		SemanticScholarAPIKey: getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
 
-		IdentityURL:    strings.TrimRight(getenv("IDENTITY_URL", "http://localhost:8101"), "/"),
-		CatalogURL:     strings.TrimRight(getenv("CATALOG_URL", "http://localhost:8102"), "/"),
-		LibraryURL:     strings.TrimRight(getenv("LIBRARY_URL", "http://localhost:8103"), "/"),
-		AnnotationsURL: strings.TrimRight(getenv("ANNOTATIONS_URL", "http://localhost:8104"), "/"),
-		AssistantURL:   strings.TrimRight(getenv("ASSISTANT_URL", "http://localhost:8105"), "/"),
-		FeedURL:        strings.TrimRight(getenv("FEED_URL", "http://localhost:8106"), "/"),
-		InternalToken:  getenv("INTERNAL_TOKEN", ""),
+		IdentityURL:         strings.TrimRight(getenv("IDENTITY_URL", "http://localhost:8101"), "/"),
+		CatalogURL:          strings.TrimRight(getenv("CATALOG_URL", "http://localhost:8102"), "/"),
+		LibraryURL:          strings.TrimRight(getenv("LIBRARY_URL", "http://localhost:8103"), "/"),
+		AnnotationsURL:      strings.TrimRight(getenv("ANNOTATIONS_URL", "http://localhost:8104"), "/"),
+		AssistantURL:        strings.TrimRight(getenv("ASSISTANT_URL", "http://localhost:8105"), "/"),
+		FeedURL:             strings.TrimRight(getenv("FEED_URL", "http://localhost:8106"), "/"),
+		SearchAPIURL:        strings.TrimRight(getenv("SEARCH_API_URL", "http://localhost:8107"), "/"),
+		WebSearchServiceURL: strings.TrimRight(getenv("WEBSEARCH_SERVICE_URL", "http://localhost:8092"), "/"),
+		InternalToken:       getenv("INTERNAL_TOKEN", ""),
 	}
 }
 

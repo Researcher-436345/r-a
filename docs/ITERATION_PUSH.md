@@ -32,7 +32,7 @@ npm run dev -- --port 5173
 | Parser | http://localhost:8091/health |
 | MinIO API | http://localhost:**9002** |
 | MinIO UI | http://localhost:9003 |
-| Postgres | localhost:5432 |
+| Postgres | localhost:5433 |
 | Redis | localhost:6379 |
 
 Внутренние порты: identity 8101, catalog 8102, library 8103, annotations 8104, assistant 8105, feed 8106 (+ translator 8090, worker).

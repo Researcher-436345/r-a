@@ -10,6 +10,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/modules/feed"
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/modules/library"
+	"github.com/centraluniversity/researcher/internal/modules/searchapi"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
@@ -93,6 +94,10 @@ func Router(d Deps) http.Handler {
 				OpenAlexMailto:        d.Config.OpenAlexMailto,
 				SemanticScholarAPIKey: d.Config.SemanticScholarAPIKey,
 			},
+		}}.Mount(r)
+		searchapi.API{DB: d.DB, Provider: searchapi.Client{
+			BaseURL: d.Config.WebSearchServiceURL,
+			Token:   d.Config.InternalToken,
 		}}.Mount(r)
 	})
 

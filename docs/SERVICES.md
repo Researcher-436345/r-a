@@ -15,10 +15,12 @@ Last refreshed: 2026-08-11
 | annotations | 8104 | annotations CRUD |
 | assistant | 8105 | chat SSE, explain, models, translate proxy |
 | feed | 8106 | `/feed/trending` |
+| searchapi | 8107 | `/search/*`, chat ownership/history, SSE proxy |
 | translator | 8090 | перевод |
 | parser | 8091 | PDF→text |
+| websearch | 8092 | internal Perplexity workflow and source normalization |
 | worker | — | asynq jobs |
-| postgres / redis / minio | 5432 / 6379 / 9002 | infra |
+| postgres / redis / minio | 5432 → host **5433** / 6379 / 9002 | infra |
 
 Legacy monolith binary `api` ещё собирается в образе (rollback), в compose **не** запускается.
 
@@ -31,6 +33,7 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 | library_* | library (catalog also uses membership for ACL) |
 | annotations | annotations |
 | chat_messages, chat_thread_summaries | assistant |
+| search_chats, search_chat_messages | searchapi |
 
 ## Internal
 
@@ -39,4 +42,4 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 
 ## Env (gateway)
 
-`IDENTITY_URL`, `CATALOG_URL`, `LIBRARY_URL`, `ANNOTATIONS_URL`, `ASSISTANT_URL`, `FEED_URL`
+`IDENTITY_URL`, `CATALOG_URL`, `LIBRARY_URL`, `ANNOTATIONS_URL`, `ASSISTANT_URL`, `FEED_URL`, `SEARCH_API_URL`

@@ -81,7 +81,7 @@ npm run dev -- --port 5173
 | API | http://localhost:8080 (`/health`, `/docs` нет — это Go) |
 | MinIO API | http://localhost:**9002** (не 9000!) |
 | MinIO Console | http://localhost:**9003** |
-| Postgres | localhost:5432 (`researcher` / `researcher`) |
+| Postgres | localhost:5433 (`researcher` / `researcher`) |
 | Redis | localhost:6379 |
 
 Проверка API: `curl http://localhost:8080/health` → `status: ok`.

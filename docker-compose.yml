@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: researcher
       POSTGRES_DB: researcher
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -83,6 +83,25 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+
+  websearch:
+    build:
+      context: ./services/websearch
+    env_file:
+      - .env
+    environment:
+      WEBSEARCH_LLM_BASE_URL: ${WEBSEARCH_LLM_BASE_URL:-https://api.aitunnel.ru/v1}
+      WEBSEARCH_LLM_API_KEY: ${WEBSEARCH_LLM_API_KEY:-}
+      WEBSEARCH_LLM_MODEL: ${WEBSEARCH_LLM_MODEL:?WEBSEARCH_LLM_MODEL must be set in .env}
+      WEBSEARCH_TIMEOUT_SECONDS: ${WEBSEARCH_TIMEOUT_SECONDS:-180}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+    ports:
+      - "8092:8092"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8092/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   identity:
     build:
@@ -217,6 +236,30 @@ services:
       timeout: 3s
       retries: 10
 
+  searchapi:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      HTTP_ADDR: ":8107"
+      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      WEBSEARCH_SERVICE_URL: http://websearch:8092
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+    entrypoint: ["searchapi"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      websearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8107/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   gateway:
     build:
       context: ./backend
@@ -232,6 +275,7 @@ services:
       ANNOTATIONS_URL: http://annotations:8104
       ASSISTANT_URL: http://assistant:8105
       FEED_URL: http://feed:8106
+      SEARCH_API_URL: http://searchapi:8107
     entrypoint: ["gateway"]
     depends_on:
       identity:
@@ -245,6 +289,8 @@ services:
       assistant:
         condition: service_healthy
       feed:
+        condition: service_healthy
+      searchapi:
         condition: service_healthy
 
   worker:
