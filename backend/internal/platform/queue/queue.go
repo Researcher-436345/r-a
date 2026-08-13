@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	ProcessRemotePDF = "process_remote_pdf"
+	// ProcessArxivPDF is kept so jobs queued by older app versions still run.
 	ProcessArxivPDF     = "process_arxiv_pdf"
 	FinalizeUploadedPDF = "finalize_uploaded_pdf"
 	ProcessPaperParse   = "process_paper_parse"

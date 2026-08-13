@@ -365,6 +365,10 @@ func (a API) translate(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, status, err.Error())
 		return
 	}
+	if r.URL.Query().Get("stream") == "1" || strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+		a.translateStream(w, r, input)
+		return
+	}
 	result, err := (TranslationClient{Config: a.Config}).Translate(r.Context(), input)
 	if err != nil {
 		var serviceErr *TranslationServiceError
@@ -376,4 +380,43 @@ func (a API) translate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, result)
+}
+
+func (a API) translateStream(w http.ResponseWriter, r *http.Request, input translation.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		httpx.Error(w, http.StatusInternalServerError, "Streaming is not supported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	write := func(event translation.StreamEvent) error {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+	result, err := (TranslationClient{Config: a.Config}).TranslateStream(r.Context(), input, func(delta string) error {
+		return write(translation.StreamEvent{Type: "delta", Text: delta})
+	})
+	if err != nil {
+		detail := "Translation service is unavailable"
+		var serviceErr *TranslationServiceError
+		if errors.As(err, &serviceErr) && serviceErr.Detail != "" {
+			detail = serviceErr.Detail
+		}
+		_ = write(translation.StreamEvent{Type: "error", Detail: detail})
+		return
+	}
+	_ = write(translation.StreamEvent{Type: "done", Translation: result.Translation, TargetLang: result.TargetLang})
 }

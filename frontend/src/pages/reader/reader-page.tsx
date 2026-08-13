@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchAnnotations,
   createAnnotation,
-  explainPaper,
-  translateText,
+  translateTextStream,
+  TRANSLATION_MAX_CHARS,
   type PaperAnnotation,
 } from '../../features/reader/api';
 import type { ChatContextAttachment } from '../../features/reader/chat-context';
@@ -14,8 +14,13 @@ import {
   toPagePixelRect,
 } from '../../features/reader/highlight-colors';
 import {
+  fetchLibraryFolders,
+  fetchLibraryItem,
   fetchPaper,
+  saveToLibraryFolder,
   waitForPdfUrl,
+  type LibraryFolder,
+  type LibraryItem,
   type LibraryPaper,
 } from '../../features/library/api';
 import { ReaderChatPanel } from '../../features/reader/components/reader-chat-panel';
@@ -33,6 +38,11 @@ import { ApiError } from '../../shared/api/client';
 export function ReaderPage() {
   const { paperId } = useParams({ strict: false }) as { paperId?: string };
   const [paper, setPaper] = useState<LibraryPaper | null>(null);
+  const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
+  const [libraryItem, setLibraryItem] = useState<LibraryItem | null>(null);
+  const [foldersLoading, setFoldersLoading] = useState(Boolean(paperId));
+  const [savingFolderId, setSavingFolderId] = useState<string | null>(null);
+  const [folderError, setFolderError] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'failed' | 'idle'>('idle');
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
@@ -48,8 +58,6 @@ export function ReaderPage() {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translation, setTranslation] = useState<string | null>(null);
-  const [isExplaining, setIsExplaining] = useState(false);
-  const [explanation, setExplanation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(paperId));
@@ -125,8 +133,6 @@ export function ReaderPage() {
     setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setTranslation(null);
     setIsTranslating(false);
-    setExplanation(null);
-    setIsExplaining(false);
     window.getSelection()?.removeAllRanges();
   };
 
@@ -228,14 +234,123 @@ export function ReaderPage() {
     };
   }, [paperId]);
 
+  useEffect(() => {
+    if (!paperId) {
+      setLibraryFolders([]);
+      setLibraryItem(null);
+      setFoldersLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFoldersLoading(true);
+    setFolderError(null);
+
+    void Promise.all([
+      fetchLibraryFolders(),
+      fetchLibraryItem(paperId).catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }),
+    ])
+      .then(([folderResponse, item]) => {
+        if (!cancelled) {
+          setLibraryFolders(folderResponse.items ?? []);
+          setLibraryItem(item);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setFolderError(
+            err instanceof ApiError ? err.detail : 'Не удалось загрузить папки библиотеки',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setFoldersLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId]);
+
+  const handleFolderSelect = async (folderId: string) => {
+    if (!paperId) {
+      return;
+    }
+    setSavingFolderId(folderId);
+    setFolderError(null);
+    try {
+      const item = await saveToLibraryFolder(paperId, folderId);
+      setLibraryItem(item);
+      showToast('Статья добавлена в папку');
+    } catch (err) {
+      setFolderError(err instanceof ApiError ? err.detail : 'Не удалось сохранить статью');
+      throw err;
+    } finally {
+      setSavingFolderId(null);
+    }
+  };
+
   const handleTextSelect = (nextSelection: ReaderTextSelection) => {
+    const text = nextSelection.text.replace(/\s+/g, ' ').trim();
     setTranslation(null);
-    setIsTranslating(false);
-    setExplanation(null);
-    setIsExplaining(false);
+    setIsTranslating(Boolean(text) && Array.from(text).length <= TRANSLATION_MAX_CHARS);
     setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setSelection(nextSelection);
   };
+
+  useEffect(() => {
+    if (!paperId || !selection) {
+      return;
+    }
+
+    const text = selection.text.replace(/\s+/g, ' ').trim();
+    if (!text || Array.from(text).length > TRANSLATION_MAX_CHARS) {
+      setIsTranslating(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsTranslating(true);
+    setTranslation(null);
+
+    let streamed = '';
+    void translateTextStream(
+      paperId,
+      text,
+      'ru',
+      {
+        onDelta: (delta) => {
+          streamed += delta;
+          setTranslation(streamed);
+        },
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        setTranslation(result.translation);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        setTranslation(
+          err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Не удалось перевести',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsTranslating(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [paperId, selection]);
 
   const handleNoteSelect = (note: PaperAnnotation) => {
     setActiveNoteId(note.id);
@@ -296,42 +411,6 @@ export function ReaderPage() {
     closeSelection();
   };
 
-  const handleTranslate = async (text: string) => {
-    if (!paperId) {
-      return;
-    }
-    setIsTranslating(true);
-    setTranslation(null);
-    try {
-      const result = await translateText(paperId, text);
-      setTranslation(result.translation);
-    } catch (err) {
-      setTranslation(
-        err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Не удалось перевести',
-      );
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  const handleExplain = async (text: string) => {
-    if (!paperId) {
-      return;
-    }
-    setIsExplaining(true);
-    setExplanation(null);
-    try {
-      const result = await explainPaper(paperId, text);
-      setExplanation(result.reply);
-    } catch (err) {
-      setExplanation(
-        err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Не удалось объяснить',
-      );
-    } finally {
-      setIsExplaining(false);
-    }
-  };
-
   if (!paperId) {
     return (
       <div className="library-page__state">
@@ -368,6 +447,12 @@ export function ReaderPage() {
         pdfUrl={pdfUrl}
         pdfLoading={pdfStatus === 'loading'}
         pdfError={pdfStatus === 'failed' ? error : null}
+        libraryFolders={libraryFolders}
+        currentFolderId={libraryItem?.folder_id ?? null}
+        foldersLoading={foldersLoading}
+        savingFolderId={savingFolderId}
+        folderError={folderError}
+        onFolderSelect={handleFolderSelect}
         onTextSelect={handleTextSelect}
         focusAnnotation={flashFocus}
         onFocusComplete={() => setFlashFocus(null)}
@@ -435,19 +520,11 @@ export function ReaderPage() {
         isSaving={isSavingNote}
         isTranslating={isTranslating}
         translation={translation}
-        isExplaining={isExplaining}
-        explanation={explanation}
         highlightColor={highlightColor}
         onHighlightColorChange={setHighlightColor}
         onClose={closeSelection}
         onSave={handleSaveNote}
         onAskAssistant={handleAskAssistant}
-        onTranslate={(text) => {
-          void handleTranslate(text);
-        }}
-        onExplain={(text) => {
-          void handleExplain(text);
-        }}
       />
       {toast ? <div className="reader-page__toast">{toast}</div> : null}
     </div>

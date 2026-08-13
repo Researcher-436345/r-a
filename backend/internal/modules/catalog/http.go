@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -32,6 +33,7 @@ func (a API) store() Store { return Store{DB: a.DB} }
 func (a API) Mount(r chi.Router) {
 	r.Post("/papers/arxiv", a.addArxiv)
 	r.Post("/papers/doi", a.addDOI)
+	r.Post("/papers/from-url", a.addFromURL)
 	r.Post("/papers/upload", a.upload)
 	r.Get("/papers/{paperID}", a.getPaper)
 	r.Get("/papers/{paperID}/pdf-url", a.pdfURL)
@@ -98,45 +100,17 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := CanonicalArxivID(raw)
-	p, e := a.store().FindByArxiv(r.Context(), id)
-	if e == nil && p != nil {
-		if addToLibrary(b.AddToLibrary) {
-			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
-		}
-		if e != nil {
-			httpx.Error(w, 500, e.Error())
+	paperID, e := a.addArxivPaper(r.Context(), identity.UserID(r), id, addToLibrary(b.AddToLibrary))
+	if e != nil {
+		var sourceErr *sourceFetchError
+		if errors.As(e, &sourceErr) {
+			httpx.Error(w, 502, sourceErr.Error())
 			return
 		}
-		a.paperResponse(w, r, p.ID, 201)
-		return
-	}
-	m, e := FetchArxivMetadata(r.Context(), id)
-	if e != nil {
-		httpx.Error(w, 502, "Failed to fetch arXiv metadata: "+e.Error())
-		return
-	}
-	venue := "arXiv"
-	created, e := a.store().CreatePaper(r.Context(), m.Title, ptr(m.Abstract), m.Year, &venue, nil, &m.ArxivID)
-	p = &created
-	if e != nil {
 		httpx.Error(w, 500, e.Error())
 		return
 	}
-	if e = a.store().AttachAuthors(r.Context(), p.ID, m.Authors); e == nil {
-		v, e2 := a.store().CreateVersion(r.Context(), p.ID, 1, "arxiv", &m.PDFURL, nil, nil, nil, "processing")
-		e = e2
-		if e == nil && addToLibrary(b.AddToLibrary) {
-			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
-		}
-		if e == nil && a.Queue != nil {
-			e = queue.Enqueue(a.Queue, queue.ProcessArxivPDF, v.ID.String())
-		}
-	}
-	if e != nil {
-		httpx.Error(w, 500, e.Error())
-		return
-	}
-	a.paperResponse(w, r, p.ID, 201)
+	a.paperResponse(w, r, paperID, 201)
 }
 
 func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
@@ -152,40 +126,17 @@ func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, e.Error())
 		return
 	}
-	p, e := a.store().FindByDOI(r.Context(), doi)
-	if e == nil && p != nil {
-		if addToLibrary(b.AddToLibrary) {
-			e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
-		}
-		if e != nil {
-			httpx.Error(w, 500, e.Error())
+	paperID, e := a.addDOIPaper(r.Context(), identity.UserID(r), doi, addToLibrary(b.AddToLibrary))
+	if e != nil {
+		var sourceErr *sourceFetchError
+		if errors.As(e, &sourceErr) {
+			httpx.Error(w, 502, sourceErr.Error())
 			return
 		}
-		a.paperResponse(w, r, p.ID, 201)
-		return
-	}
-	m, e := FetchCrossrefMetadata(r.Context(), doi)
-	if e != nil {
-		httpx.Error(w, 502, "Failed to fetch Crossref metadata: "+e.Error())
-		return
-	}
-	created, e := a.store().CreatePaper(r.Context(), m.Title, m.Abstract, m.Year, m.Venue, &m.DOI, nil)
-	p = &created
-	if e == nil {
-		e = a.store().AttachAuthors(r.Context(), p.ID, m.Authors)
-	}
-	if e == nil {
-		sourceURL := "https://doi.org/" + m.DOI
-		_, e = a.store().CreateVersion(r.Context(), p.ID, 1, "doi", &sourceURL, nil, nil, nil, "ready")
-	}
-	if e == nil && addToLibrary(b.AddToLibrary) {
-		e = a.Membership.Add(r.Context(), identity.UserID(r), p.ID)
-	}
-	if e != nil {
 		httpx.Error(w, 500, e.Error())
 		return
 	}
-	a.paperResponse(w, r, p.ID, 201)
+	a.paperResponse(w, r, paperID, 201)
 }
 
 func (a API) upload(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +243,10 @@ func (a API) pdfURL(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if v.Status == "ready" && v.PDFKey == nil {
+		httpx.Error(w, http.StatusUnprocessableEntity, "PDF is not available for this article")
+		return
+	}
 	if v.Status == "failed" {
 		httpx.Error(w, 409, orString(v.ErrorMessage, "PDF processing failed"))
 		return
@@ -315,6 +270,10 @@ func (a API) pdfStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if v.Status == "failed" {
 		httpx.Error(w, 409, orString(v.ErrorMessage, "PDF processing failed"))
+		return
+	}
+	if v.Status == "ready" && v.PDFKey == nil {
+		httpx.Error(w, http.StatusUnprocessableEntity, "PDF is not available for this article")
 		return
 	}
 	if v.Status != "ready" || v.PDFKey == nil {
@@ -351,7 +310,7 @@ func (a API) retryPDF(w http.ResponseWriter, r *http.Request) {
 			typ := queue.ProcessArxivPDF
 			if v.Source == "upload" {
 				typ = queue.FinalizeUploadedPDF
-			} else if v.Source != "arxiv" {
+			} else if v.Source != "arxiv" && v.Source != "web_pdf" {
 				httpx.Error(w, 400, "Cannot retry this PDF source")
 				return
 			}

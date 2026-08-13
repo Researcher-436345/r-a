@@ -71,6 +71,11 @@ func (s Store) Get(ctx context.Context, userID, chatID uuid.UUID) (Chat, error) 
 	return chat, err
 }
 
+func (s Store) Delete(ctx context.Context, userID, chatID uuid.UUID) (bool, error) {
+	tag, err := s.DB.Exec(ctx, `DELETE FROM search_chats WHERE id = $1 AND user_id = $2`, chatID, userID)
+	return tag.RowsAffected() > 0, err
+}
+
 func (s Store) Ensure(ctx context.Context, userID, chatID uuid.UUID, title, mode string) error {
 	tag, err := s.DB.Exec(ctx, `
 		INSERT INTO search_chats (id, user_id, title, mode)

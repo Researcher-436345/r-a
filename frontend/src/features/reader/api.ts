@@ -300,6 +300,7 @@ export async function translateText(
   paperId: string,
   text: string,
   targetLang = 'ru',
+  signal?: AbortSignal,
 ): Promise<TranslateReply> {
   const normalized = text.trim();
   if (Array.from(normalized).length > TRANSLATION_MAX_CHARS) {
@@ -308,6 +309,121 @@ export async function translateText(
   return apiRequest<TranslateReply>(`/papers/${paperId}/translate`, {
     method: 'POST',
     token: authToken(),
+    signal,
     body: { text: normalized, target_lang: targetLang },
   });
+}
+
+type TranslationStreamEvent =
+  | { type: 'delta'; text?: string }
+  | { type: 'done'; translation?: string; target_lang?: string }
+  | { type: 'error'; detail?: string };
+
+export async function translateTextStream(
+  paperId: string,
+  text: string,
+  targetLang = 'ru',
+  handlers: { onDelta?: (text: string) => void } = {},
+  signal?: AbortSignal,
+): Promise<TranslateReply> {
+  const normalized = text.trim();
+  if (Array.from(normalized).length > TRANSLATION_MAX_CHARS) {
+    throw new Error(`Для перевода можно выделить не более ${TRANSLATION_MAX_CHARS} символов`);
+  }
+
+  const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  });
+  const token = authToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const body = JSON.stringify({ text: normalized, target_lang: targetLang });
+  const request = () =>
+    fetch(`${API_URL}/papers/${paperId}/translate?stream=1`, {
+      method: 'POST',
+      headers,
+      body,
+      signal,
+    });
+
+  let response = await request();
+  if (response.status === 401) {
+    const { tryRefreshSession } = await import('../auth/refresh-session');
+    const { getAccessToken, clearTokens } = await import('../auth/token-storage');
+    const refreshed = await tryRefreshSession();
+    if (refreshed) {
+      headers.set('Authorization', `Bearer ${getAccessToken()}`);
+      response = await request();
+    } else {
+      clearTokens();
+      throw new ApiError(401, 'Session expired');
+    }
+  }
+  if (!response.ok) {
+    let detail = `Request failed with status ${response.status}`;
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (data.detail) {
+        detail = data.detail;
+      }
+    } catch {
+      // ignore invalid error payloads
+    }
+    throw new ApiError(response.status, detail);
+  }
+  if (!response.body) {
+    throw new ApiError(502, 'Empty translation stream');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: TranslateReply | null = null;
+  const handleLine = (line: string) => {
+    if (!line.startsWith('data:')) {
+      return;
+    }
+    const payload = line.slice(5).trim();
+    if (!payload) {
+      return;
+    }
+    let event: TranslationStreamEvent;
+    try {
+      event = JSON.parse(payload) as TranslationStreamEvent;
+    } catch {
+      return;
+    }
+    if (event.type === 'delta' && event.text) {
+      handlers.onDelta?.(event.text);
+    } else if (event.type === 'error') {
+      throw new ApiError(502, event.detail || 'Translation stream error');
+    } else if (event.type === 'done' && event.translation) {
+      result = { translation: event.translation, target_lang: event.target_lang || targetLang };
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      handleLine(line);
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer) {
+    handleLine(buffer);
+  }
+  const completed = result as TranslateReply | null;
+  if (!completed) {
+    throw new ApiError(502, 'Translation stream ended without completion');
+  }
+  return completed;
 }

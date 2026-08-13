@@ -53,7 +53,10 @@ func main() {
 		HTTP:    &http.Client{Timeout: cfg.ParserTimeout},
 	}
 	mux.HandleFunc(queue.ProcessArxivPDF, func(ctx context.Context, t *asynq.Task) error {
-		return processArxiv(ctx, t, papers, s3, qclient)
+		return processRemotePDF(ctx, t, papers, s3, qclient)
+	})
+	mux.HandleFunc(queue.ProcessRemotePDF, func(ctx context.Context, t *asynq.Task) error {
+		return processRemotePDF(ctx, t, papers, s3, qclient)
 	})
 	mux.HandleFunc(queue.FinalizeUploadedPDF, func(ctx context.Context, t *asynq.Task) error {
 		return finalizeUpload(ctx, t, papers, s3, qclient)
@@ -64,7 +67,7 @@ func main() {
 	log.Fatal(server.Run(mux))
 }
 
-func processArxiv(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *storage.Client, q *asynq.Client) error {
+func processRemotePDF(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *storage.Client, q *asynq.Client) error {
 	payload, err := queue.Decode(t)
 	if err != nil {
 		return err

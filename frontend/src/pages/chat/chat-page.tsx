@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   Sparkles,
   SquarePen,
+  Trash2,
 } from 'lucide-react';
 import {
   Fragment,
@@ -18,6 +19,7 @@ import {
 } from 'react';
 
 import {
+  deleteResearchChat,
   getResearchChat,
   listResearchChats,
   streamResearchMessage,
@@ -30,7 +32,23 @@ import {
   parseResearchMode,
   type ChatMessage,
   type ResearchMode,
+  type ResearchSourceProgress,
 } from '../../features/chat/types';
+import {
+  addByUrl,
+  fetchLibraryFolders,
+  isUnsupportedUrl,
+  openByUrl,
+  patchLibraryItem,
+  prefetchUrl,
+  preparedUrlPaper,
+  type LibraryFolder,
+  type LibraryPaper,
+} from '../../features/library/api';
+import {
+  flattenLibraryFolders,
+  LibraryFolderIcon,
+} from '../../features/library/folder-icons';
 import { ApiError } from '../../shared/api/client';
 import { useI18n, type Locale } from '../../shared/i18n/i18n-context';
 
@@ -43,6 +61,7 @@ interface ChatRouteSearch {
 
 type ChatScreen = 'conversation' | 'new';
 const PENDING_STATUS_INTERVAL_MS = 2_400;
+const DEEP_PENDING_STATUS_INTERVAL_MS = 8_000;
 
 const chatCopy = {
   ru: {
@@ -55,6 +74,9 @@ const chatCopy = {
     historyLabel: 'История диалогов',
     collapseHistory: 'Свернуть список чатов',
     expandHistory: 'Развернуть список чатов',
+    deleteChat: 'Удалить диалог',
+    deleteChatConfirm: 'Удалить этот диалог? Это действие нельзя отменить.',
+    deleteChatFailed: 'Не удалось удалить диалог',
     pendingStatuses: [
       'Формулирую поисковые запросы…',
       'Ищу релевантные статьи…',
@@ -62,9 +84,22 @@ const chatCopy = {
       'Читаю первоисточники…',
       'Сопоставляю результаты…',
     ],
+    deepPendingStatuses: [
+      'Формирую план глубокого исследования…',
+      'Ищу релевантные источники…',
+      'Изучаю найденные материалы…',
+      'Сопоставляю данные из разных источников…',
+      'Проверяю факты и ограничения…',
+      'Готовлю подробный исследовательский отчёт…',
+    ],
     requestFailed: 'Не удалось выполнить исследовательский поиск',
     copyMarkdown: 'Копировать Markdown',
     copiedMarkdown: 'Скопировано',
+    addingSource: 'Добавляем…',
+    addedSource: 'Добавлено',
+    chooseFolder: 'Добавить в папку',
+    foldersLoading: 'Загружаем папки…',
+    openingSource: 'Открываем статью…',
     inputLabel: 'Сообщение',
     modeLabel: 'Режим исследования',
     suggestions: [
@@ -83,6 +118,9 @@ const chatCopy = {
     historyLabel: 'Conversation history',
     collapseHistory: 'Collapse chat list',
     expandHistory: 'Expand chat list',
+    deleteChat: 'Delete conversation',
+    deleteChatConfirm: 'Delete this conversation? This action cannot be undone.',
+    deleteChatFailed: 'Could not delete conversation',
     pendingStatuses: [
       'Formulating search queries…',
       'Finding relevant papers…',
@@ -90,9 +128,22 @@ const chatCopy = {
       'Reading primary sources…',
       'Comparing the findings…',
     ],
+    deepPendingStatuses: [
+      'Planning the deep research process…',
+      'Searching for relevant sources…',
+      'Reviewing the retrieved material…',
+      'Comparing evidence across sources…',
+      'Checking facts and limitations…',
+      'Preparing the detailed research report…',
+    ],
     requestFailed: 'The research search could not be completed',
     copyMarkdown: 'Copy Markdown',
     copiedMarkdown: 'Copied',
+    addingSource: 'Adding…',
+    addedSource: 'Added',
+    chooseFolder: 'Add to folder',
+    foldersLoading: 'Loading folders…',
+    openingSource: 'Opening article…',
     inputLabel: 'Message',
     modeLabel: 'Research mode',
     suggestions: [
@@ -113,10 +164,19 @@ const chatCopy = {
     historyLabel: string;
     collapseHistory: string;
     expandHistory: string;
+    deleteChat: string;
+    deleteChatConfirm: string;
+    deleteChatFailed: string;
     pendingStatuses: string[];
+    deepPendingStatuses: string[];
     requestFailed: string;
     copyMarkdown: string;
     copiedMarkdown: string;
+    addingSource: string;
+    addedSource: string;
+    chooseFolder: string;
+    foldersLoading: string;
+    openingSource: string;
     inputLabel: string;
     modeLabel: string;
     suggestions: string[];
@@ -149,18 +209,106 @@ function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function PendingResearchMessage({ locale }: { locale: Locale }) {
+function formatResearchDuration(elapsedSeconds: number) {
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function foundSourcesLabel(locale: Locale, count: number) {
+  if (locale === 'en') {
+    return `Found ${count} ${count === 1 ? 'source' : 'sources'}`;
+  }
+  const modulo100 = count % 100;
+  const modulo10 = count % 10;
+  const noun =
+    modulo100 >= 11 && modulo100 <= 14
+      ? 'источников'
+      : modulo10 === 1
+        ? 'источник'
+        : modulo10 >= 2 && modulo10 <= 4
+          ? 'источника'
+          : 'источников';
+  return `Найдено ${count} ${noun}`;
+}
+
+function PendingResearchMessage({
+  locale,
+  progress,
+  sourceProgress,
+  mode,
+}: {
+  locale: Locale;
+  progress?: string;
+  sourceProgress?: ResearchSourceProgress;
+  mode?: ResearchMode;
+}) {
   const [statusIndex, setStatusIndex] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const isDeep = mode === 'deep';
   const statuses = chatCopy[locale].pendingStatuses;
 
   useEffect(() => {
     setStatusIndex(0);
     const interval = window.setInterval(() => {
-      setStatusIndex((current) => (current + 1) % statuses.length);
-    }, PENDING_STATUS_INTERVAL_MS);
+      const statusCount = isDeep
+        ? chatCopy[locale].deepPendingStatuses.length
+        : statuses.length;
+      setStatusIndex((current) => (current + 1) % statusCount);
+    }, isDeep ? DEEP_PENDING_STATUS_INTERVAL_MS : PENDING_STATUS_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [locale, statuses.length]);
+  }, [isDeep, locale, statuses.length]);
+
+  useEffect(() => {
+    if (!isDeep) {
+      return;
+    }
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+    }, 1_000);
+
+    return () => window.clearInterval(interval);
+  }, [isDeep]);
+
+  if (isDeep) {
+    const duration = formatResearchDuration(elapsedSeconds);
+    const sourceNames = sourceProgress?.sources
+      .map((source) => source.title || source.domain)
+      .filter(Boolean)
+      .slice(-3);
+    const status = progress
+      ? progress
+      : sourceProgress
+        ? foundSourcesLabel(locale, sourceProgress.count)
+        : chatCopy[locale].deepPendingStatuses[statusIndex];
+
+    return (
+      <div
+        className="chat-message chat-message--assistant chat-message--pending chat-message--pending-deep"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2
+          className="chat-message__loader"
+          aria-hidden="true"
+          size={17}
+          strokeWidth={2}
+        />
+        <div className="chat-message__pending-deep-content">
+          <span className="chat-message__pending-status" key={status}>
+            {status} · {duration}
+          </span>
+          {sourceNames?.length ? (
+            <span className="chat-message__pending-sources">
+              {sourceNames.join(' · ')}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -174,8 +322,8 @@ function PendingResearchMessage({ locale }: { locale: Locale }) {
         size={17}
         strokeWidth={2}
       />
-      <span className="chat-message__pending-status" key={statusIndex}>
-        {statuses[statusIndex]}
+      <span className="chat-message__pending-status" key={progress ?? statusIndex}>
+        {progress || statuses[statusIndex]}
       </span>
     </div>
   );
@@ -201,8 +349,212 @@ async function copyText(value: string) {
   }
 }
 
-function AssistantMessage({ content, locale }: { content: string; locale: Locale }) {
+interface SourceState {
+  status: 'adding' | 'added' | 'error';
+  error?: string;
+  paperId?: string;
+  readerCapable?: boolean;
+}
+
+function canOpenInReader(paper: LibraryPaper) {
+  const version = paper.latest_version;
+  return Boolean(
+    version?.pdf_key ||
+      version?.source === 'arxiv' ||
+      version?.source === 'web_pdf' ||
+      version?.source === 'upload',
+  );
+}
+
+function InlineSourceLink({
+  href,
+  title,
+  children,
+  sourceState,
+  folders,
+  foldersLoading,
+  locale,
+  onAdd,
+}: {
+  href: string;
+  title: string;
+  children: React.ReactNode;
+  sourceState?: SourceState;
+  folders: LibraryFolder[];
+  foldersLoading: boolean;
+  locale: Locale;
+  onAdd: (url: string, title: string, folderId: string) => Promise<void>;
+}) {
+  const navigate = useNavigate();
+  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const copy = chatCopy[locale];
+  const choices = useMemo(() => flattenLibraryFolders(folders), [folders]);
+
+  useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) {
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      prefetchUrl(href, title);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          prefetchUrl(href, title);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '240px 0px' },
+    );
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [href, title]);
+
+  const openInReader = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    const prepared = preparedUrlPaper(href);
+    if (
+      isUnsupportedUrl(href) ||
+      (prepared && !canOpenInReader(prepared)) ||
+      (sourceState?.paperId && sourceState.readerCapable === false)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    setOpenError(null);
+    setIsOpening(true);
+    try {
+      const paper = sourceState?.paperId
+        ? null
+        : await openByUrl(href, title);
+      if (paper && !canOpenInReader(paper)) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const paperId = sourceState?.paperId ?? paper?.id;
+      if (paperId) {
+        await navigate({ to: '/reader/$paperId', params: { paperId } });
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setOpenError(detail);
+      // Unsupported formats retain the original link behavior.
+      if (error instanceof ApiError && error.status === 422) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    } finally {
+      setIsOpening(false);
+    }
+  };
+
+  return (
+    <span
+      className="chat-inline-source"
+      onMouseEnter={() => setIsPopoverOpen(true)}
+      onMouseLeave={() => setIsPopoverOpen(false)}
+      onFocus={() => setIsPopoverOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsPopoverOpen(false);
+        }
+      }}
+    >
+      <a
+        ref={anchorRef}
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-busy={isOpening || undefined}
+        onClick={(event) => void openInReader(event)}
+      >
+        {children}
+      </a>
+      {isPopoverOpen ? (
+        <span className="chat-inline-source__popover" role="dialog">
+          <span className="chat-inline-source__heading">
+            {isOpening ? copy.openingSource : copy.chooseFolder}
+          </span>
+          {sourceState?.status === 'added' ? (
+            <span className="chat-inline-source__success">
+              <Check aria-hidden="true" size={14} strokeWidth={2} />
+              {copy.addedSource}
+            </span>
+          ) : foldersLoading ? (
+            <span className="chat-inline-source__loading">
+              <Loader2 className="chat-message__loader" aria-hidden="true" size={14} />
+              {copy.foldersLoading}
+            </span>
+          ) : (
+            <span className="chat-inline-source__folders">
+              {choices.map(({ folder, depth }) => (
+                <button
+                  type="button"
+                  disabled={sourceState?.status === 'adding'}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void onAdd(href, title, folder.id);
+                  }}
+                  key={folder.id}
+                >
+                  <span
+                    className="chat-inline-source__folder-label"
+                    style={{ paddingLeft: depth * 12 }}
+                  >
+                    <LibraryFolderIcon folder={folder} />
+                    <span>{folder.name}</span>
+                  </span>
+                </button>
+              ))}
+            </span>
+          )}
+          {sourceState?.status === 'adding' ? (
+            <span className="chat-inline-source__loading">
+              <Loader2 className="chat-message__loader" aria-hidden="true" size={14} />
+              {copy.addingSource}
+            </span>
+          ) : null}
+          {sourceState?.error || openError ? (
+            <span className="chat-inline-source__error">
+              {sourceState?.error || openError}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function AssistantMessage({
+  content,
+  sources = [],
+  folders,
+  foldersLoading,
+  locale,
+}: {
+  content: string;
+  sources?: NonNullable<ChatMessage['sources']>;
+  folders: LibraryFolder[];
+  foldersLoading: boolean;
+  locale: Locale;
+}) {
   const [copied, setCopied] = useState(false);
+  const [sourceStates, setSourceStates] = useState<Record<string, SourceState>>({});
+  const copy = chatCopy[locale];
 
   useEffect(() => {
     if (!copied) {
@@ -221,13 +573,55 @@ function AssistantMessage({ content, locale }: { content: string; locale: Locale
     }
   };
 
-  const label = copied
-    ? chatCopy[locale].copiedMarkdown
-    : chatCopy[locale].copyMarkdown;
+  const label = copied ? copy.copiedMarkdown : copy.copyMarkdown;
+
+  const handleAddSource = async (url: string, title: string, folderId: string) => {
+    setSourceStates((current) => ({ ...current, [url]: { status: 'adding' } }));
+    try {
+      const paper = await addByUrl(url, title);
+      await patchLibraryItem(paper.id, { folder_id: folderId });
+      setSourceStates((current) => ({
+        ...current,
+        [url]: {
+          status: 'added',
+          paperId: paper.id,
+          readerCapable: canOpenInReader(paper),
+        },
+      }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setSourceStates((current) => ({
+        ...current,
+        [url]: { status: 'error', error: detail },
+      }));
+    }
+  };
 
   return (
     <article className="chat-message chat-message--assistant" aria-live="polite">
-      <MarkdownMessage content={content} />
+      <MarkdownMessage
+        content={content}
+        renderLink={({ href, children, anchorProps }) => {
+          if (!/^https?:\/\//i.test(href)) {
+            return <a {...anchorProps} href={href}>{children}</a>;
+          }
+          const source = sources.find((candidate) => candidate.url === href);
+          const title = source?.title || href;
+          return (
+            <InlineSourceLink
+              href={href}
+              title={title}
+              sourceState={sourceStates[href]}
+              folders={folders}
+              foldersLoading={foldersLoading}
+              locale={locale}
+              onAdd={handleAddSource}
+            >
+              {children}
+            </InlineSourceLink>
+          );
+        }}
+      />
       <div className="chat-message__actions">
         <button
           className="chat-message__copy"
@@ -250,13 +644,24 @@ function AssistantMessage({ content, locale }: { content: string; locale: Locale
 
 function ChatMessageView({
   message,
+  folders,
+  foldersLoading,
   locale,
 }: {
   message: ChatMessage;
+  folders: LibraryFolder[];
+  foldersLoading: boolean;
   locale: Locale;
 }) {
   if (message.pending) {
-    return <PendingResearchMessage locale={locale} />;
+    return (
+      <PendingResearchMessage
+        locale={locale}
+        progress={message.progress}
+        sourceProgress={message.sourceProgress}
+        mode={message.researchMode}
+      />
+    );
   }
 
   if (message.role === 'user') {
@@ -267,7 +672,15 @@ function ChatMessageView({
     );
   }
 
-  return <AssistantMessage content={message.content} locale={locale} />;
+  return (
+    <AssistantMessage
+      content={message.content}
+      sources={message.sources}
+      folders={folders}
+      foldersLoading={foldersLoading}
+      locale={locale}
+    />
+  );
 }
 
 export function ChatPage() {
@@ -293,8 +706,11 @@ export function ChatPage() {
   const [composerMode, setComposerMode] = useState<ResearchMode>(routeMode);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatHistory, setChatHistory] = useState<ResearchChatSummary[]>([]);
+  const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const loadedRouteConversationKeyRef = useRef('');
   const activeStreamRef = useRef<AbortController | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -329,6 +745,40 @@ export function ChatPage() {
         message: content,
         mode,
         signal: controller.signal,
+        onProgress: (progress) => {
+          if (loadedRouteConversationKeyRef.current !== requestKey) {
+            return;
+          }
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId && !message.content
+                ? {
+                    ...message,
+                    pending: true,
+                    progress,
+                    sourceProgress: undefined,
+                  }
+                : message,
+            ),
+          );
+        },
+        onSourceProgress: (sourceProgress) => {
+          if (loadedRouteConversationKeyRef.current !== requestKey) {
+            return;
+          }
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId && !message.content
+                ? {
+                    ...message,
+                    pending: true,
+                    progress: undefined,
+                    sourceProgress,
+                  }
+                : message,
+            ),
+          );
+        },
         onDelta: (delta) => {
           if (loadedRouteConversationKeyRef.current !== requestKey) {
             return;
@@ -340,6 +790,8 @@ export function ChatPage() {
                     ...message,
                     content: message.content + delta,
                     pending: false,
+                    progress: undefined,
+                    sourceProgress: undefined,
                   }
                 : message,
             ),
@@ -355,6 +807,8 @@ export function ChatPage() {
                   id: storedMessage.id,
                   sources: storedMessage.sources,
                   pending: false,
+                  progress: undefined,
+                  sourceProgress: undefined,
                 }
               : message,
           ),
@@ -389,6 +843,10 @@ export function ChatPage() {
 
   useEffect(() => {
     void refreshChatHistory();
+    void fetchLibraryFolders()
+      .then((response) => setLibraryFolders(response.items))
+      .catch(() => setLibraryFolders([]))
+      .finally(() => setFoldersLoading(false));
   }, []);
 
   useEffect(() => {
@@ -444,7 +902,13 @@ export function ChatPage() {
           const assistantId = createMessageId('assistant');
           setMessages([
             { id: createMessageId('user'), role: 'user', content: initialQuestion },
-            { id: assistantId, role: 'assistant', content: '', pending: true },
+            {
+              id: assistantId,
+              role: 'assistant',
+              content: '',
+              pending: true,
+              researchMode: routeMode,
+            },
           ]);
           const now = new Date().toISOString();
           setChatHistory((current) => [
@@ -538,6 +1002,7 @@ export function ChatPage() {
         role: 'assistant',
         content: '',
         pending: true,
+        researchMode: responseMode,
       },
     ]);
     setDraft('');
@@ -581,6 +1046,30 @@ export function ChatPage() {
     });
   };
 
+  const deleteStoredChat = async (chat: ResearchChatSummary) => {
+    if (!window.confirm(copy.deleteChatConfirm)) {
+      return;
+    }
+
+    if (chat.id === chatId) {
+      activeStreamRef.current?.abort();
+      activeStreamRef.current = null;
+      setIsSending(false);
+    }
+    setDeletingChatId(chat.id);
+    try {
+      await deleteResearchChat(chat.id);
+      setChatHistory((current) => current.filter((item) => item.id !== chat.id));
+      if (chat.id === chatId) {
+        openNewChat();
+      }
+    } catch (error) {
+      window.alert(error instanceof ApiError ? error.detail : copy.deleteChatFailed);
+    } finally {
+      setDeletingChatId(null);
+    }
+  };
+
   const today = new Date().toDateString();
   const todayChats = chatHistory.filter(
     (chat) => new Date(chat.updated_at).toDateString() === today,
@@ -618,24 +1107,42 @@ export function ChatPage() {
               <h2>{copy.today}</h2>
               <div className="chat-history__items">
                 {todayChats.map((chat) => (
-                  <button
+                  <div
                     className={
                       screen === 'conversation' && chat.id === chatId
-                        ? 'chat-history__item chat-history__item--active'
-                        : 'chat-history__item'
+                        ? 'chat-history__item-row chat-history__item-row--active'
+                        : 'chat-history__item-row'
                     }
-                    type="button"
-                    aria-current={
-                      screen === 'conversation' && chat.id === chatId
-                        ? 'page'
-                        : undefined
-                    }
-                    onClick={() => openStoredChat(chat)}
-                    title={chat.title}
                     key={chat.id}
                   >
-                    <span>{chat.title}</span>
-                  </button>
+                    <button
+                      className="chat-history__item"
+                      type="button"
+                      aria-current={
+                        screen === 'conversation' && chat.id === chatId
+                          ? 'page'
+                          : undefined
+                      }
+                      onClick={() => openStoredChat(chat)}
+                      title={chat.title}
+                    >
+                      <span>{chat.title}</span>
+                    </button>
+                    <button
+                      className="chat-history__delete"
+                      type="button"
+                      disabled={deletingChatId === chat.id}
+                      onClick={() => void deleteStoredChat(chat)}
+                      title={copy.deleteChat}
+                      aria-label={`${copy.deleteChat}: ${chat.title}`}
+                    >
+                      {deletingChatId === chat.id ? (
+                        <Loader2 className="spin" aria-hidden="true" size={14} />
+                      ) : (
+                        <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
+                      )}
+                    </button>
+                  </div>
                 ))}
               </div>
             </section>
@@ -645,24 +1152,42 @@ export function ChatPage() {
                 <h2>{copy.earlier}</h2>
                 <div className="chat-history__items">
                   {earlierChats.map((chat) => (
-                    <button
+                    <div
                       className={
                         screen === 'conversation' && chat.id === chatId
-                          ? 'chat-history__item chat-history__item--active'
-                          : 'chat-history__item'
+                          ? 'chat-history__item-row chat-history__item-row--active'
+                          : 'chat-history__item-row'
                       }
-                      type="button"
-                      aria-current={
-                        screen === 'conversation' && chat.id === chatId
-                          ? 'page'
-                          : undefined
-                      }
-                      onClick={() => openStoredChat(chat)}
-                      title={chat.title}
                       key={chat.id}
                     >
-                      <span>{chat.title}</span>
-                    </button>
+                      <button
+                        className="chat-history__item"
+                        type="button"
+                        aria-current={
+                          screen === 'conversation' && chat.id === chatId
+                            ? 'page'
+                            : undefined
+                        }
+                        onClick={() => openStoredChat(chat)}
+                        title={chat.title}
+                      >
+                        <span>{chat.title}</span>
+                      </button>
+                      <button
+                        className="chat-history__delete"
+                        type="button"
+                        disabled={deletingChatId === chat.id}
+                        onClick={() => void deleteStoredChat(chat)}
+                        title={copy.deleteChat}
+                        aria-label={`${copy.deleteChat}: ${chat.title}`}
+                      >
+                        {deletingChatId === chat.id ? (
+                          <Loader2 className="spin" aria-hidden="true" size={14} />
+                        ) : (
+                          <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
+                        )}
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -722,7 +1247,12 @@ export function ChatPage() {
             <div className="chat-thread">
               {messages.map((message) => (
                 <Fragment key={message.id}>
-                  <ChatMessageView message={message} locale={locale} />
+                  <ChatMessageView
+                    message={message}
+                    folders={libraryFolders}
+                    foldersLoading={foldersLoading}
+                    locale={locale}
+                  />
                 </Fragment>
               ))}
               <div

@@ -25,6 +25,7 @@ DEEP_LLM_MODEL = os.getenv(
     "WEBSEARCH_DEEP_LLM_MODEL", "perplexity/sonar-deep-research"
 ).strip()
 LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_TIMEOUT_SECONDS", "180"))
+DEEP_LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_DEEP_TIMEOUT_SECONDS", "600"))
 LLM_HTTP_REFERER = os.getenv("LLM_HTTP_REFERER", "http://localhost:5173")
 LLM_APP_TITLE = os.getenv("LLM_APP_TITLE", "Researcher")
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
@@ -111,6 +112,10 @@ def model_for_mode(mode: ResearchMode) -> str:
     return DEEP_LLM_MODEL if mode == "deep" else LLM_MODEL
 
 
+def timeout_for_mode(mode: ResearchMode) -> float:
+    return DEEP_LLM_TIMEOUT_SECONDS if mode == "deep" else LLM_TIMEOUT_SECONDS
+
+
 def normalize_source(raw: Any) -> Source | None:
     if isinstance(raw, dict) and raw.get("type") == "url_citation":
         raw = raw.get("url_citation")
@@ -165,13 +170,16 @@ def sse(event: str, payload: Any) -> str:
 
 
 def provider_body(payload: SearchRequest) -> dict[str, Any]:
-    return {
+    body: dict[str, Any] = {
         "model": model_for_mode(payload.mode),
         "messages": [
             {"role": "system", "content": system_prompt(payload.mode)},
             *(message.model_dump() for message in payload.messages),
         ],
-        "tools": [
+        "stream": True,
+    }
+    if payload.mode == "web":
+        body["tools"] = [
             {
                 "type": "openrouter:web_search",
                 "parameters": {
@@ -187,9 +195,23 @@ def provider_body(payload: SearchRequest) -> dict[str, Any]:
                     "max_content_tokens": 50_000,
                 },
             },
-        ],
-        "stream": True,
-    }
+        ]
+    else:
+        body["reasoning"] = {"effort": "high", "summary": "concise"}
+    return body
+
+
+def reasoning_summary_fragments(chunk: dict[str, Any]) -> list[str]:
+    fragments: list[str] = []
+    for choice in chunk.get("choices") or []:
+        delta = choice.get("delta") or {}
+        for detail in delta.get("reasoning_details") or []:
+            if not isinstance(detail, dict) or detail.get("type") != "reasoning.summary":
+                continue
+            summary = detail.get("summary")
+            if isinstance(summary, str) and summary:
+                fragments.append(summary)
+    return fragments
 
 
 async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
@@ -205,7 +227,8 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
         headers["HTTP-Referer"] = LLM_HTTP_REFERER
         headers["X-Title"] = LLM_APP_TITLE
     body = provider_body(payload)
-    timeout = httpx.Timeout(LLM_TIMEOUT_SECONDS, connect=20.0)
+    timeout = httpx.Timeout(timeout_for_mode(payload.mode), connect=20.0)
+    progress_parts: list[str] = []
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream(
             "POST", f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
@@ -225,6 +248,10 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
                     chunk = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if payload.mode == "deep":
+                    for summary in reasoning_summary_fragments(chunk):
+                        progress_parts.append(summary)
+                        yield "progress", "".join(progress_parts)[-4_000:]
                 choices = chunk.get("choices") or []
                 delta = ""
                 if choices:
@@ -264,8 +291,19 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                 if event == "delta":
                     answer_parts.append(value)
                     yield sse("delta", {"content": value})
+                elif event == "progress":
+                    yield sse("progress", {"content": value})
                 elif event == "sources":
+                    previous_count = len(sources)
                     merge_sources(sources, value)
+                    if body.mode == "deep" and len(sources) > previous_count:
+                        yield sse(
+                            "source_progress",
+                            {
+                                "count": len(sources),
+                                "sources": [source.model_dump() for source in sources[-3:]],
+                            },
+                        )
             answer = "".join(answer_parts)
             if not has_linked_sources_section(answer):
                 suffix = markdown_sources(sources)

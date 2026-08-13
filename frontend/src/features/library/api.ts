@@ -75,6 +75,20 @@ export function fetchLibraryFolders(): Promise<{ items: LibraryFolder[] }> {
   });
 }
 
+export function fetchLibraryItem(paperId: string): Promise<LibraryItem> {
+  return apiRequest<LibraryItem>(`/library/${paperId}`, {
+    token: authToken(),
+  });
+}
+
+export function saveToLibraryFolder(paperId: string, folderId: string): Promise<LibraryItem> {
+  return apiRequest<LibraryItem>(`/library/${paperId}`, {
+    method: 'POST',
+    token: authToken(),
+    body: { folder_id: folderId },
+  });
+}
+
 export function createLibraryFolder(
   name: string,
   parentId: string | null,
@@ -83,6 +97,13 @@ export function createLibraryFolder(
     method: 'POST',
     token: authToken(),
     body: { name, parent_id: parentId },
+  });
+}
+
+export function deleteLibraryFolder(folderId: string): Promise<void> {
+  return apiRequest<void>(`/library/folders/${folderId}`, {
+    method: 'DELETE',
+    token: authToken(),
   });
 }
 
@@ -159,6 +180,63 @@ export function addByDoi(doi: string): Promise<LibraryPaper> {
     method: 'POST',
     token: authToken(),
     body: { doi },
+  });
+}
+
+export function addByUrl(url: string, titleHint?: string): Promise<LibraryPaper> {
+  return apiRequest<LibraryPaper>('/papers/from-url', {
+    method: 'POST',
+    token: authToken(),
+    body: { url, title_hint: titleHint ?? '', add_to_library: true },
+  });
+}
+
+const openByUrlRequests = new Map<string, Promise<LibraryPaper>>();
+const preparedUrlPapers = new Map<string, LibraryPaper>();
+const unsupportedUrls = new Set<string>();
+
+/** Готовит поддерживаемую web-ссылку для reader, не добавляя её в библиотеку. */
+export function openByUrl(url: string, titleHint?: string): Promise<LibraryPaper> {
+  const key = url.trim();
+  const cached = openByUrlRequests.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const request = apiRequest<LibraryPaper>('/papers/from-url', {
+    method: 'POST',
+    token: authToken(),
+    body: { url: key, title_hint: titleHint ?? '', add_to_library: false },
+  });
+  openByUrlRequests.set(key, request);
+  void request
+    .then((paper) => {
+      preparedUrlPapers.set(key, paper);
+      unsupportedUrls.delete(key);
+    })
+    .catch((error) => {
+      if (error instanceof ApiError && error.status === 422) {
+        unsupportedUrls.add(key);
+      }
+      if (openByUrlRequests.get(key) === request) {
+        openByUrlRequests.delete(key);
+      }
+    });
+  return request;
+}
+
+export function preparedUrlPaper(url: string) {
+  return preparedUrlPapers.get(url.trim());
+}
+
+export function isUnsupportedUrl(url: string) {
+  return unsupportedUrls.has(url.trim());
+}
+
+/** Запускает подготовку URL, когда ссылка попала во viewport. */
+export function prefetchUrl(url: string, titleHint?: string) {
+  void openByUrl(url, titleHint).catch(() => {
+    // Неподдерживаемые ссылки продолжат работать как обычные внешние ссылки.
   });
 }
 

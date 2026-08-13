@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,5 +84,51 @@ func TestTranslateDoesNotLeakProviderErrorBody(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "sensitive") {
 		t.Fatalf("provider body leaked: %v", err)
+	}
+}
+
+func TestTranslateStreamUsesDedicatedModelWithoutReasoning(t *testing.T) {
+	var gotModel, gotEffort string
+	var gotStream bool
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model     string `json:"model"`
+			Stream    bool   `json:"stream"`
+			Reasoning struct {
+				Effort string `json:"effort"`
+			} `json:"reasoning"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		gotModel, gotStream, gotEffort = body.Model, body.Stream, body.Reasoning.Effort
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"Привет, "}}]}`)
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"мир!"}}]}`)
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "data: [DONE]")
+	}))
+	defer provider.Close()
+
+	cfg := testConfig(provider.URL)
+	cfg.TranslationLLMModel = "google/gemma-4-26b-a4b-it"
+	var streamed strings.Builder
+	result, err := (Service{Config: cfg}).TranslateStream(
+		context.Background(),
+		Request{Text: "Hello, world!", TargetLang: "ru"},
+		func(delta string) error {
+			streamed.WriteString(delta)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotModel != cfg.TranslationLLMModel || !gotStream || gotEffort != "none" {
+		t.Fatalf("model=%q stream=%v effort=%q", gotModel, gotStream, gotEffort)
+	}
+	if streamed.String() != "Привет, мир!" || result.Translation != "Привет, мир!" {
+		t.Fatalf("streamed=%q result=%+v", streamed.String(), result)
 	}
 }

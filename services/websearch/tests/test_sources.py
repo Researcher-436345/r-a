@@ -10,6 +10,7 @@ from app.main import (
     markdown_sources,
     merge_sources,
     provider_body,
+    reasoning_summary_fragments,
     system_prompt,
 )
 
@@ -65,6 +66,31 @@ def test_provider_body_uses_deep_research_model() -> None:
     )
 
     assert body["model"] == "perplexity/sonar-deep-research"
+    assert "tools" not in body
+    assert body["reasoning"] == {"effort": "high", "summary": "concise"}
+
+
+def test_only_displayable_reasoning_summaries_become_progress() -> None:
+    fragments = reasoning_summary_fragments(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "reasoning": "hidden chain of thought",
+                        "reasoning_details": [
+                            {
+                                "type": "reasoning.summary",
+                                "summary": "Нашёл несколько релевантных работ; проверяю детали.",
+                            },
+                            {"type": "reasoning.text", "text": "hidden reasoning"},
+                        ],
+                    }
+                }
+            ]
+        }
+    )
+
+    assert fragments == ["Нашёл несколько релевантных работ; проверяю детали."]
 
 
 def test_system_prompt_contains_current_date_for_recency_window() -> None:
@@ -95,8 +121,33 @@ def test_markdown_fallback_is_only_needed_without_linked_section() -> None:
 
 def test_stream_exposes_text_and_structured_sources() -> None:
     async def fake_provider_stream(_payload):
-        yield "delta", "Answer"
+        yield "progress", "Нашёл релевантные работы; уточняю выводы."
         yield "sources", [{"title": "Paper", "url": "https://example.com/paper"}]
+        yield "delta", "Answer"
+
+    original = main.provider_stream
+    main.provider_stream = fake_provider_stream
+    try:
+        response = TestClient(main.app).post(
+            "/v1/search/stream",
+            json={"messages": [{"role": "user", "content": "question"}], "mode": "deep"},
+        )
+    finally:
+        main.provider_stream = original
+
+    assert response.status_code == 200
+    assert 'event: progress\ndata: {"content": "Нашёл релевантные работы; уточняю выводы."}' in response.text
+    assert 'event: source_progress\ndata: {"count": 1, "sources": [{"title": "Paper"' in response.text
+    assert 'event: delta\ndata: {"content": "Answer"}' in response.text
+    assert 'event: sources' in response.text
+    assert '"domain": "example.com"' in response.text
+    assert 'event: done\ndata: {"status": "ok"}' in response.text
+
+
+def test_web_stream_does_not_emit_source_progress() -> None:
+    async def fake_provider_stream(_payload):
+        yield "sources", [{"title": "Paper", "url": "https://example.com/paper"}]
+        yield "delta", "Answer"
 
     original = main.provider_stream
     main.provider_stream = fake_provider_stream
@@ -109,7 +160,4 @@ def test_stream_exposes_text_and_structured_sources() -> None:
         main.provider_stream = original
 
     assert response.status_code == 200
-    assert 'event: delta\ndata: {"content": "Answer"}' in response.text
-    assert 'event: sources' in response.text
-    assert '"domain": "example.com"' in response.text
-    assert 'event: done\ndata: {"status": "ok"}' in response.text
+    assert "event: source_progress" not in response.text

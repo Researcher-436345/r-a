@@ -21,7 +21,6 @@ import {
   fetchChatMessages,
   updateAnnotation,
   type ChatContextUsage,
-  type LLMModelOption,
   type PaperAnnotation,
 } from '../api';
 import type { ChatContextAttachment } from '../chat-context';
@@ -141,7 +140,6 @@ export function ReaderChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [composerEmpty, setComposerEmpty] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [models, setModels] = useState<LLMModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null);
   const [savingNoteMessageId, setSavingNoteMessageId] = useState<string | null>(null);
@@ -189,7 +187,6 @@ export function ReaderChatPanel({
           return;
         }
         const items = res.items?.length ? res.items : [{ id: res.default, label: res.default }];
-        setModels(items);
         const stored = localStorage.getItem(MODEL_STORAGE_KEY) || '';
         const pick =
           items.find((m) => m.id === stored)?.id ||
@@ -863,32 +860,6 @@ export function ReaderChatPanel({
               <button className="reader-attach-button" type="button" title={text.attach}>
                 <Paperclip aria-hidden="true" size={16} strokeWidth={2} />
               </button>
-              {models.length > 0 ? (
-                <label className="reader-model-picker" title={selectedModel || undefined}>
-                  <span className="sr-only">{locale === 'ru' ? 'Модель' : 'Model'}</span>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    disabled={isSending}
-                  >
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <span className="reader-model-picker-fallback" title={selectedModel || undefined}>
-                  {selectedModel
-                    ? selectedModel.includes('/')
-                      ? selectedModel.slice(selectedModel.lastIndexOf('/') + 1)
-                      : selectedModel
-                    : locale === 'ru'
-                      ? 'модель…'
-                      : 'model…'}
-                </span>
-              )}
               {contextUsage ? (
                 <div
                   className={`reader-context-chip reader-context-chip--${contextTone}`}
@@ -972,12 +943,10 @@ export function ReaderChatPanel({
                     type="submit"
                     className="reader-notes-composer__submit"
                     disabled={isSavingFreeNote || !freeNoteDraft.trim()}
+                    title={locale === 'ru' ? 'Добавить заметку' : 'Add note'}
+                    aria-label={locale === 'ru' ? 'Добавить заметку' : 'Add note'}
                   >
-                    {isSavingFreeNote
-                      ? '…'
-                      : locale === 'ru'
-                        ? 'Добавить'
-                        : 'Add note'}
+                    <ArrowUp aria-hidden="true" size={17} strokeWidth={2} />
                   </button>
                 </div>
               </form>

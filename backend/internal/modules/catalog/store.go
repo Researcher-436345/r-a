@@ -18,7 +18,7 @@ func (s Store) IsPublic(ctx context.Context, paperID uuid.UUID) (bool, error) {
 	err := s.DB.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM paper_versions
-			WHERE paper_id=$1 AND source IN ('arxiv', 'doi')
+			WHERE paper_id=$1 AND source IN ('arxiv', 'doi', 'web_pdf')
 		)`, paperID).Scan(&public)
 	return public, err
 }
@@ -78,6 +78,14 @@ func (s Store) FindVersionBySHA(ctx context.Context, sha string) (*Version, erro
 	}
 	return &v, err
 }
+func (s Store) FindVersionBySourceURL(ctx context.Context, sourceURL string) (*Version, error) {
+	var v Version
+	err := s.DB.QueryRow(ctx, `SELECT id,paper_id,version_number,source,source_url,pdf_key,sha256,size_bytes,status,error_message FROM paper_versions WHERE source_url=$1 ORDER BY created_at DESC LIMIT 1`, sourceURL).Scan(&v.ID, &v.PaperID, &v.VersionNumber, &v.Source, &v.SourceURL, &v.PDFKey, &v.SHA256, &v.SizeBytes, &v.Status, &v.ErrorMessage)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &v, err
+}
 func (s Store) CreatePaper(ctx context.Context, title string, abstract *string, year *int, venue, doi, arxivID *string) (Paper, error) {
 	var p Paper
 	err := s.DB.QueryRow(ctx, `INSERT INTO papers(id,title,abstract,year,venue,doi,arxiv_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,title,abstract,year,venue,doi,arxiv_id,created_at`, uuid.New(), title, abstract, year, venue, doi, arxivID).Scan(&p.ID, &p.Title, &p.Abstract, &p.Year, &p.Venue, &p.DOI, &p.ArxivID, &p.CreatedAt)
@@ -122,6 +130,11 @@ func (s Store) CreateVersion(ctx context.Context, paperID uuid.UUID, number int,
 	var v Version
 	err := s.DB.QueryRow(ctx, `INSERT INTO paper_versions(id,paper_id,version_number,source,source_url,pdf_key,sha256,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,paper_id,version_number,source,source_url,pdf_key,sha256,size_bytes,status,error_message`, uuid.New(), paperID, number, source, sourceURL, pdfKey, sha, size, status).Scan(&v.ID, &v.PaperID, &v.VersionNumber, &v.Source, &v.SourceURL, &v.PDFKey, &v.SHA256, &v.SizeBytes, &v.Status, &v.ErrorMessage)
 	return v, err
+}
+func (s Store) NextVersionNumber(ctx context.Context, paperID uuid.UUID) (int, error) {
+	var number int
+	err := s.DB.QueryRow(ctx, `SELECT COALESCE(MAX(version_number),0)+1 FROM paper_versions WHERE paper_id=$1`, paperID).Scan(&number)
+	return number, err
 }
 func (s Store) GetVersion(ctx context.Context, id uuid.UUID) (Version, error) {
 	var v Version

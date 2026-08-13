@@ -1,5 +1,10 @@
 import { apiFetch, apiRequest } from '../../shared/api/client';
-import type { ChatMessageRole, ResearchMode } from './types';
+import type {
+  ChatMessageRole,
+  ResearchMode,
+  ResearchSource,
+  ResearchSourceProgress,
+} from './types';
 
 export interface StoredChatMessage {
   id: string;
@@ -10,12 +15,7 @@ export interface StoredChatMessage {
   created_at: string;
 }
 
-export interface SearchSource {
-  title: string;
-  url: string;
-  domain: string;
-  published_at: string | null;
-}
+export type SearchSource = ResearchSource;
 
 export interface ResearchChatSummary {
   id: string;
@@ -37,12 +37,18 @@ export function getResearchChat(chatId: string) {
   return apiRequest<ResearchChat>(`/search/chats/${chatId}`);
 }
 
+export function deleteResearchChat(chatId: string) {
+  return apiRequest<void>(`/search/chats/${chatId}`, { method: 'DELETE' });
+}
+
 interface StreamResearchMessageOptions {
   chatId: string;
   message: string;
   mode: ResearchMode;
   signal?: AbortSignal;
   onDelta: (content: string) => void;
+  onProgress?: (content: string) => void;
+  onSourceProgress?: (progress: ResearchSourceProgress) => void;
 }
 
 export async function streamResearchMessage({
@@ -51,6 +57,8 @@ export async function streamResearchMessage({
   mode,
   signal,
   onDelta,
+  onProgress,
+  onSourceProgress,
 }: StreamResearchMessageOptions): Promise<StoredChatMessage> {
   const response = await apiFetch(`/search/chats/${chatId}/messages`, {
     method: 'POST',
@@ -83,6 +91,20 @@ export async function streamResearchMessage({
     const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
     if (event === 'delta' && typeof data.content === 'string') {
       onDelta(data.content);
+    } else if (
+      event === 'progress' &&
+      typeof data.content === 'string'
+    ) {
+      onProgress?.(data.content);
+    } else if (
+      event === 'source_progress' &&
+      typeof data.count === 'number' &&
+      Array.isArray(data.sources)
+    ) {
+      onSourceProgress?.({
+        count: data.count,
+        sources: data.sources as ResearchSource[],
+      });
     } else if (event === 'error') {
       throw new Error(
         typeof data.detail === 'string' ? data.detail : 'Research request failed',

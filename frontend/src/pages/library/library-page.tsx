@@ -1,11 +1,8 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import {
-  Archive,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
-  Clock3,
   FilePlus2,
   Folder,
   FolderOpen,
@@ -13,35 +10,24 @@ import {
   LoaderCircle,
   Plus,
   RotateCcw,
+  Trash2,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import {
   createLibraryFolder,
+  deleteLibraryFolder,
   fetchLibrary,
   fetchLibraryFolders,
-  patchLibraryItem,
+  removeFromLibrary,
   retryPdf,
   type LibraryFolder,
   type LibraryItem,
 } from '../../features/library/api';
+import { LibraryFolderIcon } from '../../features/library/folder-icons';
 import { ApiError } from '../../shared/api/client';
 import { RichText } from '../../shared/ui/rich-text';
-
-const STATUS_LABELS: Record<string, string> = {
-  ready: 'PDF готов',
-  processing: 'Обрабатывается',
-  uploading: 'Загрузка',
-  failed: 'Ошибка PDF',
-};
-
-const SYSTEM_FOLDER_ICONS: Record<string, LucideIcon> = {
-  want_to_read: BookOpen,
-  reading: Clock3,
-  other: Archive,
-};
 
 interface FolderNode extends LibraryFolder {
   children: FolderNode[];
@@ -66,13 +52,6 @@ function folderTree(folders: LibraryFolder[]) {
   return roots;
 }
 
-function flatFolders(nodes: FolderNode[], depth = 0): Array<{ folder: FolderNode; depth: number }> {
-  return nodes.flatMap((folder) => [
-    { folder, depth },
-    ...flatFolders(folder.children, depth + 1),
-  ]);
-}
-
 interface FolderRowProps {
   folder: FolderNode;
   depth: number;
@@ -81,6 +60,8 @@ interface FolderRowProps {
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
   onAddChild: (id: string) => void;
+  onDelete: (folder: LibraryFolder) => void;
+  deletingId: string | null;
   createParentId: string | null | undefined;
   createForm: React.ReactNode;
 }
@@ -93,60 +74,82 @@ function FolderRow({
   onSelect,
   onToggle,
   onAddChild,
+  onDelete,
+  deletingId,
   createParentId,
   createForm,
 }: FolderRowProps) {
   const isOpen = expanded[folder.id] ?? true;
   const hasChildren = folder.children.length > 0;
-  const Icon = folder.system_key
-    ? SYSTEM_FOLDER_ICONS[folder.system_key] ?? Folder
-    : selectedId === folder.id
-      ? FolderOpen
-      : Folder;
-
   return (
     <div className="library-folders__branch">
       <div
         className={
-          selectedId === folder.id
-            ? 'library-folders__row library-folders__row--active'
-            : 'library-folders__row'
+          `library-folders__row${selectedId === folder.id ? ' library-folders__row--active' : ''}${
+            hasChildren ? ' library-folders__row--has-children' : ''
+          }`
         }
         style={{ paddingLeft: `${10 + depth * 16}px` }}
       >
         <button
-          className="library-folders__toggle"
-          type="button"
-          onClick={() => onToggle(folder.id)}
-          aria-label={isOpen ? 'Свернуть папку' : 'Развернуть папку'}
-          aria-expanded={hasChildren ? isOpen : undefined}
-          disabled={!hasChildren}
-        >
-          {hasChildren ? (
-            isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
-          ) : (
-            <span aria-hidden="true" />
-          )}
-        </button>
-        <button
           className="library-folders__select"
           type="button"
-          onClick={() => onSelect(folder.id)}
+          onClick={() => {
+            onSelect(folder.id);
+            if (hasChildren && (selectedId === folder.id || !isOpen)) {
+              onToggle(folder.id);
+            }
+          }}
           title={folder.name}
         >
-          <Icon aria-hidden="true" size={16} strokeWidth={2} />
+          {folder.system_key ? (
+            <LibraryFolderIcon folder={folder} size={16} />
+          ) : selectedId === folder.id ? (
+            <FolderOpen aria-hidden="true" size={16} strokeWidth={2} />
+          ) : (
+            <Folder aria-hidden="true" size={16} strokeWidth={2} />
+          )}
           <span>{folder.name}</span>
-          <span className="library-folders__count">{folder.article_count}</span>
         </button>
-        <button
-          className="library-folders__add-child"
-          type="button"
-          onClick={() => onAddChild(folder.id)}
-          title={`Новая папка внутри «${folder.name}»`}
-          aria-label={`Новая папка внутри «${folder.name}»`}
-        >
-          <FolderPlus aria-hidden="true" size={14} strokeWidth={2} />
-        </button>
+        <div className="library-folders__actions">
+          <button
+            className="library-folders__add-child"
+            type="button"
+            onClick={() => onAddChild(folder.id)}
+            title={`Новая папка внутри «${folder.name}»`}
+            aria-label={`Новая папка внутри «${folder.name}»`}
+          >
+            <FolderPlus aria-hidden="true" size={14} strokeWidth={2} />
+          </button>
+          {!folder.system_key ? (
+            <button
+              className="library-folders__delete"
+              type="button"
+              onClick={() => onDelete(folder)}
+              disabled={deletingId === folder.id}
+              title={`Удалить папку «${folder.name}»`}
+              aria-label={`Удалить папку «${folder.name}»`}
+            >
+              {deletingId === folder.id ? (
+                <LoaderCircle className="spin" aria-hidden="true" size={14} />
+              ) : (
+                <Trash2 aria-hidden="true" size={14} strokeWidth={2} />
+              )}
+            </button>
+          ) : null}
+        </div>
+        {hasChildren ? (
+          <button
+            className="library-folders__toggle"
+            type="button"
+            onClick={() => onToggle(folder.id)}
+            aria-label={isOpen ? 'Свернуть папку' : 'Развернуть папку'}
+            aria-expanded={isOpen}
+          >
+            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        ) : null}
+        <span className="library-folders__count">{folder.article_count}</span>
       </div>
       {createParentId === folder.id ? createForm : null}
       {hasChildren && isOpen ? (
@@ -161,6 +164,8 @@ function FolderRow({
               onSelect={onSelect}
               onToggle={onToggle}
               onAddChild={onAddChild}
+              onDelete={onDelete}
+              deletingId={deletingId}
               createParentId={createParentId}
               createForm={createForm}
             />
@@ -181,7 +186,8 @@ export function LibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [movingId, setMovingId] = useState<string | null>(null);
+  const [deletingPaperId, setDeletingPaperId] = useState<string | null>(null);
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [createParentId, setCreateParentId] = useState<string | null | undefined>(undefined);
   const [newFolderName, setNewFolderName] = useState('');
@@ -190,7 +196,6 @@ export function LibraryPage() {
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const tree = useMemo(() => folderTree(folders), [folders]);
-  const folderOptions = useMemo(() => flatFolders(tree), [tree]);
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
 
   const selectFolder = (folderId: string) => {
@@ -303,21 +308,58 @@ export function LibraryPage() {
     }
   };
 
-  const movePaper = async (paperId: string, folderId: string) => {
-    if (!folderId || folderId === selectedFolderId) {
+  const handleDeletePaper = async (item: LibraryItem) => {
+    if (!window.confirm(`Удалить «${item.paper.title}» из библиотеки?`)) {
       return;
     }
-    setMovingId(paperId);
+    setDeletingPaperId(item.paper.id);
     setError(null);
     try {
-      await patchLibraryItem(paperId, { folder_id: folderId });
-      setItems((current) => current.filter((item) => item.paper.id !== paperId));
+      await removeFromLibrary(item.paper.id);
+      setItems((current) => current.filter((candidate) => candidate.id !== item.id));
       setTotal((current) => Math.max(0, current - 1));
       await refreshFolders(selectedFolderId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Не удалось переместить статью');
+      setError(err instanceof ApiError ? err.detail : 'Не удалось удалить статью');
     } finally {
-      setMovingId(null);
+      setDeletingPaperId(null);
+    }
+  };
+
+  const handleDeleteFolder = async (folder: LibraryFolder) => {
+    const confirmed = window.confirm(
+      `Удалить папку «${folder.name}» вместе со всеми вложенными папками? Статьи будут перемещены в «Другое».`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const byId = new Map(folders.map((item) => [item.id, item]));
+    let selectedInsideDeletedFolder = false;
+    let cursor = byId.get(selectedFolderId);
+    while (cursor) {
+      if (cursor.id === folder.id) {
+        selectedInsideDeletedFolder = true;
+        break;
+      }
+      cursor = cursor.parent_id ? byId.get(cursor.parent_id) : undefined;
+    }
+
+    setDeletingFolderId(folder.id);
+    setFolderError(null);
+    try {
+      await deleteLibraryFolder(folder.id);
+      const fallbackId = folders.find((item) => item.system_key === 'other')?.id;
+      if (selectedInsideDeletedFolder && fallbackId) {
+        selectFolder(fallbackId);
+        await refreshFolders(fallbackId);
+      } else {
+        await refreshFolders(selectedFolderId);
+      }
+    } catch (err) {
+      setFolderError(err instanceof ApiError ? err.detail : 'Не удалось удалить папку');
+    } finally {
+      setDeletingFolderId(null);
     }
   };
 
@@ -374,6 +416,8 @@ export function LibraryPage() {
                 setExpanded((current) => ({ ...current, [id]: !(current[id] ?? true) }))
               }
               onAddChild={(id) => beginCreateFolder(id)}
+              onDelete={(folder) => void handleDeleteFolder(folder)}
+              deletingId={deletingFolderId}
               createParentId={createParentId}
               createForm={createForm}
             />
@@ -420,41 +464,55 @@ export function LibraryPage() {
             const authors = (item.paper.authors ?? []).map((author) => author.name).join(', ');
             const version = item.paper.latest_version;
             const status = version?.status ?? 'processing';
-            const statusLabel = STATUS_LABELS[status] ?? status;
+            const identifier = item.paper.arxiv_id
+              ? `arXiv:${item.paper.arxiv_id}`
+              : item.paper.doi
+                ? `DOI:${item.paper.doi}`
+                : null;
 
             return (
               <article className="library-card" key={item.id}>
                 <div className="library-card__body">
-                  <Link
-                    className="library-card__title"
-                    to="/reader/$paperId"
-                    params={{ paperId: item.paper.id }}
-                  >
-                    {item.paper.title}
-                  </Link>
-                  {authors ? <div className="library-card__authors">{authors}</div> : null}
-                  <div className="library-card__meta">
-                    {item.paper.year ? <span>{item.paper.year}</span> : null}
-                    {item.paper.arxiv_id ? <span>arXiv:{item.paper.arxiv_id}</span> : null}
-                    {item.paper.doi ? <span>DOI:{item.paper.doi}</span> : null}
-                    <span
-                      className={`library-card__status library-card__status--${status}`}
-                      title={version?.error_message ?? undefined}
+                  <div className="library-card__top">
+                    <Link
+                      className="library-card__title"
+                      to="/reader/$paperId"
+                      params={{ paperId: item.paper.id }}
                     >
-                      {statusLabel}
-                    </span>
-                    {status === 'failed' ? (
+                      {item.paper.title}
+                    </Link>
+                    <span className="library-card__actions">
+                      {identifier ? (
+                        <span className="library-card__identifier">{identifier}</span>
+                      ) : null}
                       <button
+                        className="library-card__delete"
                         type="button"
-                        className="library-card__retry"
-                        disabled={retryingId === item.paper.id}
-                        onClick={() => void handleRetry(item.paper.id)}
+                        disabled={deletingPaperId === item.paper.id}
+                        onClick={() => void handleDeletePaper(item)}
+                        title="Удалить из библиотеки"
+                        aria-label={`Удалить «${item.paper.title}» из библиотеки`}
                       >
-                        <RotateCcw size={14} strokeWidth={2} />
-                        {retryingId === item.paper.id ? 'Повтор…' : 'Повторить'}
+                        {deletingPaperId === item.paper.id ? (
+                          <LoaderCircle className="spin" aria-hidden="true" size={15} />
+                        ) : (
+                          <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+                        )}
                       </button>
-                    ) : null}
+                    </span>
                   </div>
+                  {authors ? <div className="library-card__authors">{authors}</div> : null}
+                  {status === 'failed' ? (
+                    <button
+                      type="button"
+                      className="library-card__retry"
+                      disabled={retryingId === item.paper.id}
+                      onClick={() => void handleRetry(item.paper.id)}
+                    >
+                      <RotateCcw size={14} strokeWidth={2} />
+                      {retryingId === item.paper.id ? 'Повтор…' : 'Повторить обработку PDF'}
+                    </button>
+                  ) : null}
                   {status === 'failed' && version?.error_message ? (
                     <p className="library-card__error">{version.error_message}</p>
                   ) : null}
@@ -464,20 +522,6 @@ export function LibraryPage() {
                     </RichText>
                   ) : null}
                 </div>
-                <label className="library-card__folder-select">
-                  <span>Папка</span>
-                  <select
-                    value={item.folder_id ?? selectedFolderId}
-                    disabled={movingId === item.paper.id}
-                    onChange={(event) => void movePaper(item.paper.id, event.target.value)}
-                  >
-                    {folderOptions.map(({ folder, depth }) => (
-                      <option value={folder.id} key={folder.id}>
-                        {`${'— '.repeat(depth)}${folder.name}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
               </article>
             );
           })}

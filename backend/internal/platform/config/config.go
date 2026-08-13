@@ -39,6 +39,7 @@ type Config struct {
 
 	TranslationHTTPAddr      string
 	TranslationServiceURL    string
+	TranslationLLMModel      string
 	TranslationMaxChars      int
 	TranslationMaxConcurrent int
 
@@ -105,6 +106,7 @@ func Load() Config {
 
 		TranslationHTTPAddr:      getenv("TRANSLATION_HTTP_ADDR", ":8090"),
 		TranslationServiceURL:    getenv("TRANSLATION_SERVICE_URL", "http://localhost:8090"),
+		TranslationLLMModel:      getenv("TRANSLATION_LLM_MODEL", getenv("LLM_MODEL", "auto")),
 		TranslationMaxChars:      positiveInt(getenv("TRANSLATION_MAX_CHARS", "5000"), 5000),
 		TranslationMaxConcurrent: positiveInt(getenv("TRANSLATION_MAX_CONCURRENT", "8"), 8),
 

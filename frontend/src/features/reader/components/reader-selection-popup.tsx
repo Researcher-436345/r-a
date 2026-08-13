@@ -1,4 +1,4 @@
-import { Languages, MessageSquareText, NotebookPen, Sparkles, X } from 'lucide-react';
+import { LoaderCircle, MessageSquareText, NotebookPen, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 
 import type { ChatContextAttachment } from '../chat-context';
@@ -18,22 +18,18 @@ export interface ReaderSelection {
   anchor: { x: number; y: number };
 }
 
-type PopupMode = 'choose' | 'note' | 'translate' | 'explain';
+type PopupMode = 'choose' | 'note';
 
 interface ReaderSelectionPopupProps {
   selection: ReaderSelection | null;
   isSaving: boolean;
   isTranslating?: boolean;
   translation?: string | null;
-  isExplaining?: boolean;
-  explanation?: string | null;
   highlightColor: string;
   onHighlightColorChange: (color: string) => void;
   onClose: () => void;
   onSave: (payload: { note: string; quote: string; color: string }) => void;
   onAskAssistant: (attachment: ChatContextAttachment) => void;
-  onTranslate: (text: string) => void;
-  onExplain: (text: string) => void;
 }
 
 function buildAttachment(selection: ReaderSelection): ChatContextAttachment {
@@ -100,15 +96,11 @@ export function ReaderSelectionPopup({
   isSaving,
   isTranslating = false,
   translation = null,
-  isExplaining = false,
-  explanation = null,
   highlightColor,
   onHighlightColorChange,
   onClose,
   onSave,
   onAskAssistant,
-  onTranslate,
-  onExplain,
 }: ReaderSelectionPopupProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
@@ -168,7 +160,7 @@ export function ReaderSelectionPopup({
 
   useLayoutEffect(() => {
     updatePosition();
-  }, [selection, mode, translation, isTranslating, explanation, isExplaining, highlightColor, updatePosition]);
+  }, [selection, mode, translation, isTranslating, highlightColor, updatePosition]);
 
   useEffect(() => {
     if (!selection) {
@@ -242,22 +234,6 @@ export function ReaderSelectionPopup({
     onAskAssistant(buildAttachment(selection));
   };
 
-  const startExplain = () => {
-    setMode('explain');
-    const raw = selection.text.replace(/\s+/g, ' ').trim();
-    if (raw) {
-      onExplain(raw);
-    }
-  };
-
-  const startTranslate = () => {
-    setMode('translate');
-    const raw = selection.text.replace(/\s+/g, ' ').trim();
-    if (raw && Array.from(raw).length <= TRANSLATION_MAX_CHARS) {
-      onTranslate(raw);
-    }
-  };
-
   const selectedCharCount = Array.from(selection.text.replace(/\s+/g, ' ').trim()).length;
   const selectionTooLong = selectedCharCount > TRANSLATION_MAX_CHARS;
 
@@ -290,7 +266,7 @@ export function ReaderSelectionPopup({
       ref={rootRef}
       className={
         [
-          mode === 'note' || mode === 'translate' || mode === 'explain'
+          mode === 'note'
             ? 'reader-selection-popup reader-selection-popup--note'
             : 'reader-selection-popup',
           isOccluded ? 'reader-selection-popup--occluded' : null,
@@ -313,22 +289,9 @@ export function ReaderSelectionPopup({
               <MessageSquareText aria-hidden="true" size={15} strokeWidth={2} />
               В чат
             </button>
-            <button type="button" className="reader-selection-popup__tool" onClick={startExplain}>
-              <Sparkles aria-hidden="true" size={15} strokeWidth={2} />
-              Спросить AI
-            </button>
             <button type="button" className="reader-selection-popup__tool" onClick={() => setMode('note')}>
               <NotebookPen aria-hidden="true" size={15} strokeWidth={2} />
               Заметка
-            </button>
-            <button
-              type="button"
-              className="reader-selection-popup__tool"
-              onClick={startTranslate}
-              title={selectionTooLong ? `Максимум ${TRANSLATION_MAX_CHARS} символов` : undefined}
-            >
-              <Languages aria-hidden="true" size={15} strokeWidth={2} />
-              Перевод
             </button>
             <button
               type="button"
@@ -339,37 +302,23 @@ export function ReaderSelectionPopup({
               <X aria-hidden="true" size={15} strokeWidth={2} />
             </button>
           </div>
-        </div>
-      ) : mode === 'explain' ? (
-        <div className="reader-selection-popup__note">
-          <div className="reader-selection-popup__translation">
-            {isExplaining ? 'Думаю…' : explanation || 'Не удалось объяснить'}
-          </div>
-          <div className="reader-selection-popup__actions">
-            <button type="button" onClick={() => setMode('choose')} disabled={isExplaining}>
-              Назад
-            </button>
-            <button type="button" className="reader-selection-popup__save" onClick={onClose}>
-              Закрыть
-            </button>
-          </div>
-        </div>
-      ) : mode === 'translate' ? (
-        <div className="reader-selection-popup__note">
-          <div className="reader-selection-popup__translation">
+          <div className="reader-selection-popup__translation" aria-live="polite">
             {selectionTooLong
               ? `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
-              : isTranslating
-                ? 'Переводим…'
-                : translation || 'Не удалось перевести'}
-          </div>
-          <div className="reader-selection-popup__actions">
-            <button type="button" onClick={() => setMode('choose')} disabled={isTranslating}>
-              Назад
-            </button>
-            <button type="button" className="reader-selection-popup__save" onClick={onClose}>
-              Закрыть
-            </button>
+              : translation ||
+                (isTranslating ? (
+                  <span className="reader-selection-popup__translation-loading">
+                    <LoaderCircle
+                      className="reader-selection-popup__translation-loader"
+                      aria-hidden="true"
+                      size={12}
+                      strokeWidth={2.25}
+                    />
+                    Переводим…
+                  </span>
+                ) : (
+                  'Не удалось перевести'
+                ))}
           </div>
         </div>
       ) : (

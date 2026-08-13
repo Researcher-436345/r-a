@@ -1,20 +1,29 @@
 export const researchModes = ['web', 'deep'] as const;
 
 export type ResearchMode = (typeof researchModes)[number];
-
 export type ChatMessageRole = 'user' | 'assistant';
+
+export interface ResearchSource {
+  title: string;
+  url: string;
+  domain: string;
+  published_at: string | null;
+}
+
+export interface ResearchSourceProgress {
+  count: number;
+  sources: ResearchSource[];
+}
 
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
   content: string;
-  sources?: Array<{
-    title: string;
-    url: string;
-    domain: string;
-    published_at: string | null;
-  }>;
+  sources?: ResearchSource[];
   pending?: boolean;
+  progress?: string;
+  sourceProgress?: ResearchSourceProgress;
+  researchMode?: ResearchMode;
 }
 
 export function parseResearchMode(value: unknown): ResearchMode {

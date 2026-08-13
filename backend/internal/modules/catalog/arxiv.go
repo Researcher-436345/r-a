@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -91,16 +92,6 @@ func FetchArxivMetadata(ctx context.Context, id string) (ArxivPaper, error) {
 	return p, nil
 }
 
-var pdfHTTPClient = &http.Client{
-	Timeout: 90 * time.Second,
-	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		TLSHandshakeTimeout:   30 * time.Second,
-		ResponseHeaderTimeout: 30 * time.Second,
-		IdleConnTimeout:       90 * time.Second,
-	},
-}
-
 func DownloadPDF(ctx context.Context, url string) ([]byte, error) {
 	candidates := pdfURLCandidates(url)
 	var lastErr error
@@ -164,5 +155,22 @@ func downloadPDFOnce(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("PDF download returned %s", resp.Status)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 51<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, (50<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > 50<<20 {
+		return nil, fmt.Errorf("PDF is too large (max 50MB)")
+	}
+	if !hasPDFHeader(data) {
+		return nil, fmt.Errorf("download did not return a PDF")
+	}
+	return data, nil
+}
+
+func hasPDFHeader(data []byte) bool {
+	if len(data) > 1024 {
+		data = data[:1024]
+	}
+	return bytes.Contains(data, []byte("%PDF-"))
 }

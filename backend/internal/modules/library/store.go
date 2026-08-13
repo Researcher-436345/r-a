@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,12 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var ErrSystemFolderDeletion = errors.New("system folders cannot be deleted")
+
 var systemFolders = []struct {
 	Key  string
 	Name string
 }{
 	{Key: "want_to_read", Name: "Хочу прочитать"},
-	{Key: "reading", Name: "В процессе"},
+	{Key: "reading", Name: "Читаю сейчас"},
 	{Key: "other", Name: "Другое"},
 }
 
@@ -117,7 +120,12 @@ func (s Store) Patch(ctx context.Context, userID, paperID uuid.UUID, status *str
 
 func (s Store) EnsureSystemFolders(ctx context.Context, userID uuid.UUID) (map[string]uuid.UUID, error) {
 	for _, folder := range systemFolders {
-		if _, err := s.DB.Exec(ctx, `INSERT INTO library_folders (id,user_id,name,system_key) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,system_key) WHERE system_key IS NOT NULL DO NOTHING`, uuid.New(), userID, folder.Name, folder.Key); err != nil {
+		if _, err := s.DB.Exec(ctx, `
+			INSERT INTO library_folders (id,user_id,name,system_key)
+			VALUES ($1,$2,$3,$4)
+			ON CONFLICT (user_id,system_key) WHERE system_key IS NOT NULL
+			DO UPDATE SET name=EXCLUDED.name,updated_at=now()
+		`, uuid.New(), userID, folder.Name, folder.Key); err != nil {
 			return nil, err
 		}
 	}
@@ -197,6 +205,59 @@ func (s Store) CreateFolder(ctx context.Context, userID uuid.UUID, name string, 
 	folder := FolderOut{ID: uuid.New(), Name: name, ParentID: parentID, CreatedAt: time.Now()}
 	err := s.DB.QueryRow(ctx, `INSERT INTO library_folders (id,user_id,parent_id,name) VALUES ($1,$2,$3,$4) RETURNING created_at`, folder.ID, userID, parentID, name).Scan(&folder.CreatedAt)
 	return folder, err
+}
+
+func (s Store) DeleteFolder(ctx context.Context, userID, folderID uuid.UUID) (bool, error) {
+	system, err := s.EnsureSystemFolders(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	var systemKey *string
+	if err := tx.QueryRow(ctx, `SELECT system_key FROM library_folders WHERE id=$1 AND user_id=$2 FOR UPDATE`, folderID, userID).Scan(&systemKey); err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if systemKey != nil {
+		return false, ErrSystemFolderDeletion
+	}
+
+	otherID := system["other"]
+	if _, err := tx.Exec(ctx, `
+		WITH RECURSIVE subtree AS (
+			SELECT id FROM library_folders WHERE id=$1 AND user_id=$2
+			UNION ALL
+			SELECT child.id
+			FROM library_folders child
+			JOIN subtree parent ON child.parent_id=parent.id
+			WHERE child.user_id=$2
+		)
+		UPDATE user_library_items
+		SET folder_id=$3::uuid,status='read'
+		WHERE user_id=$2 AND folder_id IN (SELECT id FROM subtree)
+	`, folderID, userID, otherID); err != nil {
+		return false, err
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM library_folders WHERE id=$1 AND user_id=$2 AND system_key IS NULL`, folderID, userID)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s Store) Delete(ctx context.Context, userID, paperID uuid.UUID) (bool, error) {

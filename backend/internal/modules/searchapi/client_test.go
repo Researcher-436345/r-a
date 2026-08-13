@@ -14,7 +14,7 @@ func TestClientStreamsSSEEvents(t *testing.T) {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: delta\ndata: {\"content\":\"hi\"}\n\nevent: done\ndata: {\"status\":\"ok\"}\n\n"))
+		_, _ = w.Write([]byte("event: progress\ndata: {\"content\":\"checking sources\"}\n\nevent: source_progress\ndata: {\"count\":1,\"sources\":[]}\n\nevent: delta\ndata: {\"content\":\"hi\"}\n\nevent: done\ndata: {\"status\":\"ok\"}\n\n"))
 	}))
 	defer server.Close()
 	stream, err := (Client{BaseURL: server.URL}).Stream(context.Background(), []ProviderMessage{{Role: "user", Content: "q"}}, "web")
@@ -30,7 +30,7 @@ func TestClientStreamsSSEEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(names, []string{"delta", "done"}) {
+	if !reflect.DeepEqual(names, []string{"progress", "source_progress", "delta", "done"}) {
 		t.Fatalf("unexpected events %#v", names)
 	}
 }

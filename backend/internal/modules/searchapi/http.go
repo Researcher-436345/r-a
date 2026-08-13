@@ -23,6 +23,7 @@ type API struct {
 func (a API) Mount(r chi.Router) {
 	r.Get("/search/chats", a.listChats)
 	r.Get("/search/chats/{chatID}", a.getChat)
+	r.Delete("/search/chats/{chatID}", a.deleteChat)
 	r.Post("/search/chats/{chatID}/messages", a.sendMessage)
 }
 
@@ -53,6 +54,24 @@ func (a API) getChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, 200, chat)
+}
+
+func (a API) deleteChat(w http.ResponseWriter, r *http.Request) {
+	chatID, err := uuid.Parse(chi.URLParam(r, "chatID"))
+	if err != nil {
+		httpx.Error(w, 404, "Search chat not found")
+		return
+	}
+	deleted, err := a.store().Delete(r.Context(), identity.UserID(r), chatID)
+	if err != nil {
+		httpx.Error(w, 500, "Failed to delete search chat")
+		return
+	}
+	if !deleted {
+		httpx.Error(w, 404, "Search chat not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +155,16 @@ func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
 			}
 			answer.WriteString(payload.Content)
 			if err := writeSSE(w, "delta", payload); err != nil {
+				return err
+			}
+			flusher.Flush()
+		case "progress":
+			if _, err := fmt.Fprintf(w, "event: progress\ndata: %s\n\n", event.Data); err != nil {
+				return err
+			}
+			flusher.Flush()
+		case "source_progress":
+			if _, err := fmt.Fprintf(w, "event: source_progress\ndata: %s\n\n", event.Data); err != nil {
 				return err
 			}
 			flusher.Flush()

@@ -18,6 +18,8 @@ export const readerStrings: Record<
     download: string;
     bookmarkAdd: string;
     bookmarkRemove: string;
+    chooseFolder: string;
+    foldersLoading: string;
     tabAssistant: string;
     tabNotes: string;
     tabSimilar: string;
@@ -35,6 +37,8 @@ export const readerStrings: Record<
     download: 'Скачать PDF',
     bookmarkAdd: 'Добавить в «Хочу прочитать»',
     bookmarkRemove: 'Убрать из «Хочу прочитать»',
+    chooseFolder: 'Добавить в папку',
+    foldersLoading: 'Загружаем папки…',
     tabAssistant: 'Ассистент',
     tabNotes: 'Заметки',
     tabSimilar: 'Похожие',
@@ -52,6 +56,8 @@ export const readerStrings: Record<
     download: 'Download PDF',
     bookmarkAdd: 'Add to “Want to read”',
     bookmarkRemove: 'Remove from “Want to read”',
+    chooseFolder: 'Add to folder',
+    foldersLoading: 'Loading folders…',
     tabAssistant: 'Assistant',
     tabNotes: 'Notes',
     tabSimilar: 'Similar',
@@ -68,13 +74,13 @@ export const readerStrings: Record<
 export const readerPrompts: Record<Locale, string[]> = {
   ru: [
     'Объясни основную идею простыми словами',
-    'Чем QGF отличается от backprop-through-time?',
-    'Какие бенчмарки использовали в экспериментах?',
+    'Какие основные результаты получили авторы?',
+    'Какие связанные работы упоминаются в статье?',
   ],
   en: [
     'Explain the core idea in simple terms',
-    'How does QGF differ from backprop-through-time?',
-    'Which benchmarks were used in the experiments?',
+    'What were the authors’ main results?',
+    'Which related works are discussed in the paper?',
   ],
 };
 

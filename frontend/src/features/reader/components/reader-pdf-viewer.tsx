@@ -1,14 +1,17 @@
 import {
   Bookmark,
   BookmarkCheck,
+  Check,
   Download,
   FileText,
   LoaderCircle,
   Minus,
   Plus,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import type { LibraryFolder } from '../../library/api';
+import { flattenLibraryFolders, LibraryFolderIcon } from '../../library/folder-icons';
 import { useI18n } from '../../../shared/i18n/i18n-context';
 import { useTheme } from '../../../shared/theme/theme-context';
 import { readerStrings } from '../reader-data';
@@ -26,6 +29,12 @@ interface ReaderPdfViewerProps {
   pdfUrl?: string | null;
   pdfLoading?: boolean;
   pdfError?: string | null;
+  libraryFolders?: LibraryFolder[];
+  currentFolderId?: string | null;
+  foldersLoading?: boolean;
+  savingFolderId?: string | null;
+  folderError?: string | null;
+  onFolderSelect?: (folderId: string) => Promise<void>;
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
@@ -55,6 +64,12 @@ export function ReaderPdfViewer({
   pdfUrl,
   pdfLoading = false,
   pdfError = null,
+  libraryFolders = [],
+  currentFolderId = null,
+  foldersLoading = false,
+  savingFolderId = null,
+  folderError = null,
+  onFolderSelect,
   onTextSelect,
   focusAnnotation,
   onFocusComplete,
@@ -62,15 +77,21 @@ export function ReaderPdfViewer({
 }: ReaderPdfViewerProps) {
   const { locale } = useI18n();
   const { readerDark } = useTheme();
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false);
   const [pageCount, setPageCount] = useState(0);
   const [scale, setScale] = useState(1);
   /** Пока true — масштаб подстраивается под ширину области PDF */
   const [fitToWidth, setFitToWidth] = useState(true);
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
   const frameWrapRef = useRef<HTMLDivElement | null>(null);
+  const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
   const text = readerStrings[locale];
+  const isBookmarked = Boolean(currentFolderId);
   const BookmarkIcon = isBookmarked ? BookmarkCheck : Bookmark;
+  const folderChoices = useMemo(
+    () => flattenLibraryFolders(libraryFolders),
+    [libraryFolders],
+  );
   const zoomLabel = fitToWidth ? 'Fit' : `${Math.round(scale * 100)}%`;
   const resolvedTitle = title || 'Статья';
   const resolvedMeta = meta || '';
@@ -117,6 +138,28 @@ export function ReaderPdfViewer({
     };
   }, [applyFitToWidth, basePageWidth, fitToWidth, pdfUrl]);
 
+  useEffect(() => {
+    if (!isFolderMenuOpen) {
+      return;
+    }
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!bookmarkMenuRef.current?.contains(event.target as Node)) {
+        setIsFolderMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFolderMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isFolderMenuOpen]);
+
   const updateScale = (direction: -1 | 1) => {
     setFitToWidth(false);
     setScale((currentScale) => {
@@ -135,19 +178,75 @@ export function ReaderPdfViewer({
       aria-label="PDF viewer"
     >
       <div className="reader-toolbar">
-        <button
-          className={
-            isBookmarked
-              ? 'reader-bookmark-button reader-bookmark-button--active'
-              : 'reader-bookmark-button'
-          }
-          type="button"
-          title={isBookmarked ? text.bookmarkRemove : text.bookmarkAdd}
-          aria-label={isBookmarked ? text.bookmarkRemove : text.bookmarkAdd}
-          onClick={() => setIsBookmarked((value) => !value)}
-        >
-          <BookmarkIcon aria-hidden="true" size={19} strokeWidth={2} />
-        </button>
+        <div className="reader-bookmark-menu" ref={bookmarkMenuRef}>
+          <button
+            className={
+              isBookmarked
+                ? 'reader-bookmark-button reader-bookmark-button--active'
+                : 'reader-bookmark-button'
+            }
+            type="button"
+            title={text.bookmarkAdd}
+            aria-label={text.bookmarkAdd}
+            aria-haspopup="dialog"
+            aria-expanded={isFolderMenuOpen}
+            onClick={() => setIsFolderMenuOpen((value) => !value)}
+          >
+            <BookmarkIcon aria-hidden="true" size={19} strokeWidth={2} />
+          </button>
+          {isFolderMenuOpen ? (
+            <div className="reader-folder-popover" role="dialog" aria-label={text.chooseFolder}>
+              <div className="reader-folder-popover__heading">{text.chooseFolder}</div>
+              {foldersLoading ? (
+                <div className="reader-folder-popover__state">
+                  <LoaderCircle className="spin" aria-hidden="true" size={14} />
+                  {text.foldersLoading}
+                </div>
+              ) : (
+                <div className="reader-folder-popover__folders">
+                  {folderChoices.map(({ folder, depth }) => {
+                    const isCurrent = folder.id === currentFolderId;
+                    const isSaving = folder.id === savingFolderId;
+                    return (
+                      <button
+                        type="button"
+                        key={folder.id}
+                        className={isCurrent ? 'is-current' : undefined}
+                        disabled={Boolean(savingFolderId)}
+                        onClick={() => {
+                          if (!onFolderSelect) {
+                            return;
+                          }
+                          void onFolderSelect(folder.id)
+                            .then(() => setIsFolderMenuOpen(false))
+                            .catch(() => {
+                              // Ошибка показана внутри popover; оставляем его открытым.
+                            });
+                        }}
+                      >
+                        <span
+                          className="reader-folder-popover__label"
+                          style={{ paddingLeft: depth * 12 }}
+                        >
+                          <LibraryFolderIcon folder={folder} />
+                          <span>{folder.name}</span>
+                        </span>
+                        {isSaving ? (
+                          <LoaderCircle className="spin" aria-hidden="true" size={14} />
+                        ) : isCurrent ? (
+                          <Check aria-hidden="true" size={14} strokeWidth={2.2} />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {folderError ? (
+                <div className="reader-folder-popover__error">{folderError}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <div className="reader-toolbar__divider" />
 
