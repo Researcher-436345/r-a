@@ -13,6 +13,7 @@ type TranslationKey =
   | 'app.logo'
   | 'nav.search'
   | 'nav.assistant'
+  | 'nav.events'
   | 'nav.settings'
   | 'nav.feedback'
   | 'nav.theme'
@@ -64,6 +65,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'app.logo': 'r-a',
     'nav.search': 'Исследовать',
     'nav.assistant': 'Ассистент',
+    'nav.events': 'События',
     'nav.settings': 'Настройки',
     'nav.feedback': 'Обратная связь',
     'nav.theme': 'Тема',
@@ -114,6 +116,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     'app.logo': 'r-a',
     'nav.search': 'Explore',
     'nav.assistant': 'Assistant',
+    'nav.events': 'Events',
     'nav.settings': 'Settings',
     'nav.feedback': 'Feedback',
     'nav.theme': 'Theme',

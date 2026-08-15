@@ -94,6 +94,10 @@ func Router(d Deps) http.Handler {
 				OpenAlexMailto:        d.Config.OpenAlexMailto,
 				SemanticScholarAPIKey: d.Config.SemanticScholarAPIKey,
 			},
+			EventProvider: feed.EventDiscoveryClient{
+				BaseURL: d.Config.WebSearchServiceURL,
+				Token:   d.Config.InternalToken,
+			},
 		}}.Mount(r)
 		searchapi.API{DB: d.DB, Provider: searchapi.Client{
 			BaseURL: d.Config.WebSearchServiceURL,

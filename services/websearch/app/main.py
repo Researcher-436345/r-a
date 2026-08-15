@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -80,6 +80,24 @@ class Source(BaseModel):
     url: str
     domain: str
     published_at: str | None = None
+
+
+class DiscoveredEvent(BaseModel):
+    id: str = Field(min_length=2, max_length=100)
+    title: str = Field(min_length=2, max_length=160)
+    summary: str = Field(min_length=10, max_length=500)
+    start_date: str
+    end_date: str
+    city: str = Field(max_length=120)
+    country: str = Field(max_length=120)
+    format: Literal["in_person", "online", "hybrid"]
+    kind: Literal["conference", "meetup"]
+    region: Literal["ru", "global"]
+    topics: list[str] = Field(default_factory=list, max_length=8)
+    url: str
+    registration_url: str | None = None
+    source_url: str
+    featured: bool = False
 
 
 def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
@@ -199,6 +217,23 @@ def provider_body(payload: SearchRequest) -> dict[str, Any]:
     else:
         body["reasoning"] = {"effort": "high", "summary": "concise"}
     return body
+
+
+def extract_json_object(value: str) -> dict[str, Any]:
+    text = value.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        last_fence = text.rfind("```")
+        if first_newline >= 0 and last_fence > first_newline:
+            text = text[first_newline + 1 : last_fence].strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("event discovery returned no JSON object")
+    parsed = json.loads(text[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("event discovery returned invalid JSON")
+    return parsed
 
 
 def reasoning_summary_fragments(chunk: dict[str, Any]) -> list[str]:
@@ -322,3 +357,76 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/v1/events/discover", dependencies=[Depends(require_internal_token)])
+async def discover_events() -> dict[str, Any]:
+    if not LLM_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="event discovery is not configured: add WEBSEARCH_LLM_API_KEY or LLM_API_KEY",
+        )
+    today = date.today().isoformat()
+    prompt = f"""
+Today is {today}. Search official organizer websites for confirmed upcoming AI, ML,
+data, software engineering, cloud, security and developer conferences or meetups.
+Cover both major worldwide events (especially NeurIPS, ICML, ICLR, CVPR, ACL,
+AAAI and leading industry conferences) and Russian events (especially Yandex
+Events, Practical ML Conf, Yandex Scale, BigTechNight, Turbo ML Conf,
+Yandex ML Global Recap, HighLoad++, AI Journey and other major events).
+
+Return events whose end date is today or later, up to 30 items, sorted by start
+date. Include an event only when its exact date is confirmed by an official
+organizer page. Never infer a recurring event's date from a previous year.
+Use the official event page for url/source_url. Russian copy should be concise.
+Return only one JSON object with this exact shape:
+{{"items":[{{"id":"lowercase-slug-year","title":"...","summary":"Russian summary",
+"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","city":"...","country":"...",
+"format":"in_person|online|hybrid","kind":"conference|meetup","region":"ru|global",
+"topics":["..."],"url":"https://...","registration_url":null,
+"source_url":"https://...","featured":false}}]}}
+""".strip()
+    body = {
+        "model": LLM_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You verify event dates using web search and output strict JSON only.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+        "tools": [
+            {
+                "type": "openrouter:web_search",
+                "parameters": {"engine": "auto", "max_results": 10, "max_total_results": 40},
+            },
+            {
+                "type": "openrouter:web_fetch",
+                "parameters": {"max_uses": 20, "max_content_tokens": 80_000},
+            },
+        ],
+    }
+    headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
+    if "openrouter.ai" in LLM_BASE_URL:
+        headers["HTTP-Referer"] = LLM_HTTP_REFERER
+        headers["X-Title"] = LLM_APP_TITLE
+    timeout = httpx.Timeout(LLM_TIMEOUT_SECONDS, connect=20.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
+        )
+    if response.status_code // 100 != 2:
+        raise HTTPException(status_code=502, detail="event discovery provider failed")
+    try:
+        content = response.json()["choices"][0]["message"]["content"]
+        raw_items = extract_json_object(str(content)).get("items", [])
+        if not isinstance(raw_items, list):
+            raise ValueError("items must be a list")
+        items = [DiscoveredEvent.model_validate(item).model_dump() for item in raw_items[:30]]
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail="event discovery returned invalid data") from exc
+    return {
+        "items": items,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }

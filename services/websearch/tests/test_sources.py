@@ -10,9 +10,18 @@ from app.main import (
     markdown_sources,
     merge_sources,
     provider_body,
+    extract_json_object,
     reasoning_summary_fragments,
     system_prompt,
 )
+
+
+def test_event_discovery_json_is_extracted_from_plain_text_or_fence() -> None:
+    expected = {"items": [{"id": "neurips-2026"}]}
+    assert extract_json_object('{"items":[{"id":"neurips-2026"}]}') == expected
+    assert extract_json_object(
+        '```json\n{"items":[{"id":"neurips-2026"}]}\n```'
+    ) == expected
 
 
 def test_sources_are_normalized_and_deduplicated() -> None:

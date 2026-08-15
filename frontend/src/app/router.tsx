@@ -15,6 +15,7 @@ import { HomePage } from '../pages/home/home-page';
 import { AddPaperPage } from '../pages/library/add-paper-page';
 import { LibraryPage } from '../pages/library/library-page';
 import { ReaderPage } from '../pages/reader/reader-page';
+import { EventsPage } from '../pages/events/events-page';
 import { I18nProvider } from '../shared/i18n/i18n-context';
 import { ThemeProvider } from '../shared/theme/theme-context';
 import { AppLayout } from './layout/app-layout';
@@ -96,6 +97,12 @@ const libraryRoute = createRoute({
   }),
 });
 
+const eventsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/events',
+  component: EventsPage,
+});
+
 const addPaperRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library/add',
@@ -122,6 +129,7 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   appRoute.addChildren([
     homeRoute,
+    eventsRoute,
     chatRoute,
     libraryRoute,
     addPaperRoute,

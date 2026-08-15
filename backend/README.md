@@ -17,7 +17,7 @@ internal/
     catalog/           # papers, PDF, arxiv/doi/upload
     library/           # user_library_items
     annotations/       # highlights / notes
-    feed/              # trending + citation enrich (OpenAlex / optional S2)
+    feed/              # trending papers, daily tech events, citation enrich
     assistant/         # chat / explain + translation service client
     translation/       # validation + OpenAI-compatible provider adapter
 ```

@@ -14,6 +14,16 @@ type API struct {
 
 func (a API) Mount(r chi.Router) {
 	r.Get("/feed/trending", a.trending)
+	r.Get("/feed/events", a.events)
+}
+
+func (a API) events(w http.ResponseWriter, r *http.Request) {
+	catalog, err := a.Service.UpcomingEvents(r.Context())
+	if err != nil {
+		httpx.Error(w, 502, "Failed to load events")
+		return
+	}
+	httpx.JSON(w, 200, catalog)
 }
 
 func (a API) trending(w http.ResponseWriter, r *http.Request) {

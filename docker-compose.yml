@@ -233,9 +233,14 @@ services:
     environment:
       HTTP_ADDR: ":8106"
       REDIS_URL: redis://redis:6379/0
+      WEBSEARCH_SERVICE_URL: http://websearch:8092
+      EVENT_DISCOVERY_ENABLED: ${EVENT_DISCOVERY_ENABLED:-false}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     entrypoint: ["feed"]
     depends_on:
       redis:
+        condition: service_healthy
+      websearch:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8106/health"]

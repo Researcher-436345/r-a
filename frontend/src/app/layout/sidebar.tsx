@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   BookMarked,
+  CalendarDays,
   Globe,
   LogOut,
   MessageSquare,
@@ -30,8 +31,10 @@ interface SidebarPrimaryNavProps {
   isCollapsed: boolean;
   isExploreCurrent: boolean;
   isAssistantActive: boolean;
+  isEventsActive: boolean;
   searchLabel: string;
   assistantLabel: string;
+  eventsLabel: string;
 }
 
 interface SidebarFooterProps {
@@ -96,8 +99,10 @@ export function Sidebar({
         isCollapsed={isCollapsed}
         isExploreCurrent={pathname === '/'}
         isAssistantActive={pathname.startsWith('/chat/')}
+        isEventsActive={pathname === '/events'}
         searchLabel={t('nav.search')}
         assistantLabel={t('nav.assistant')}
+        eventsLabel={t('nav.events')}
       />
 
       <SidebarFooter
@@ -119,8 +124,10 @@ function SidebarPrimaryNav({
   isCollapsed,
   isExploreCurrent,
   isAssistantActive,
+  isEventsActive,
   searchLabel,
   assistantLabel,
+  eventsLabel,
 }: SidebarPrimaryNavProps) {
   return (
     <nav className="sidebar__nav" aria-label="Primary navigation">
@@ -137,6 +144,21 @@ function SidebarPrimaryNav({
       >
         <Globe aria-hidden="true" size={18} strokeWidth={2} />
         {!isCollapsed ? <span>{searchLabel}</span> : null}
+      </Link>
+
+      <Link
+        to="/events"
+        className={
+          isEventsActive
+            ? 'sidebar__nav-button sidebar__nav-button--active'
+            : 'sidebar__nav-button'
+        }
+        title={eventsLabel}
+        aria-label={eventsLabel}
+        aria-current={isEventsActive ? 'page' : undefined}
+      >
+        <CalendarDays aria-hidden="true" size={18} strokeWidth={2} />
+        {!isCollapsed ? <span>{eventsLabel}</span> : null}
       </Link>
 
       <Link

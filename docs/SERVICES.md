@@ -14,7 +14,7 @@ Last refreshed: 2026-08-11
 | library | 8103 | `/library` |
 | annotations | 8104 | annotations CRUD |
 | assistant | 8105 | chat SSE, explain, models, translate proxy |
-| feed | 8106 | `/feed/trending` |
+| feed | 8106 | `/feed/trending`, `/feed/events` |
 | searchapi | 8107 | `/search/*`, chat ownership/history, SSE proxy |
 | translator | 8090 | перевод |
 | parser | 8091 | PDF→text |

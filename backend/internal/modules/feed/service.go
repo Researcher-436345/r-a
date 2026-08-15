@@ -17,8 +17,9 @@ import (
 )
 
 type Service struct {
-	Redis     *redis.Client
-	Citations CitationConfig
+	Redis         *redis.Client
+	Citations     CitationConfig
+	EventProvider EventProvider
 }
 
 type SortMode string
