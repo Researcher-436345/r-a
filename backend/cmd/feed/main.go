@@ -35,7 +35,7 @@ func main() {
 		go service.StartEventRefreshLoop(context.Background())
 		log.Print("automatic event discovery is enabled")
 	} else {
-		log.Print("automatic event discovery is disabled; serving curated events only")
+		log.Print("automatic event discovery is disabled; serving cached and curated events")
 	}
 
 	r := chi.NewRouter()

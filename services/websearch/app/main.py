@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
+import time
 from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
 from typing import Any, Literal
@@ -15,6 +18,7 @@ from pydantic import BaseModel, Field
 ResearchMode = Literal["web", "deep"]
 
 app = FastAPI(title="researcher-websearch", version="0.1.0")
+logger = logging.getLogger("uvicorn.error")
 
 LLM_BASE_URL = os.getenv(
     "WEBSEARCH_LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1"
@@ -26,6 +30,7 @@ DEEP_LLM_MODEL = os.getenv(
 ).strip()
 LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_TIMEOUT_SECONDS", "180"))
 DEEP_LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_DEEP_TIMEOUT_SECONDS", "600"))
+EVENT_DISCOVERY_TIMEOUT_SECONDS = float(os.getenv("EVENT_DISCOVERY_TIMEOUT_SECONDS", "360"))
 LLM_HTTP_REFERER = os.getenv("LLM_HTTP_REFERER", "http://localhost:5173")
 LLM_APP_TITLE = os.getenv("LLM_APP_TITLE", "Researcher")
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
@@ -85,7 +90,7 @@ class Source(BaseModel):
 class DiscoveredEvent(BaseModel):
     id: str = Field(min_length=2, max_length=100)
     title: str = Field(min_length=2, max_length=160)
-    summary: str = Field(min_length=10, max_length=500)
+    summary: str = Field(min_length=40, max_length=360)
     start_date: str
     end_date: str
     city: str = Field(max_length=120)
@@ -98,6 +103,17 @@ class DiscoveredEvent(BaseModel):
     registration_url: str | None = None
     source_url: str
     featured: bool = False
+
+
+class KnownEvent(BaseModel):
+    id: str = Field(min_length=2, max_length=100)
+    title: str = Field(min_length=2, max_length=160)
+    start_date: str
+    url: str
+
+
+class EventDiscoveryRequest(BaseModel):
+    known_events: list[KnownEvent] = Field(default_factory=list, max_length=100)
 
 
 def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
@@ -236,6 +252,96 @@ def extract_json_object(value: str) -> dict[str, Any]:
     return parsed
 
 
+EVENT_MONTH_MARKERS = {
+    1: ("january", "jan", "январ"),
+    2: ("february", "feb", "феврал"),
+    3: ("march", "mar", "март"),
+    4: ("april", "apr", "апрел"),
+    5: ("may", "май", "мая"),
+    6: ("june", "jun", "июн"),
+    7: ("july", "jul", "июл"),
+    8: ("august", "aug", "август"),
+    9: ("september", "sep", "sept", "сентябр"),
+    10: ("october", "oct", "октябр"),
+    11: ("november", "nov", "ноябр"),
+    12: ("december", "dec", "декабр"),
+}
+
+
+def canonical_event_source_url(value: str) -> str:
+    parsed = urlparse(value.strip())
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    path = parsed.path.rstrip("/") or "/"
+    return f"{host}{path}"
+
+
+def cited_date_texts(annotations: list[Any]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for annotation in annotations:
+        if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
+            continue
+        citation = annotation.get("url_citation")
+        if not isinstance(citation, dict):
+            continue
+        url = str(citation.get("url") or "")
+        content = str(citation.get("content") or "").lower()
+        key = canonical_event_source_url(url)
+        if key and content:
+            result.setdefault(key, []).append(content)
+    return result
+
+
+def citation_mentions_date(content: str, value: date) -> bool:
+    year = str(value.year)
+    day = str(value.day)
+    numeric = re.search(
+        rf"(?:\b{year}[-./]0?{value.month}[-./]0?{value.day}\b|"
+        rf"\b0?{value.day}[-./]0?{value.month}[-./]{year}\b)",
+        content,
+    )
+    if numeric:
+        return True
+    has_year = re.search(rf"\b{year}\b", content) is not None
+    has_day = re.search(rf"\b{day}(?:st|nd|rd|th)?\b", content) is not None
+    has_month = any(marker in content for marker in EVENT_MONTH_MARKERS[value.month])
+    return has_year and has_day and has_month
+
+
+def citation_confirms_event_dates(event: DiscoveredEvent, annotations: list[Any]) -> bool:
+    try:
+        start = date.fromisoformat(event.start_date)
+        end = date.fromisoformat(event.end_date)
+    except ValueError:
+        return False
+    texts = cited_date_texts(annotations).get(canonical_event_source_url(event.source_url), [])
+    return any(
+        citation_mentions_date(content, start) and citation_mentions_date(content, end)
+        for content in texts
+    )
+
+
+def validate_discovered_events(
+    raw_items: list[Any],
+    annotations: list[Any] | None = None,
+    *,
+    require_date_citation: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    items: list[dict[str, Any]] = []
+    rejected = 0
+    for raw_item in raw_items[:50]:
+        try:
+            event = DiscoveredEvent.model_validate(raw_item)
+            if require_date_citation and not citation_confirms_event_dates(
+                event, annotations or []
+            ):
+                rejected += 1
+                continue
+            items.append(event.model_dump())
+        except (TypeError, ValueError):
+            rejected += 1
+    return items, rejected
+
+
 def reasoning_summary_fragments(chunk: dict[str, Any]) -> list[str]:
     fragments: list[str] = []
     for choice in chunk.get("choices") or []:
@@ -359,26 +465,68 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
     )
 
 
-@app.post("/v1/events/discover", dependencies=[Depends(require_internal_token)])
-async def discover_events() -> dict[str, Any]:
-    if not LLM_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="event discovery is not configured: add WEBSEARCH_LLM_API_KEY or LLM_API_KEY",
-        )
-    today = date.today().isoformat()
+def event_discovery_body(
+    today: date | None = None,
+    known_events: list[KnownEvent] | None = None,
+) -> dict[str, Any]:
+    current_date = (today or date.today()).isoformat()
+    known = [item.model_dump() for item in (known_events or [])]
+    known_json = json.dumps(known, ensure_ascii=False, separators=(",", ":"))
     prompt = f"""
-Today is {today}. Search official organizer websites for confirmed upcoming AI, ML,
-data, software engineering, cloud, security and developer conferences or meetups.
-Cover both major worldwide events (especially NeurIPS, ICML, ICLR, CVPR, ACL,
-AAAI and leading industry conferences) and Russian events (especially Yandex
-Events, Practical ML Conf, Yandex Scale, BigTechNight, Turbo ML Conf,
-Yandex ML Global Recap, HighLoad++, AI Journey and other major events).
+Today is {current_date}. Build a broad, practical calendar of upcoming technology
+events. Search official organizer websites and official event pages. The known
+catalog is included below. Prioritize events missing from it; revisit a known
+event only when an official source confirms materially newer dates or links.
 
-Return events whose end date is today or later, up to 30 items, sorted by start
-date. Include an event only when its exact date is confirmed by an official
-organizer page. Never infer a recurring event's date from a previous year.
-Use the official event page for url/source_url. Russian copy should be concise.
+KNOWN_CATALOG_JSON:
+{known_json}
+
+PRIORITY 1 — RUSSIA AND RUSSIAN-SPEAKING TECH COMMUNITY (broad coverage):
+- Find useful conferences and public meetups in AI, ML, data, backend, frontend,
+  mobile, DevOps, cloud, infrastructure, security, product and engineering.
+- Cover Moscow, Saint Petersburg and other Russian cities, plus online events
+  intended for Russian-speaking engineers.
+- Check official calendars and event pages of Yandex, VK Tech, Sber, T-Bank,
+  Ozon Tech, AvitoTech, MTS, Kaspersky, Positive Technologies, Selectel, ITMO,
+  HSE, Skoltech and major independent communities and conference organizers.
+- Specifically consider BigTechNight, Turbo ML Conf, Yandex events and recaps,
+  Practical ML Conf, HighLoad++, AI Journey, TeamLead Conf, Data Fest and major
+  local AI/ML, security and engineering meetups.
+
+PRIORITY 2 — GLOBAL EVENTS (flagships only):
+- Include only internationally significant research or industry conferences,
+  such as NeurIPS, ICML, ICLR, CVPR, ACL, EMNLP, AAAI, KDD, SIGIR, The Web
+  Conference, NVIDIA GTC, KubeCon, AWS re:Invent, Google Cloud Next, Microsoft
+  Build/Ignite, Black Hat and DEF CON when exact future dates are confirmed.
+
+SEARCH RULES:
+- Use varied queries and do not repeat a failed or rate-limited query.
+- Return only events whose end_date is today or later.
+- An exact date must be confirmed by an official organizer page. Never infer a
+  recurring event's date from a previous year or an unofficial aggregator.
+- source_url must be the exact official page whose web-search citation visibly
+  contains the claimed event dates. A generic organizer homepage, an event page
+  without a published date, or a model assumption is not evidence; omit the
+  event in all three cases.
+- Return at most 50 unique event editions, sorted by start_date.
+- One conference edition is one item. Never return satellites, venues, tracks,
+  workshops, tutorials or individual conference days as separate events. Merge
+  multiple locations into the main conference record.
+- If the search limit is reached, immediately return all already verified items
+  as valid JSON; do not explain the limitation and do not keep retrying.
+
+UNIFIED OUTPUT STYLE:
+- title: official event name, without marketing suffixes.
+- summary: exactly one neutral, informative Russian sentence, about 100–240
+  characters, ending with punctuation; do not repeat dates, city or country.
+- city and country: Russian-language names. For a multi-location event, join
+  locations consistently with ` · `.
+- region: `ru` for events in Russia or primarily for the Russian-speaking tech
+  community; `global` for all international events.
+- format, kind and region must use only the enum values from the schema.
+- url and source_url must point to official pages; registration_url is the
+  official registration page or null.
+
 Return only one JSON object with this exact shape:
 {{"items":[{{"id":"lowercase-slug-year","title":"...","summary":"Russian summary",
 "start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","city":"...","country":"...",
@@ -395,37 +543,95 @@ Return only one JSON object with this exact shape:
             },
             {"role": "user", "content": prompt},
         ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.1,
+        "max_completion_tokens": 12_000,
+        "usage": {"include": True},
+        "stop_server_tools_when": [
+            {"type": "step_count_is", "step_count": 24},
+            {"type": "max_cost", "max_cost_in_dollars": 0.08},
+        ],
         "stream": False,
         "tools": [
             {
                 "type": "openrouter:web_search",
-                "parameters": {"engine": "auto", "max_results": 10, "max_total_results": 40},
-            },
-            {
-                "type": "openrouter:web_fetch",
-                "parameters": {"max_uses": 20, "max_content_tokens": 80_000},
+                "parameters": {
+                    "engine": "exa",
+                    "max_results": 5,
+                    "max_total_results": 50,
+                    "search_context_size": "low",
+                },
             },
         ],
     }
+    return body
+
+
+@app.post("/v1/events/discover", dependencies=[Depends(require_internal_token)])
+async def discover_events(request: EventDiscoveryRequest) -> dict[str, Any]:
+    if not LLM_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="event discovery is not configured: add WEBSEARCH_LLM_API_KEY or LLM_API_KEY",
+        )
+    body = event_discovery_body(known_events=request.known_events)
     headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
     if "openrouter.ai" in LLM_BASE_URL:
         headers["HTTP-Referer"] = LLM_HTTP_REFERER
         headers["X-Title"] = LLM_APP_TITLE
-    timeout = httpx.Timeout(LLM_TIMEOUT_SECONDS, connect=20.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(
-            f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
-        )
+    timeout = httpx.Timeout(EVENT_DISCOVERY_TIMEOUT_SECONDS, connect=20.0)
+    started = time.monotonic()
+    logger.info("event discovery started: model=%s", LLM_MODEL)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
+            )
+    except httpx.TimeoutException as exc:
+        elapsed = time.monotonic() - started
+        logger.warning("event discovery timed out after %.1fs", elapsed)
+        raise HTTPException(status_code=504, detail="event discovery provider timed out") from exc
+    except httpx.RequestError as exc:
+        logger.warning("event discovery request failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="event discovery provider is unavailable") from exc
     if response.status_code // 100 != 2:
+        logger.warning("event discovery provider returned status=%d", response.status_code)
         raise HTTPException(status_code=502, detail="event discovery provider failed")
     try:
-        content = response.json()["choices"][0]["message"]["content"]
+        provider_payload = response.json()
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("event discovery provider returned non-JSON data")
+        raise HTTPException(status_code=502, detail="event discovery returned invalid data") from exc
+    usage = provider_payload.get("usage") or {}
+    tool_usage = usage.get("server_tool_use_details") or usage.get("server_tool_use") or {}
+    logger.info(
+        "event discovery provider completed: elapsed=%.1fs total_tokens=%s cost=%s searches=%s",
+        time.monotonic() - started,
+        usage.get("total_tokens", "unknown"),
+        usage.get("cost", "unknown"),
+        tool_usage.get("web_search_requests", "unknown"),
+    )
+    try:
+        message = provider_payload["choices"][0]["message"]
+        content = message["content"]
         raw_items = extract_json_object(str(content)).get("items", [])
         if not isinstance(raw_items, list):
             raise ValueError("items must be a list")
-        items = [DiscoveredEvent.model_validate(item).model_dump() for item in raw_items[:30]]
+        items, rejected = validate_discovered_events(
+            raw_items,
+            message.get("annotations") or [],
+            require_date_citation=True,
+        )
+        if raw_items and not items:
+            raise ValueError("all discovered events failed validation")
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("event discovery returned an invalid response")
         raise HTTPException(status_code=502, detail="event discovery returned invalid data") from exc
+    logger.info(
+        "event discovery parsed: accepted=%d rejected=%d",
+        len(items),
+        rejected,
+    )
     return {
         "items": items,
         "generated_at": datetime.now(timezone.utc).isoformat(),

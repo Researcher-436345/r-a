@@ -5,15 +5,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
-const eventsCacheVersion = "v1"
+const (
+	eventsCacheVersion  = "v2"
+	legacyCacheVersion  = "v1"
+	eventRefreshTimeout = 7 * time.Minute
+	eventRefreshLockTTL = 8 * time.Minute
+)
 
 var moscowTime = time.FixedZone("Europe/Moscow", 3*60*60)
 
@@ -43,7 +50,7 @@ type EventCatalog struct {
 }
 
 type EventProvider interface {
-	Discover(context.Context) ([]Event, error)
+	Discover(context.Context, []Event) ([]Event, error)
 }
 
 type EventDiscoveryClient struct {
@@ -52,12 +59,30 @@ type EventDiscoveryClient struct {
 	HTTP    *http.Client
 }
 
-func (c EventDiscoveryClient) Discover(ctx context.Context) ([]Event, error) {
+func (c EventDiscoveryClient) Discover(ctx context.Context, known []Event) ([]Event, error) {
+	type knownEvent struct {
+		ID        string `json:"id"`
+		Title     string `json:"title"`
+		StartDate string `json:"start_date"`
+		URL       string `json:"url"`
+	}
+	discoveryRequest := struct {
+		KnownEvents []knownEvent `json:"known_events"`
+	}{KnownEvents: make([]knownEvent, 0, len(known))}
+	for _, item := range known {
+		discoveryRequest.KnownEvents = append(discoveryRequest.KnownEvents, knownEvent{
+			ID: item.ID, Title: item.Title, StartDate: item.StartDate, URL: item.URL,
+		})
+	}
+	body, err := json.Marshal(discoveryRequest)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		strings.TrimRight(c.BaseURL, "/")+"/v1/events/discover",
-		bytes.NewReader([]byte("{}")),
+		bytes.NewReader(body),
 	)
 	if err != nil {
 		return nil, err
@@ -68,7 +93,7 @@ func (c EventDiscoveryClient) Discover(ctx context.Context) ([]Event, error) {
 	}
 	client := c.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: 3 * time.Minute}
+		client = &http.Client{Timeout: 380 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -89,57 +114,168 @@ func (c EventDiscoveryClient) Discover(ctx context.Context) ([]Event, error) {
 
 func (f Service) UpcomingEvents(ctx context.Context) (EventCatalog, error) {
 	now := time.Now().In(moscowTime)
-	cacheKey := fmt.Sprintf("feed:events:%s:%s", eventsCacheVersion, now.Format("2006-01-02"))
-	if f.Redis != nil {
-		if raw, err := f.Redis.Get(ctx, cacheKey).Bytes(); err == nil {
-			var cached EventCatalog
-			if json.Unmarshal(raw, &cached) == nil && len(cached.Items) > 0 {
-				return cached, nil
-			}
-		}
+	if cached, ok := f.cachedEventCatalog(ctx, now); ok {
+		// Curated entries are authoritative. Reconcile cached discovery data on
+		// every read so a model can add a missing series but never overwrite a
+		// manually verified date, location or description.
+		cached.Items = futureEvents(mergeEvents(curatedEvents(), cached.Items, now), now)
+		cached.NextUpdateAt = nextEventRefresh(now)
+		f.storeEventCatalog(ctx, cached)
+		return cached, nil
 	}
-	return f.RefreshEvents(ctx)
+
+	// Event discovery is deliberately never called from an HTTP request. The
+	// page gets the curated catalog immediately while the background loop owns
+	// all potentially slow and billable provider calls.
+	catalog := buildEventCatalog(curatedEvents(), now, false)
+	f.storeEventCatalog(ctx, catalog)
+	return catalog, nil
 }
 
 func (f Service) RefreshEvents(ctx context.Context) (EventCatalog, error) {
 	now := time.Now().In(moscowTime)
+	release, acquired := f.acquireEventRefreshLock(ctx, now)
+	if !acquired {
+		if cached, ok := f.cachedEventCatalog(ctx, now); ok {
+			return cached, nil
+		}
+		return buildEventCatalog(curatedEvents(), now, false), nil
+	}
+	defer release()
+
 	items := curatedEvents()
 	automatic := false
+	if cached, ok := f.cachedEventCatalog(ctx, now); ok {
+		// Previously discovered events are part of the durable catalog. A later
+		// provider failure or an incomplete result must never remove them.
+		items = mergeEvents(items, cached.Items, now)
+		automatic = cached.Automatic
+	}
 	if f.EventProvider != nil {
-		discovered, err := f.EventProvider.Discover(ctx)
+		discovered, err := f.EventProvider.Discover(ctx, items)
 		if err == nil {
 			items = mergeEvents(items, discovered, now)
 			automatic = true
+			log.Printf("event discovery completed: received=%d catalog=%d", len(discovered), len(items))
+		} else {
+			log.Printf("event discovery failed; keeping curated catalog: %v", err)
 		}
 	}
-	items = futureEvents(items, now)
-	catalog := EventCatalog{
-		Items:        items,
+	catalog := buildEventCatalog(items, now, automatic)
+	f.storeEventCatalog(ctx, catalog)
+	return catalog, nil
+}
+
+func buildEventCatalog(items []Event, now time.Time, automatic bool) EventCatalog {
+	return EventCatalog{
+		Items:        futureEvents(items, now),
 		UpdatedAt:    now,
 		NextUpdateAt: nextEventRefresh(now),
 		Automatic:    automatic,
 	}
-	if f.Redis != nil {
-		if raw, err := json.Marshal(catalog); err == nil {
-			cacheKey := fmt.Sprintf("feed:events:%s:%s", eventsCacheVersion, now.Format("2006-01-02"))
-			ttl := time.Until(catalog.NextUpdateAt.Add(time.Hour))
-			if ttl < time.Hour {
-				ttl = time.Hour
-			}
-			_ = f.Redis.Set(ctx, cacheKey, raw, ttl).Err()
+}
+
+func eventCacheKey() string {
+	return fmt.Sprintf("feed:events:%s:catalog", eventsCacheVersion)
+}
+
+func legacyEventCacheKey(now time.Time) string {
+	return fmt.Sprintf("feed:events:%s:%s", legacyCacheVersion, now.In(moscowTime).Format("2006-01-02"))
+}
+
+func (f Service) cachedEventCatalog(ctx context.Context, now time.Time) (EventCatalog, bool) {
+	if f.Redis == nil {
+		return EventCatalog{}, false
+	}
+	if cached, ok := f.readEventCatalog(ctx, eventCacheKey()); ok {
+		return cached, true
+	}
+
+	// Migrate the richer of today's and yesterday's old daily caches. This
+	// keeps already paid-for discovery results when deploying the durable key.
+	legacy := make([]EventCatalog, 0, 2)
+	for _, day := range []time.Time{now, now.AddDate(0, 0, -1)} {
+		if cached, ok := f.readEventCatalog(ctx, legacyEventCacheKey(day)); ok {
+			legacy = append(legacy, cached)
 		}
 	}
-	return catalog, nil
+	if len(legacy) == 0 {
+		return EventCatalog{}, false
+	}
+	cached := preferredEventCatalog(legacy)
+	f.storeEventCatalog(ctx, cached)
+	log.Printf("migrated legacy event catalog to durable cache: items=%d", len(cached.Items))
+	return cached, true
+}
+
+func (f Service) readEventCatalog(ctx context.Context, key string) (EventCatalog, bool) {
+	raw, err := f.Redis.Get(ctx, key).Bytes()
+	if err != nil {
+		return EventCatalog{}, false
+	}
+	var cached EventCatalog
+	if json.Unmarshal(raw, &cached) != nil || len(cached.Items) == 0 {
+		return EventCatalog{}, false
+	}
+	return cached, true
+}
+
+func preferredEventCatalog(catalogs []EventCatalog) EventCatalog {
+	best := catalogs[0]
+	for _, candidate := range catalogs[1:] {
+		if len(candidate.Items) > len(best.Items) ||
+			(len(candidate.Items) == len(best.Items) && candidate.UpdatedAt.After(best.UpdatedAt)) {
+			best = candidate
+		}
+	}
+	return best
+}
+
+func (f Service) storeEventCatalog(ctx context.Context, catalog EventCatalog) {
+	if f.Redis != nil {
+		if raw, err := json.Marshal(catalog); err == nil {
+			// The catalog is durable. Daily freshness is decided from UpdatedAt;
+			// expiration must not erase discovered events while discovery is off.
+			if err := f.Redis.Set(ctx, eventCacheKey(), raw, 0).Err(); err != nil {
+				log.Printf("failed to cache event catalog: %v", err)
+			}
+		}
+	}
+}
+
+func (f Service) acquireEventRefreshLock(ctx context.Context, now time.Time) (func(), bool) {
+	if f.Redis == nil {
+		return func() {}, true
+	}
+	key := fmt.Sprintf("feed:events:refresh-lock:%s:%s", eventsCacheVersion, now.In(moscowTime).Format("2006-01-02"))
+	acquired, err := f.Redis.SetNX(ctx, key, "1", eventRefreshLockTTL).Result()
+	if err != nil {
+		log.Printf("failed to acquire event refresh lock; continuing without it: %v", err)
+		return func() {}, true
+	}
+	if !acquired {
+		log.Print("event discovery skipped: another refresh is already running")
+		return func() {}, false
+	}
+	return func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = f.Redis.Del(cleanupCtx, key).Err()
+	}, true
 }
 
 // StartEventRefreshLoop refreshes the shared Redis catalog shortly after midnight
-// in Moscow. UpcomingEvents also refreshes lazily, so restarts and missed timers are safe.
+// in Moscow. UpdatedAt suppresses duplicate searches while the durable catalog
+// preserves discovered events across calendar days and restarts.
 func (f Service) StartEventRefreshLoop(ctx context.Context) {
-	for {
-		refreshCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-		_, _ = f.RefreshEvents(refreshCtx)
-		cancel()
+	now := time.Now().In(moscowTime)
+	if cached, ok := f.cachedEventCatalog(ctx, now); !ok || !sameMoscowDay(cached.UpdatedAt, now) {
+		f.refreshEventsWithTimeout(ctx)
+	} else {
+		log.Print("event discovery skipped on startup: today's catalog is already cached")
+	}
 
+	for {
 		delay := time.Until(nextEventRefresh(time.Now().In(moscowTime)))
 		timer := time.NewTimer(delay)
 		select {
@@ -147,13 +283,28 @@ func (f Service) StartEventRefreshLoop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-timer.C:
+			f.refreshEventsWithTimeout(ctx)
 		}
 	}
 }
 
+func sameMoscowDay(a, b time.Time) bool {
+	return a.In(moscowTime).Format("2006-01-02") == b.In(moscowTime).Format("2006-01-02")
+}
+
+func (f Service) refreshEventsWithTimeout(ctx context.Context) {
+	refreshCtx, cancel := context.WithTimeout(ctx, eventRefreshTimeout)
+	defer cancel()
+	_, _ = f.RefreshEvents(refreshCtx)
+}
+
 func nextEventRefresh(now time.Time) time.Time {
 	local := now.In(moscowTime)
-	return time.Date(local.Year(), local.Month(), local.Day()+1, 0, 5, 0, 0, moscowTime)
+	next := time.Date(local.Year(), local.Month(), local.Day(), 0, 5, 0, 0, moscowTime)
+	if !next.After(local) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next
 }
 
 func futureEvents(items []Event, now time.Time) []Event {
@@ -189,9 +340,9 @@ func mergeEvents(curated, discovered []Event, now time.Time) []Event {
 			continue
 		}
 		key := eventKey(item)
-		if i, ok := index[key]; ok {
-			item.Featured = item.Featured || merged[i].Featured
-			merged[i] = item
+		if _, ok := index[key]; ok {
+			// The curated catalog is the source of truth for known event series.
+			// Discovery may add missing series, but cannot rewrite verified data.
 			continue
 		}
 		index[key] = len(merged)
@@ -201,8 +352,43 @@ func mergeEvents(curated, discovered []Event, now time.Time) []Event {
 }
 
 func eventKey(item Event) string {
-	title := strings.ToLower(strings.Join(strings.Fields(item.Title), " "))
-	return title + "|" + item.StartDate[:min(4, len(item.StartDate))]
+	return eventSeriesName(item) + "|" + item.StartDate[:min(4, len(item.StartDate))]
+}
+
+var eventTitleSeparatorPattern = regexp.MustCompile(`[^\p{L}\p{N}]+`)
+var eventYearTokenPattern = regexp.MustCompile(`^(?:19|20)\d{2}$`)
+
+func eventSeriesName(item Event) string {
+	title := strings.ToLower(eventTitleSeparatorPattern.ReplaceAllString(item.Title, " "))
+	startYear := item.StartDate[:min(4, len(item.StartDate))]
+	shortYear := ""
+	if len(startYear) == 4 {
+		shortYear = startYear[2:]
+	}
+	parts := make([]string, 0, 6)
+	for _, part := range strings.Fields(title) {
+		if eventYearTokenPattern.MatchString(part) || (len(parts) > 0 && shortYear != "" && part == shortYear) {
+			break
+		}
+		parts = append(parts, part)
+	}
+	if len(parts) == 0 {
+		return title
+	}
+	return strings.Join(parts, " ")
+}
+
+func isEventSubEvent(item Event) bool {
+	title := " " + strings.ToLower(eventTitleSeparatorPattern.ReplaceAllString(item.Title, " ")) + " "
+	for _, marker := range []string{
+		" satellite ", " сателлит ", " workshop ", " воркшоп ",
+		" tutorial ", " туториал ", " track ", " трек ",
+	} {
+		if strings.Contains(title, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 var eventIDPattern = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -212,17 +398,25 @@ func normalizeEvent(item Event) Event {
 	item.ID = eventIDPattern.ReplaceAllString(item.ID, "-")
 	item.ID = strings.Trim(item.ID, "-")
 	item.Title = strings.TrimSpace(item.Title)
-	item.Summary = strings.TrimSpace(item.Summary)
+	item.Summary = strings.Join(strings.Fields(item.Summary), " ")
+	if item.Summary != "" && !strings.ContainsAny(item.Summary[len(item.Summary)-1:], ".!?") {
+		item.Summary += "."
+	}
 	item.StartDate = strings.TrimSpace(item.StartDate)
 	item.EndDate = strings.TrimSpace(item.EndDate)
 	if item.EndDate == "" {
 		item.EndDate = item.StartDate
 	}
-	item.City = strings.TrimSpace(item.City)
-	item.Country = strings.TrimSpace(item.Country)
+	item.City = normalizeEventPlaces(item.City, eventCityNames)
+	item.Country = normalizeEventPlaces(item.Country, eventCountryNames)
 	item.Format = strings.ToLower(strings.TrimSpace(item.Format))
 	item.Kind = strings.ToLower(strings.TrimSpace(item.Kind))
 	item.Region = strings.ToLower(strings.TrimSpace(item.Region))
+	if item.Country == "Россия" {
+		item.Region = "ru"
+	} else if item.Region == "ru" && item.Country == "" {
+		item.Country = "Россия"
+	}
 	item.URL = strings.TrimSpace(item.URL)
 	item.SourceURL = strings.TrimSpace(item.SourceURL)
 	if item.RegistrationURL != nil {
@@ -236,10 +430,83 @@ func normalizeEvent(item Event) Event {
 	if item.SourceURL == "" {
 		item.SourceURL = item.URL
 	}
-	if item.Topics == nil {
-		item.Topics = []string{}
-	}
+	item.Topics = normalizeEventTopics(item.Topics)
 	return item
+}
+
+var eventCountryNames = map[string]string{
+	"russia": "Россия", "russian federation": "Россия", "российская федерация": "Россия",
+	"usa": "США", "us": "США", "united states": "США", "united states of america": "США",
+	"australia": "Австралия", "france": "Франция", "canada": "Канада",
+	"sweden": "Швеция", "japan": "Япония", "germany": "Германия",
+	"united kingdom": "Великобритания", "uk": "Великобритания", "netherlands": "Нидерланды",
+	"uae": "ОАЭ", "united arab emirates": "ОАЭ", "spain": "Испания",
+	"italy": "Италия", "austria": "Австрия", "switzerland": "Швейцария",
+	"singapore": "Сингапур", "south korea": "Южная Корея", "china": "Китай",
+}
+
+var eventCityNames = map[string]string{
+	"moscow": "Москва", "saint petersburg": "Санкт-Петербург", "st. petersburg": "Санкт-Петербург",
+	"sydney": "Сидней", "atlanta": "Атланта", "paris": "Париж", "orlando": "Орландо",
+	"montreal": "Монреаль", "seattle": "Сиэтл", "kyoto": "Киото", "malmö": "Мальмё",
+	"malmo": "Мальмё", "arlington": "Арлингтон", "london": "Лондон", "berlin": "Берлин",
+	"amsterdam": "Амстердам", "barcelona": "Барселона", "vienna": "Вена",
+}
+
+func normalizeEventPlaces(raw string, names map[string]string) string {
+	parts := strings.Split(strings.TrimSpace(raw), "·")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if normalized, ok := names[strings.ToLower(part)]; ok {
+			part = normalized
+		}
+		parts[i] = part
+	}
+	return strings.Join(parts, " · ")
+}
+
+func normalizeEventTopics(topics []string) []string {
+	aliases := map[string]string{
+		"ai": "AI", "artificial intelligence": "AI", "machine learning": "ML", "ml": "ML",
+		"deep learning": "Deep Learning", "large language models": "LLM", "llm": "LLM",
+		"mlops": "MLOps", "devops": "DevOps", "backend": "Backend", "frontend": "Frontend",
+		"cloud": "Cloud", "security": "Security", "data": "Data", "product": "Product",
+		"computer vision": "Computer Vision", "nlp": "NLP", "qa": "QA",
+		"genai": "GenAI", "highload": "HighLoad", "ot security": "OT Security",
+		"neural information processing systems": "Neural Networks",
+	}
+	result := make([]string, 0, min(8, len(topics)))
+	seen := map[string]bool{}
+	for _, topic := range topics {
+		topic = strings.Join(strings.Fields(topic), " ")
+		if normalized, ok := aliases[strings.ToLower(topic)]; ok {
+			topic = normalized
+		} else {
+			topic = titleEventTopic(topic)
+		}
+		key := strings.ToLower(topic)
+		if topic == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, topic)
+		if len(result) == 8 {
+			break
+		}
+	}
+	return result
+}
+
+func titleEventTopic(topic string) string {
+	words := strings.Fields(topic)
+	for i, word := range words {
+		runes := []rune(strings.ToLower(word))
+		if len(runes) > 0 {
+			runes[0] = unicode.ToUpper(runes[0])
+		}
+		words[i] = string(runes)
+	}
+	return strings.Join(words, " ")
 }
 
 func validEvent(item Event, now time.Time) bool {
