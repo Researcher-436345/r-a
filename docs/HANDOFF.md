@@ -82,6 +82,7 @@ npm run dev -- --port 5173
 | MinIO API | http://localhost:**9002** (не 9000!) |
 | MinIO Console | http://localhost:**9003** |
 | Postgres | localhost:5433 (`researcher` / `researcher`) |
+| Mailpit (dev-почта) | http://localhost:8025 (SMTP :1025) |
 | Redis | localhost:6379 |
 
 Проверка API: `curl http://localhost:8080/health` → `status: ok`.
@@ -94,8 +95,8 @@ npm run dev -- --port 5173
 Browser (5173)
     │  JWT Bearer
     ▼
-Go API (:8080)  ──► Postgres (схема из `migrations/`)
-    │           ──► Redis (asynq queue + feed cache)
+Go API (:8080)  ──► pgbouncer (transaction pool) ──► Postgres (схема из `migrations/`)
+    │           ──► Redis (asynq queue + feed cache + auth throttle)
     │           ──► MinIO (PDF), внутри Docker: minio:9000
     │
     └── GET /papers/{id}/pdf  ← стрим PDF через API

@@ -21,6 +21,7 @@ Last refreshed: 2026-08-11
 | websearch | 8092 | internal Perplexity workflow and source normalization |
 | worker | — | asynq jobs |
 | mailpit | 1025 SMTP / 8025 UI → host **8025** | dev-почта: все письма видны на http://localhost:8025 |
+| pgbouncer | 5432 (только внутри compose) | connection pooler (transaction mode) перед postgres; все Go-сервисы ходят через него, migrate — напрямую |
 | postgres / redis / minio | 5432 → host **5433** / 6379 / 9002 | infra (redis также для auth-throttle) |
 
 Legacy monolith binary `api` ещё собирается в образе (rollback), в compose **не** запускается.

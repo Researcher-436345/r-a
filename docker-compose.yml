@@ -59,6 +59,7 @@ services:
     env_file:
       - .env
     environment:
+      # Миграции идут напрямую в postgres (session mode), минуя пулер.
       DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
     volumes:
       - ./migrations:/migrations:ro
@@ -67,6 +68,33 @@ services:
         condition: service_healthy
     entrypoint: ["/bin/sh", "/migrations/migrate.sh"]
     restart: "no"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: researcher
+      DB_PASSWORD: researcher
+      DB_NAME: researcher
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "20"
+      MIN_POOL_SIZE: "2"
+      RESERVE_POOL_SIZE: "5"
+      MAX_DB_CONNECTIONS: "60"
+      MAX_PREPARED_STATEMENTS: "200"
+      LOG_CONNECTION: "0"
+      LOG_DISCONNECTION: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/5432'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   translator:
     build:
@@ -128,14 +156,14 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8101"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       REDIS_URL: redis://redis:6379/0
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       MAIL_ENABLED: ${MAIL_ENABLED:-true}
     entrypoint: ["identity"]
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -154,7 +182,7 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8102"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9002
@@ -163,7 +191,7 @@ services:
       S3_BUCKET: papers
     entrypoint: ["catalog"]
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -184,10 +212,10 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8103"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
     entrypoint: ["library"]
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -204,7 +232,7 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8104"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       CATALOG_URL: http://catalog:8102
     entrypoint: ["annotations"]
     depends_on:
@@ -225,7 +253,7 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8105"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       CATALOG_URL: http://catalog:8102
       TRANSLATION_SERVICE_URL: http://translator:8090
     entrypoint: ["assistant"]
@@ -267,12 +295,12 @@ services:
       - .env
     environment:
       HTTP_ADDR: ":8107"
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       WEBSEARCH_SERVICE_URL: http://websearch:8092
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     entrypoint: ["searchapi"]
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -323,7 +351,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgres://researcher:researcher@postgres:5432/researcher
+      DATABASE_URL: postgres://researcher:researcher@pgbouncer:5432/researcher
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9002
@@ -334,7 +362,7 @@ services:
       PARSER_OCR: ${PARSER_OCR:-auto}
       PARSER_TIMEOUT_SECONDS: ${PARSER_TIMEOUT_SECONDS:-180}
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy

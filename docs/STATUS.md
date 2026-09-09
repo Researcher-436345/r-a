@@ -24,6 +24,7 @@
 
 ## Недавние изменения (changelog)
 
+- **2026-09-09 — pgbouncer:** connection pooler (transaction mode, `MAX_PREPARED_STATEMENTS=200` для pgx) перед postgres; 7 Go-сервисов ходят через `pgbouncer:5432`, миграции — напрямую в postgres. Серверные коннекты к БД ограничены `MAX_DB_CONNECTIONS=60` — фиксы риск `too many clients` при 7 пулах × MaxConns=20 против дефолтных 100 коннектов postgres
 - **2026-09-08 — production-ready auth:** серверные сессии (`007_auth_sessions.sql`), refresh в httpOnly cookie с ротацией и reuse detection (повтор старой cookie отзывает все сессии), подтверждение email (жёсткий блок + resend), сброс пароля (письмо → смена → отзыв всех сессий), Redis-троттлинг (429 + Retry-After), страница `/settings/sessions`, Mailpit в compose (SMTP :1025, UI http://localhost:8025). ⚠️ Старые stateless refresh-JWT из localStorage перестали работать — пользователи перелогинятся; регистрация больше не возвращает токены (200 «check your email»)
 - **2026-08-11 — notes scroll:** длинный список заметок скроллится, карточки не сжимаются
 - **2026-08-11 — API split:** gateway + identity/catalog/library/annotations/assistant/feed как отдельные контейнеры; фронт по-прежнему `:8080`
