@@ -8,8 +8,13 @@ import {
 import type { QueryClient } from '@tanstack/react-query';
 
 import { isAuthenticated } from '../features/auth/token-storage';
+import { tryRefreshSession } from '../features/auth/refresh-session';
 import { LoginPage } from '../pages/auth/login-page';
 import { RegisterPage } from '../pages/auth/register-page';
+import { VerifyEmailPage } from '../pages/auth/verify-email-page';
+import { ForgotPasswordPage } from '../pages/auth/forgot-password-page';
+import { ResetPasswordPage } from '../pages/auth/reset-password-page';
+import { SessionsPage } from '../pages/settings/sessions-page';
 import { ChatPage } from '../pages/chat/chat-page';
 import { HomePage } from '../pages/home/home-page';
 import { AddPaperPage } from '../pages/library/add-paper-page';
@@ -60,13 +65,36 @@ const registerRoute = createRoute({
   },
 });
 
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/verify-email',
+  component: VerifyEmailPage,
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordPage,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  component: ResetPasswordPage,
+});
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   component: AppLayout,
-  beforeLoad: () => {
+  beforeLoad: async () => {
     if (!isAuthenticated()) {
-      throw redirect({ to: '/login' });
+      // Access-токен живёт в памяти и умирает с вкладкой: после перезагрузки
+      // молча обновляем сессию по httpOnly cookie.
+      const refreshed = await tryRefreshSession();
+      if (!refreshed) {
+        throw redirect({ to: '/login' });
+      }
     }
   },
 });
@@ -117,9 +145,18 @@ const readerPaperRoute = createRoute({
   component: ReaderPage,
 });
 
+const sessionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings/sessions',
+  component: SessionsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
+  verifyEmailRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
   appRoute.addChildren([
     homeRoute,
     chatRoute,
@@ -127,6 +164,7 @@ const routeTree = rootRoute.addChildren([
     addPaperRoute,
     readerRoute,
     readerPaperRoute,
+    sessionsRoute,
   ]),
 ]);
 

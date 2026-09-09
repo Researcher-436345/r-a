@@ -4,6 +4,7 @@ import {
   Globe,
   LogOut,
   MessageSquare,
+  MonitorSmartphone,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { clearTokens } from '../../features/auth/token-storage';
+import { logout } from '../../features/auth/auth-api';
 import { useI18n } from '../../shared/i18n/i18n-context';
 import { LogoMark } from '../../shared/ui/logo-mark';
 import type { ThemeMode } from '../../shared/theme/theme-context';
@@ -63,8 +64,10 @@ export function Sidebar({
   const themeLabel = theme === 'light' ? t('nav.darkMode') : t('nav.lightMode');
 
   const handleLogout = () => {
-    clearTokens();
-    void navigate({ to: '/login' });
+    // Отзываем серверную сессию (cookie) и чистим access-токен в памяти.
+    void logout().finally(() => {
+      void navigate({ to: '/login' });
+    });
   };
 
   useEffect(() => {
@@ -112,6 +115,21 @@ export function Sidebar({
         onLogout={handleLogout}
       />
     </aside>
+  );
+}
+
+function SidebarSessionsLink({ isCollapsed }: { isCollapsed: boolean }) {
+  return (
+    <Link
+      to="/settings/sessions"
+      className="sidebar__nav-button"
+      title="Активные сессии"
+      aria-label="Активные сессии"
+      activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}
+    >
+      <MonitorSmartphone aria-hidden="true" size={18} strokeWidth={2} />
+      {!isCollapsed ? <span>Активные сессии</span> : null}
+    </Link>
   );
 }
 
@@ -184,6 +202,8 @@ function SidebarFooter({
 }: SidebarFooterProps) {
   return (
     <div className="sidebar__footer">
+      <SidebarSessionsLink isCollapsed={isCollapsed} />
+
       <button
         className="sidebar__nav-button"
         type="button"

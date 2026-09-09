@@ -1,24 +1,20 @@
-const ACCESS_KEY = 'researcher.access_token';
-const REFRESH_KEY = 'researcher.refresh_token';
+// Access token lives only in module memory (dies with the tab).
+// The refresh token is an httpOnly cookie managed by the backend —
+// nothing session-related is persisted in localStorage anymore.
+let accessToken: string | null = null;
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  return accessToken;
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-export function setTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
+export function setAccessToken(token: string): void {
+  accessToken = token;
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  accessToken = null;
 }
 
 export function isAuthenticated(): boolean {
-  return Boolean(getAccessToken());
+  return accessToken !== null;
 }

@@ -3,14 +3,14 @@
 > Краткий чеклист. **Полный контекст для нового человека:** [`HANDOFF.md`](./HANDOFF.md).  
 > Обновлять скиллом `project-status` после значимых изменений.
 
-**Последнее обновление:** 2026-08-11
+**Последнее обновление:** 2026-09-08
 
 ## Итерация 1 — эпики
 
 | Эпик | Приоритет | Статус | Комментарий |
 |------|-----------|--------|-------------|
-| EPIC-01 Инфра | P0 | ✅ | Compose: gateway + domain services + worker/parser/translator + SQL migrations |
-| EPIC-02 Auth | P0 | ✅ | register/login/refresh, JWT (identity service) |
+| EPIC-01 Инфра | P0 | ✅ | Compose: gateway + domain services + worker/parser/translator + SQL migrations (+ Mailpit для писем) |
+| EPIC-02 Auth | P0 | ✅ | Сессии в БД (ротация + reuse detection), подтверждение email, сброс пароля, throttle, страница «Активные сессии»; access JWT 30 мин, refresh — httpOnly cookie |
 | EPIC-03 Статьи | P0 | ✅ | upload / arXiv / DOI, asynq worker; title из PDF |
 | EPIC-04 Библиотека + PDF | P0 | ✅ | library, ридер; PDF через API stream `GET /papers/{id}/pdf` (blob) |
 | EPIC-12 Дедуп | P1 | ✅ | unique DOI/arXiv, SHA-256 |
@@ -24,6 +24,7 @@
 
 ## Недавние изменения (changelog)
 
+- **2026-09-08 — production-ready auth:** серверные сессии (`007_auth_sessions.sql`), refresh в httpOnly cookie с ротацией и reuse detection (повтор старой cookie отзывает все сессии), подтверждение email (жёсткий блок + resend), сброс пароля (письмо → смена → отзыв всех сессий), Redis-троттлинг (429 + Retry-After), страница `/settings/sessions`, Mailpit в compose (SMTP :1025, UI http://localhost:8025). ⚠️ Старые stateless refresh-JWT из localStorage перестали работать — пользователи перелогинятся; регистрация больше не возвращает токены (200 «check your email»)
 - **2026-08-11 — notes scroll:** длинный список заметок скроллится, карточки не сжимаются
 - **2026-08-11 — API split:** gateway + identity/catalog/library/annotations/assistant/feed как отдельные контейнеры; фронт по-прежнему `:8080`
 - **2026-08-11 — notes UX:** Markdown в карточках заметок; длинные сворачиваются с «Показать ещё»

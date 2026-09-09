@@ -8,8 +8,8 @@ Last refreshed: 2026-08-11
 
 | Service | Port (container) | Role |
 |---------|------------------|------|
-| gateway | 8000 → host **8080** | CORS, JWT, reverse-proxy |
-| identity | 8101 | `/auth/*` |
+| gateway | 8000 → host **8080** | CORS (+credentials, точный origin), JWT, reverse-proxy |
+| identity | 8101 | `/auth/*` — register/verify-email/login/refresh/logout/forgot/reset/resend, sessions, me; письма (verify/reset) |
 | catalog | 8102 | `/papers/*` (кроме chat/annotations), internal ACL |
 | library | 8103 | `/library` |
 | annotations | 8104 | annotations CRUD |
@@ -20,7 +20,8 @@ Last refreshed: 2026-08-11
 | parser | 8091 | PDF→text |
 | websearch | 8092 | internal Perplexity workflow and source normalization |
 | worker | — | asynq jobs |
-| postgres / redis / minio | 5432 → host **5433** / 6379 / 9002 | infra |
+| mailpit | 1025 SMTP / 8025 UI → host **8025** | dev-почта: все письма видны на http://localhost:8025 |
+| postgres / redis / minio | 5432 → host **5433** / 6379 / 9002 | infra (redis также для auth-throttle) |
 
 Legacy monolith binary `api` ещё собирается в образе (rollback), в compose **не** запускается.
 
@@ -28,7 +29,7 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 
 | Tables | Owner service |
 |--------|---------------|
-| users… | identity |
+| users, auth_sessions, auth_tokens | identity |
 | papers, paper_documents, paper_chunks… | catalog (+ worker writes parse results) |
 | library_* | library (catalog also uses membership for ACL) |
 | annotations | annotations |
@@ -43,3 +44,7 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 ## Env (gateway)
 
 `IDENTITY_URL`, `CATALOG_URL`, `LIBRARY_URL`, `ANNOTATIONS_URL`, `ASSISTANT_URL`, `FEED_URL`, `SEARCH_API_URL`
+
+## Env (identity / auth)
+
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `MAIL_ENABLED` (false → письма в stdout; в compose по умолчанию true через Mailpit), `FRONTEND_URL` (ссылки в письмах), `COOKIE_SECURE` (prod за HTTPS → true), `REDIS_URL` (throttle). Политики: login 10/мин/IP + 5/15мин/email; register/resend/forgot 5/15мин/IP+email; verify/reset 10/час/IP → 429 + `Retry-After`.

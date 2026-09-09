@@ -1,44 +1,35 @@
-import { getRefreshToken, setTokens } from './token-storage';
+import { setAccessToken } from './token-storage';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 
 let refreshInFlight: Promise<boolean> | null = null;
 
-/** Обновляет access token по refresh. Один запрос на все параллельные 401. */
+/**
+ * Silent refresh via the httpOnly refresh cookie (POST /auth/refresh).
+ * One request dedupes all parallel 401s and the app-start probe.
+ */
 export async function tryRefreshSession(): Promise<boolean> {
-  if (refreshInFlight) {
-    return refreshInFlight;
-  }
-
-  refreshInFlight = (async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-
-      if (!response.ok) {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!response.ok) {
+          return false;
+        }
+        const data = (await response.json()) as { access_token: string };
+        setAccessToken(data.access_token);
+        return true;
+      } catch {
         return false;
       }
-
-      const data = (await response.json()) as {
-        access_token: string;
-        refresh_token: string;
-      };
-      setTokens(data.access_token, data.refresh_token);
-      return true;
-    } catch {
-      return false;
-    }
-  })().finally(() => {
-    refreshInFlight = null;
-  });
-
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
   return refreshInFlight;
 }

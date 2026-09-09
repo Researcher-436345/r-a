@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -83,8 +84,12 @@ func Handler(cfg config.Config) http.Handler {
 		}
 	})
 
+	origins := []string{"http://localhost:5173", "http://127.0.0.1:5173"}
+	if cfg.FrontendURL != "" && !slices.Contains(origins, cfg.FrontendURL) {
+		origins = append(origins, cfg.FrontendURL)
+	}
 	root = cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type", "Accept"},
 		AllowCredentials: true,
