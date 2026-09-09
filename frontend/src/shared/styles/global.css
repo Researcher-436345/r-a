@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   font-family:
-    Geist, "Geist Sans", ui-sans-serif, system-ui, -apple-system,
+    "Golos Text", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -101,17 +101,6 @@ textarea {
   color: var(--faint);
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
-  border-radius: 8px;
-  background: var(--border);
-  background-clip: padding-box;
-}
 
 button:focus-visible,
 a:focus-visible,
@@ -1000,9 +989,9 @@ textarea:focus-visible {
 }
 
 .reader-selection-popup__save {
-  border-color: transparent !important;
-  background: var(--accent) !important;
-  color: #fff !important;
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
 }
 
 .reader-page__toast {
@@ -2128,9 +2117,9 @@ textarea:focus-visible {
 }
 
 .reader-note-card__edit-save {
-  border-color: transparent !important;
-  background: var(--accent) !important;
-  color: #fff !important;
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
 }
 
 .reader-note-card__empty {

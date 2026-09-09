@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#fbfbfc;color:#191c20;font-family:"Golos Text",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button{font:inherit;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+a{color:inherit;text-decoration:none}
+a:hover{color:#233b92}
+textarea{font:inherit}
+::placeholder{color:#a2a8af}
+@keyframes catBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes catTail{0%,100%{transform:translateX(0)}50%{transform:translateX(-4px)}}
+@keyframes catZ{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}75%{opacity:0;transform:translateY(-8px)}100%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+input{font:inherit}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;width:100%;align-items:center;justify-content:center;padding:40px 20px;background:#fbfbfc;color:#191c20;line-height:1.5">
+  <form style="display:flex;width:min(400px,100%);flex-direction:column;gap:18px;padding:28px;border:1px solid #eceef1;background:#ffffff;box-shadow:0 1px 2px rgba(20,24,30,0.03)">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:3px">
+        <img src="../assets/logo-ra.png" alt="" style="display:block;width:44px;height:44px;object-fit:contain">
+        <span style="font-family:Fraunces,Georgia,serif;font-size:21px;font-weight:700;letter-spacing:-0.015em;color:#233b92;line-height:1;font-variation-settings:'opsz' 144">Odyssey</span>
+      </div>
+      <div>
+        <h1 style="margin:0;color:#191c20;font-size:22px;font-weight:600;letter-spacing:-0.01em">Вход</h1>
+        <p style="margin:4px 0 0;color:#8b9198;font-size:13.5px">Войдите, чтобы открыть личную библиотеку</p>
+      </div>
+    </div>
+    <label style="display:flex;flex-direction:column;gap:6px">
+  <span style="color:#6a7178;font-size:12.5px;font-weight:500">Email</span>
+  <input type="email" placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d9dde4;background:#ffffff;color:#191c20;font-size:14px;outline:none" style-focus="border-color:#233b92;box-shadow:0 0 0 3px rgba(35,59,146,0.12)">
+</label>
+    <label style="display:flex;flex-direction:column;gap:6px">
+  <span style="color:#6a7178;font-size:12.5px;font-weight:500">Пароль</span>
+  <input type="password" placeholder="Минимум 8 символов" style="width:100%;padding:10px 12px;border:1px solid #d9dde4;background:#ffffff;color:#191c20;font-size:14px;outline:none" style-focus="border-color:#233b92;box-shadow:0 0 0 3px rgba(35,59,146,0.12)">
+</label>
+    <button type="submit" style="display:inline-flex;align-items:center;justify-content:center;width:100%;padding:11px 16px;border-radius:999px;background:#233b92;color:#ffffff;font-size:14px;font-weight:600" style-hover="background:#1b2f78">Войти</button>
+    <p style="margin:0;color:#6a7178;font-size:13px;text-align:center">Нет аккаунта? <a href="#" style="color:#233b92;font-weight:500">Зарегистрироваться</a></p>
+  </form>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

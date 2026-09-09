@@ -22,6 +22,7 @@ export interface ComposerSnapshot {
 
 export interface ChatComposerHandle {
   focus: () => void;
+  insertText: (text: string) => void;
   insertAttachment: (attachment: ChatContextAttachment) => void;
   setPlainText: (text: string) => void;
   clear: () => void;
@@ -254,6 +255,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           placeCaretAfter(editor.lastChild ?? editor);
         }
       }
+    },
+    insertText: (text) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const insertAt = rangeStillInEditor(editor, savedRangeRef.current)
+        ? savedRangeRef.current.cloneRange()
+        : null;
+      editor.focus();
+      const node = document.createTextNode(text);
+      if (insertAt) {
+        insertAt.collapse(false);
+        insertAt.insertNode(node);
+      } else {
+        editor.appendChild(node);
+      }
+      placeCaretAfter(node);
+      rememberCaret();
+      emitChange();
     },
     insertAttachment: (attachment) => {
       const editor = editorRef.current;

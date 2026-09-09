@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { FileText, LayoutTemplate, Moon, Sun, X } from 'lucide-react';
 
 import { useI18n } from '../../shared/i18n/i18n-context';
@@ -14,6 +15,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { locale, setLocale, t } = useI18n();
   const { theme, setTheme, readerThemeScope, setReaderThemeScope } = useTheme();
 
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    panel?.querySelector<HTMLButtonElement>('button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key !== 'Tab' || !panel) return;
+      const controls = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input, [tabindex="0"]')];
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
+  }, [isOpen, onClose]);
+
   if (!isOpen) {
     return null;
   }
@@ -21,6 +40,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <div className="settings-modal" role="presentation" onClick={onClose}>
       <div
+        ref={panelRef}
         className="settings-modal__panel"
         role="dialog"
         aria-modal="true"

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Flame, Sparkles, Zap } from 'lucide-react';
+import { Flame, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { fetchLibrary, prefetchArxiv } from '../../library/api';
@@ -18,7 +18,7 @@ function readStoredSort(): TrendingSort {
     return 'new';
   }
   const raw = window.localStorage.getItem(SORT_STORAGE_KEY);
-  if (raw === 'hot' || raw === 'popular' || raw === 'new') {
+  if (raw === 'hot' || raw === 'new') {
     return raw;
   }
   return 'new';
@@ -36,17 +36,10 @@ export function TrendingPapers() {
       [
         { value: 'new' as const, label: t('papers.sort.new'), icon: Sparkles },
         { value: 'hot' as const, label: t('papers.sort.hot'), icon: Flame },
-        { value: 'popular' as const, label: t('papers.sort.popular'), icon: Zap },
       ] as const,
     [t],
   );
 
-  const subtitleKey =
-    sort === 'hot'
-      ? 'papers.trendingSub.hot'
-      : sort === 'popular'
-        ? 'papers.trendingSub.popular'
-        : 'papers.trendingSub.new';
 
   const refreshLibraryMap = useCallback(async () => {
     try {
@@ -119,7 +112,6 @@ export function TrendingPapers() {
       <div className="section-header">
         <div className="section-header__title">
           <h2 id="trending-papers-title">{t('papers.trending')}</h2>
-          <span>{t(subtitleKey)}</span>
         </div>
         <SegmentedControl
           ariaLabel={t('papers.sort')}

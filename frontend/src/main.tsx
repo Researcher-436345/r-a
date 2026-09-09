@@ -7,6 +7,7 @@ import { queryClient } from './app/query-client';
 import { router } from './app/router';
 import './shared/styles/global.css';
 import './features/chat/chat.css';
+import './shared/styles/v3.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

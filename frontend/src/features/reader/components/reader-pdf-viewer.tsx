@@ -1,3 +1,4 @@
+import { MetadataLine } from '../../../shared/ui/metadata-line';
 import {
   Bookmark,
   BookmarkCheck,
@@ -92,7 +93,7 @@ export function ReaderPdfViewer({
     () => flattenLibraryFolders(libraryFolders),
     [libraryFolders],
   );
-  const zoomLabel = fitToWidth ? 'Fit' : `${Math.round(scale * 100)}%`;
+  const zoomLabel = `${Math.round(scale * 100)}%`;
   const resolvedTitle = title || 'Статья';
   const resolvedMeta = meta || '';
 
@@ -252,7 +253,7 @@ export function ReaderPdfViewer({
 
         <div className="reader-toolbar__paper">
           <div className="reader-toolbar__title">{resolvedTitle}</div>
-          <div className="reader-toolbar__meta">{resolvedMeta}</div>
+          <MetadataLine className="reader-toolbar__meta" items={resolvedMeta.split(' · ')} />
         </div>
 
         <div className="reader-zoom" aria-label="Zoom controls">
@@ -285,11 +286,13 @@ export function ReaderPdfViewer({
           </button>
         </div>
 
+        <div className="reader-toolbar__divider reader-toolbar__divider--group" />
         <div className="reader-page-count">
           <FileText aria-hidden="true" size={15} strokeWidth={2} />
           <span>{pageCount > 0 ? `1 / ${pageCount}` : '—'}</span>
         </div>
 
+        {pdfUrl && <div className="reader-toolbar__divider reader-toolbar__divider--group" />}
         {pdfUrl ? (
           <a
             className="reader-download-button"

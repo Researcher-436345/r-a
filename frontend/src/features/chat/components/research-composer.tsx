@@ -1,4 +1,6 @@
 import { forwardRef } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { SleepingCat } from '../../../shared/ui/sleeping-cat';
 import { ArrowUp, Globe, Paperclip, Telescope } from 'lucide-react';
 
 import { IconButton } from '../../../shared/ui/icon-button';
@@ -46,6 +48,7 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
     },
     ref,
   ) {
+    const navigate = useNavigate();
     const canSubmit = Boolean(value.trim()) && !disabled;
 
     const submit = () => {
@@ -62,6 +65,7 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
           submit();
         }}
       >
+        <SleepingCat variant={className.includes('chat-composer') ? 'chat' : 'home'} />
         <textarea
           ref={ref}
           className="ask-box__input research-composer__input"
@@ -79,11 +83,11 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
           }}
           placeholder={placeholder}
           aria-label={inputAriaLabel}
-          rows={2}
+          rows={className.includes('chat-composer') ? 1 : 2}
         />
 
         <div className="ask-box__footer research-composer__footer">
-          <IconButton icon={Paperclip} label={attachLabel} onClick={onAttach} />
+          <IconButton icon={Paperclip} label={attachLabel} onClick={onAttach ?? (() => void navigate({ to: '/library/add', search: { folder: '' } }))} />
           <SegmentedControl
             ariaLabel={modeAriaLabel}
             value={mode}
@@ -94,7 +98,7 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
             ]}
           />
           <div className="ask-box__spacer research-composer__spacer" />
-          <span className="ask-box__hint research-composer__hint">{sendHint}</span>
+          <span className="sr-only">{sendHint}</span>
           <IconButton
             icon={ArrowUp}
             label={sendLabel}

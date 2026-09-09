@@ -30,6 +30,7 @@ interface SidebarPrimaryNavProps {
   isCollapsed: boolean;
   isExploreCurrent: boolean;
   isAssistantActive: boolean;
+  isLibraryActive: boolean;
   searchLabel: string;
   assistantLabel: string;
 }
@@ -77,8 +78,8 @@ export function Sidebar({
       aria-label="Application navigation"
     >
       <div className="sidebar__header">
-        <Link to="/" className="sidebar__logo-link" aria-label="r-a home">
-          <LogoMark />
+        <Link to="/" className="sidebar__logo-link" aria-label="Odyssey — главная">
+          <LogoMark compact={isCollapsed} />
         </Link>
         {!isCollapsed ? <div className="sidebar__header-spacer" /> : null}
         <button
@@ -96,6 +97,7 @@ export function Sidebar({
         isCollapsed={isCollapsed}
         isExploreCurrent={pathname === '/'}
         isAssistantActive={pathname.startsWith('/chat/')}
+        isLibraryActive={pathname.startsWith('/library') || pathname.startsWith('/reader')}
         searchLabel={t('nav.search')}
         assistantLabel={t('nav.assistant')}
       />
@@ -119,6 +121,7 @@ function SidebarPrimaryNav({
   isCollapsed,
   isExploreCurrent,
   isAssistantActive,
+  isLibraryActive,
   searchLabel,
   assistantLabel,
 }: SidebarPrimaryNavProps) {
@@ -159,7 +162,7 @@ function SidebarPrimaryNav({
       <Link
         to="/library"
         search={{ folder: '' }}
-        className="sidebar__nav-button"
+        className={`sidebar__nav-button${isLibraryActive ? ' sidebar__nav-button--active' : ''}`}
         title="Библиотека"
         aria-label="Библиотека"
         activeProps={{ className: 'sidebar__nav-button sidebar__nav-button--active' }}

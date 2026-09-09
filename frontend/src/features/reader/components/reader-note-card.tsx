@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Pencil, Quote, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pencil, Quote, Trash2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { RichText } from '../../../shared/ui/rich-text';
@@ -154,12 +154,20 @@ export function ReaderNoteCard({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Комментарий…"
+              aria-label={locale === 'ru' ? 'Редактировать комментарий' : 'Edit comment'}
               disabled={isSaving}
             />
             {error ? <div className="reader-note-card__edit-error">{error}</div> : null}
             <div className="reader-note-card__edit-actions">
-              <button type="button" onClick={cancelEdit} disabled={isSaving}>
-                Отмена
+              <button
+                type="button"
+                className="reader-note-card__edit-cancel"
+                onClick={cancelEdit}
+                disabled={isSaving}
+                title={locale === 'ru' ? 'Закрыть без сохранения' : 'Close without saving'}
+                aria-label={locale === 'ru' ? 'Закрыть без сохранения' : 'Close without saving'}
+              >
+                <X aria-hidden="true" size={18} strokeWidth={2} />
               </button>
               <button
                 type="button"

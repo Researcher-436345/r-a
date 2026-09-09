@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#fbfbfc;color:#191c20;font-family:"Golos Text",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button{font:inherit;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+a{color:inherit;text-decoration:none}
+a:hover{color:#233b92}
+textarea{font:inherit}
+::placeholder{color:#a2a8af}
+@keyframes catBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes catTail{0%,100%{transform:translateX(0)}50%{transform:translateX(-4px)}}
+@keyframes catZ{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}75%{opacity:0;transform:translateY(-8px)}100%{opacity:0}}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;width:100%;background:#fbfbfc;color:#191c20;line-height:1.5">
+  <aside style="position:sticky;top:0;display:flex;flex:0 0 208px;flex-direction:column;width:208px;height:100vh;gap:6px;padding:18px 14px 14px;border-right:1px solid #eceef1;background:#ffffff">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 6px 14px">
+      <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0">
+        <img src="../assets/logo-ra.png" alt="" style="display:block;width:44px;height:44px;object-fit:contain">
+        <span style="font-family:Fraunces,Georgia,serif;font-size:21px;font-weight:700;letter-spacing:-0.015em;color:#233b92;line-height:1;font-variation-settings:'opsz' 144">Odyssey</span>
+      </div>
+      <button title="Свернуть панель" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="0"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
+      </button>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:6px">
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:#f3f5fb;color:#233b92;font-size:14px;font-weight:600">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+        <span>Исследовать</span>
+      </a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44"></path><path d="m13.56 11.747 4.332-.924"></path><path d="m16 21-3.105-6.21"></path><path d="M16.485 5.94a2 2 0 0 1 1.455-2.415l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z"></path><path d="m6.158 8.633 1.114 4.456"></path><path d="m8 21 3.105-6.21"></path><circle cx="12" cy="13" r="2"></circle></svg>
+        <span>Ассистент</span>
+      </a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8l3-3 3 3V2"></path><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"></path></svg>
+        <span>Библиотека</span>
+      </a>
+    </nav>
+    <div style="display:flex;flex-direction:column;margin-top:auto;padding-top:8px;border-top:1px solid #eceef1">
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <span>Настройки</span>
+      </button>
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span>Обратная связь</span>
+      </button>
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+        <span>Тёмная тема</span>
+      </button>
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8">
+        <svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>
+        <span>Выйти</span>
+      </button>
+    </div>
+  </aside>
+
+  <main style="flex:1;min-width:0;height:100vh;overflow-y:auto">
+    <div style="width:min(880px,100%);margin:0 auto;padding:56px 40px 80px">
+      <section style="width:100%">
+        <h1 style="margin:0 0 22px;color:#191c20;font-family:Fraunces,Georgia,serif;font-variation-settings:'opsz' 144;font-size:30px;font-weight:600;text-align:center;letter-spacing:-0.01em">Что исследуем сегодня?</h1>
+        <form style="position:relative;padding:16px 16px 12px;border:1px solid #eceef1;background:#ffffff;box-shadow:0 1px 2px rgba(20,24,30,0.03)">
+          <svg aria-hidden="true" viewBox="0 0 112 80" width="84" height="60" style="position:absolute;top:-41px;right:26px;overflow:visible;pointer-events:none;shape-rendering:crispEdges">
+            <g style="animation:catTail 1.6s steps(1) infinite"><rect x="0" y="36" width="4" height="4" fill="#233b92"></rect><rect x="0" y="40" width="4" height="4" fill="#233b92"></rect><rect x="0" y="44" width="4" height="4" fill="#233b92"></rect><rect x="0" y="48" width="4" height="4" fill="#233b92"></rect><rect x="4" y="48" width="4" height="4" fill="#233b92"></rect></g>
+            <rect x="24" y="56" width="4" height="4" fill="#233b92"></rect><rect x="28" y="56" width="4" height="4" fill="#233b92"></rect><rect x="76" y="56" width="4" height="4" fill="#233b92"></rect><rect x="80" y="56" width="4" height="4" fill="#233b92"></rect><rect x="24" y="60" width="4" height="4" fill="#233b92"></rect><rect x="28" y="60" width="4" height="4" fill="#233b92"></rect><rect x="76" y="60" width="4" height="4" fill="#233b92"></rect><rect x="80" y="60" width="4" height="4" fill="#233b92"></rect><rect x="24" y="64" width="4" height="4" fill="#233b92"></rect><rect x="28" y="64" width="4" height="4" fill="#233b92"></rect><rect x="76" y="64" width="4" height="4" fill="#233b92"></rect><rect x="80" y="64" width="4" height="4" fill="#233b92"></rect><rect x="24" y="68" width="4" height="4" fill="#233b92"></rect><rect x="28" y="68" width="4" height="4" fill="#233b92"></rect><rect x="76" y="68" width="4" height="4" fill="#233b92"></rect><rect x="80" y="68" width="4" height="4" fill="#233b92"></rect><rect x="20" y="72" width="4" height="4" fill="#233b92"></rect><rect x="24" y="72" width="4" height="4" fill="#233b92"></rect><rect x="28" y="72" width="4" height="4" fill="#233b92"></rect><rect x="72" y="72" width="4" height="4" fill="#233b92"></rect><rect x="76" y="72" width="4" height="4" fill="#233b92"></rect><rect x="80" y="72" width="4" height="4" fill="#233b92"></rect>
+            <g style="animation:catBreathe 3.2s steps(1) infinite;transform-origin:0 56px"><rect x="72" y="16" width="4" height="4" fill="#233b92"></rect><rect x="96" y="16" width="4" height="4" fill="#233b92"></rect><rect x="72" y="20" width="4" height="4" fill="#233b92"></rect><rect x="76" y="20" width="4" height="4" fill="#8d9ac9"></rect><rect x="92" y="20" width="4" height="4" fill="#8d9ac9"></rect><rect x="96" y="20" width="4" height="4" fill="#233b92"></rect><rect x="72" y="24" width="4" height="4" fill="#233b92"></rect><rect x="76" y="24" width="4" height="4" fill="#233b92"></rect><rect x="80" y="24" width="4" height="4" fill="#233b92"></rect><rect x="84" y="24" width="4" height="4" fill="#233b92"></rect><rect x="88" y="24" width="4" height="4" fill="#233b92"></rect><rect x="92" y="24" width="4" height="4" fill="#233b92"></rect><rect x="96" y="24" width="4" height="4" fill="#233b92"></rect><rect x="20" y="28" width="4" height="4" fill="#233b92"></rect><rect x="24" y="28" width="4" height="4" fill="#233b92"></rect><rect x="28" y="28" width="4" height="4" fill="#233b92"></rect><rect x="32" y="28" width="4" height="4" fill="#233b92"></rect><rect x="36" y="28" width="4" height="4" fill="#233b92"></rect><rect x="40" y="28" width="4" height="4" fill="#233b92"></rect><rect x="44" y="28" width="4" height="4" fill="#233b92"></rect><rect x="48" y="28" width="4" height="4" fill="#233b92"></rect><rect x="68" y="28" width="4" height="4" fill="#233b92"></rect><rect x="72" y="28" width="4" height="4" fill="#233b92"></rect><rect x="76" y="28" width="4" height="4" fill="#233b92"></rect><rect x="80" y="28" width="4" height="4" fill="#233b92"></rect><rect x="84" y="28" width="4" height="4" fill="#233b92"></rect><rect x="88" y="28" width="4" height="4" fill="#233b92"></rect><rect x="92" y="28" width="4" height="4" fill="#233b92"></rect><rect x="96" y="28" width="4" height="4" fill="#233b92"></rect><rect x="100" y="28" width="4" height="4" fill="#233b92"></rect><rect x="16" y="32" width="4" height="4" fill="#233b92"></rect><rect x="20" y="32" width="4" height="4" fill="#233b92"></rect><rect x="24" y="32" width="4" height="4" fill="#233b92"></rect><rect x="28" y="32" width="4" height="4" fill="#233b92"></rect><rect x="32" y="32" width="4" height="4" fill="#233b92"></rect><rect x="36" y="32" width="4" height="4" fill="#233b92"></rect><rect x="40" y="32" width="4" height="4" fill="#233b92"></rect><rect x="44" y="32" width="4" height="4" fill="#233b92"></rect><rect x="48" y="32" width="4" height="4" fill="#233b92"></rect><rect x="52" y="32" width="4" height="4" fill="#233b92"></rect><rect x="56" y="32" width="4" height="4" fill="#233b92"></rect><rect x="60" y="32" width="4" height="4" fill="#233b92"></rect><rect x="64" y="32" width="4" height="4" fill="#233b92"></rect><rect x="68" y="32" width="4" height="4" fill="#233b92"></rect><rect x="72" y="32" width="4" height="4" fill="#233b92"></rect><rect x="76" y="32" width="4" height="4" fill="#233b92"></rect><rect x="80" y="32" width="4" height="4" fill="#233b92"></rect><rect x="84" y="32" width="4" height="4" fill="#233b92"></rect><rect x="88" y="32" width="4" height="4" fill="#233b92"></rect><rect x="92" y="32" width="4" height="4" fill="#233b92"></rect><rect x="96" y="32" width="4" height="4" fill="#233b92"></rect><rect x="100" y="32" width="4" height="4" fill="#233b92"></rect><rect x="104" y="32" width="4" height="4" fill="#233b92"></rect><rect x="12" y="36" width="4" height="4" fill="#233b92"></rect><rect x="16" y="36" width="4" height="4" fill="#233b92"></rect><rect x="20" y="36" width="4" height="4" fill="#233b92"></rect><rect x="24" y="36" width="4" height="4" fill="#233b92"></rect><rect x="28" y="36" width="4" height="4" fill="#233b92"></rect><rect x="32" y="36" width="4" height="4" fill="#233b92"></rect><rect x="36" y="36" width="4" height="4" fill="#233b92"></rect><rect x="40" y="36" width="4" height="4" fill="#233b92"></rect><rect x="44" y="36" width="4" height="4" fill="#233b92"></rect><rect x="48" y="36" width="4" height="4" fill="#233b92"></rect><rect x="52" y="36" width="4" height="4" fill="#233b92"></rect><rect x="56" y="36" width="4" height="4" fill="#233b92"></rect><rect x="60" y="36" width="4" height="4" fill="#233b92"></rect><rect x="64" y="36" width="4" height="4" fill="#233b92"></rect><rect x="68" y="36" width="4" height="4" fill="#233b92"></rect><rect x="72" y="36" width="4" height="4" fill="#233b92"></rect><rect x="76" y="36" width="4" height="4" fill="#8d9ac9"></rect><rect x="80" y="36" width="4" height="4" fill="#8d9ac9"></rect><rect x="84" y="36" width="4" height="4" fill="#233b92"></rect><rect x="88" y="36" width="4" height="4" fill="#233b92"></rect><rect x="92" y="36" width="4" height="4" fill="#8d9ac9"></rect><rect x="96" y="36" width="4" height="4" fill="#8d9ac9"></rect><rect x="100" y="36" width="4" height="4" fill="#233b92"></rect><rect x="104" y="36" width="4" height="4" fill="#233b92"></rect><rect x="8" y="40" width="4" height="4" fill="#233b92"></rect><rect x="12" y="40" width="4" height="4" fill="#233b92"></rect><rect x="16" y="40" width="4" height="4" fill="#233b92"></rect><rect x="20" y="40" width="4" height="4" fill="#233b92"></rect><rect x="24" y="40" width="4" height="4" fill="#233b92"></rect><rect x="28" y="40" width="4" height="4" fill="#233b92"></rect><rect x="32" y="40" width="4" height="4" fill="#233b92"></rect><rect x="36" y="40" width="4" height="4" fill="#233b92"></rect><rect x="40" y="40" width="4" height="4" fill="#233b92"></rect><rect x="44" y="40" width="4" height="4" fill="#233b92"></rect><rect x="48" y="40" width="4" height="4" fill="#233b92"></rect><rect x="52" y="40" width="4" height="4" fill="#233b92"></rect><rect x="56" y="40" width="4" height="4" fill="#233b92"></rect><rect x="60" y="40" width="4" height="4" fill="#233b92"></rect><rect x="64" y="40" width="4" height="4" fill="#233b92"></rect><rect x="68" y="40" width="4" height="4" fill="#233b92"></rect><rect x="72" y="40" width="4" height="4" fill="#233b92"></rect><rect x="76" y="40" width="4" height="4" fill="#233b92"></rect><rect x="80" y="40" width="4" height="4" fill="#233b92"></rect><rect x="84" y="40" width="4" height="4" fill="#233b92"></rect><rect x="88" y="40" width="4" height="4" fill="#233b92"></rect><rect x="92" y="40" width="4" height="4" fill="#233b92"></rect><rect x="96" y="40" width="4" height="4" fill="#233b92"></rect><rect x="100" y="40" width="4" height="4" fill="#233b92"></rect><rect x="104" y="40" width="4" height="4" fill="#233b92"></rect><rect x="8" y="44" width="4" height="4" fill="#233b92"></rect><rect x="12" y="44" width="4" height="4" fill="#233b92"></rect><rect x="16" y="44" width="4" height="4" fill="#233b92"></rect><rect x="20" y="44" width="4" height="4" fill="#233b92"></rect><rect x="24" y="44" width="4" height="4" fill="#233b92"></rect><rect x="28" y="44" width="4" height="4" fill="#233b92"></rect><rect x="32" y="44" width="4" height="4" fill="#233b92"></rect><rect x="36" y="44" width="4" height="4" fill="#233b92"></rect><rect x="40" y="44" width="4" height="4" fill="#233b92"></rect><rect x="44" y="44" width="4" height="4" fill="#233b92"></rect><rect x="48" y="44" width="4" height="4" fill="#233b92"></rect><rect x="52" y="44" width="4" height="4" fill="#233b92"></rect><rect x="56" y="44" width="4" height="4" fill="#233b92"></rect><rect x="60" y="44" width="4" height="4" fill="#233b92"></rect><rect x="64" y="44" width="4" height="4" fill="#233b92"></rect><rect x="68" y="44" width="4" height="4" fill="#233b92"></rect><rect x="72" y="44" width="4" height="4" fill="#233b92"></rect><rect x="76" y="44" width="4" height="4" fill="#233b92"></rect><rect x="80" y="44" width="4" height="4" fill="#233b92"></rect><rect x="84" y="44" width="4" height="4" fill="#8d9ac9"></rect><rect x="88" y="44" width="4" height="4" fill="#8d9ac9"></rect><rect x="92" y="44" width="4" height="4" fill="#233b92"></rect><rect x="96" y="44" width="4" height="4" fill="#233b92"></rect><rect x="100" y="44" width="4" height="4" fill="#233b92"></rect><rect x="104" y="44" width="4" height="4" fill="#233b92"></rect><rect x="8" y="48" width="4" height="4" fill="#233b92"></rect><rect x="12" y="48" width="4" height="4" fill="#233b92"></rect><rect x="16" y="48" width="4" height="4" fill="#233b92"></rect><rect x="20" y="48" width="4" height="4" fill="#233b92"></rect><rect x="24" y="48" width="4" height="4" fill="#233b92"></rect><rect x="28" y="48" width="4" height="4" fill="#233b92"></rect><rect x="32" y="48" width="4" height="4" fill="#233b92"></rect><rect x="36" y="48" width="4" height="4" fill="#233b92"></rect><rect x="40" y="48" width="4" height="4" fill="#233b92"></rect><rect x="44" y="48" width="4" height="4" fill="#233b92"></rect><rect x="48" y="48" width="4" height="4" fill="#233b92"></rect><rect x="52" y="48" width="4" height="4" fill="#233b92"></rect><rect x="56" y="48" width="4" height="4" fill="#233b92"></rect><rect x="60" y="48" width="4" height="4" fill="#233b92"></rect><rect x="64" y="48" width="4" height="4" fill="#233b92"></rect><rect x="68" y="48" width="4" height="4" fill="#233b92"></rect><rect x="72" y="48" width="4" height="4" fill="#233b92"></rect><rect x="76" y="48" width="4" height="4" fill="#233b92"></rect><rect x="80" y="48" width="4" height="4" fill="#233b92"></rect><rect x="84" y="48" width="4" height="4" fill="#233b92"></rect><rect x="88" y="48" width="4" height="4" fill="#233b92"></rect><rect x="92" y="48" width="4" height="4" fill="#233b92"></rect><rect x="96" y="48" width="4" height="4" fill="#233b92"></rect><rect x="100" y="48" width="4" height="4" fill="#233b92"></rect><rect x="8" y="52" width="4" height="4" fill="#233b92"></rect><rect x="12" y="52" width="4" height="4" fill="#233b92"></rect><rect x="16" y="52" width="4" height="4" fill="#233b92"></rect><rect x="20" y="52" width="4" height="4" fill="#233b92"></rect><rect x="24" y="52" width="4" height="4" fill="#233b92"></rect><rect x="28" y="52" width="4" height="4" fill="#233b92"></rect><rect x="32" y="52" width="4" height="4" fill="#233b92"></rect><rect x="36" y="52" width="4" height="4" fill="#233b92"></rect><rect x="40" y="52" width="4" height="4" fill="#233b92"></rect><rect x="44" y="52" width="4" height="4" fill="#233b92"></rect><rect x="48" y="52" width="4" height="4" fill="#233b92"></rect><rect x="52" y="52" width="4" height="4" fill="#233b92"></rect><rect x="56" y="52" width="4" height="4" fill="#233b92"></rect><rect x="60" y="52" width="4" height="4" fill="#233b92"></rect><rect x="64" y="52" width="4" height="4" fill="#233b92"></rect><rect x="68" y="52" width="4" height="4" fill="#233b92"></rect><rect x="72" y="52" width="4" height="4" fill="#233b92"></rect><rect x="76" y="52" width="4" height="4" fill="#233b92"></rect><rect x="80" y="52" width="4" height="4" fill="#233b92"></rect><rect x="84" y="52" width="4" height="4" fill="#233b92"></rect><rect x="88" y="52" width="4" height="4" fill="#233b92"></rect><rect x="92" y="52" width="4" height="4" fill="#233b92"></rect><rect x="96" y="52" width="4" height="4" fill="#233b92"></rect></g>
+            <g style="animation:catZ 2.4s steps(1) infinite"><rect x="104" y="12" width="3" height="3" fill="#233b92"></rect><rect x="107" y="12" width="3" height="3" fill="#233b92"></rect><rect x="110" y="12" width="3" height="3" fill="#233b92"></rect><rect x="107" y="15" width="3" height="3" fill="#233b92"></rect><rect x="104" y="18" width="3" height="3" fill="#233b92"></rect><rect x="107" y="18" width="3" height="3" fill="#233b92"></rect><rect x="110" y="18" width="3" height="3" fill="#233b92"></rect></g>
+            <g style="animation:catZ 2.4s steps(1) 1.2s infinite"><rect x="110" y="2" width="3" height="3" fill="#233b92"></rect><rect x="113" y="2" width="3" height="3" fill="#233b92"></rect><rect x="116" y="2" width="3" height="3" fill="#233b92"></rect><rect x="113" y="5" width="3" height="3" fill="#233b92"></rect><rect x="110" y="8" width="3" height="3" fill="#233b92"></rect><rect x="113" y="8" width="3" height="3" fill="#233b92"></rect><rect x="116" y="8" width="3" height="3" fill="#233b92"></rect></g>
+          </svg>
+          <textarea rows="2" placeholder="Спросите о статьях, идеях или направлениях исследований…" style="width:100%;min-height:48px;resize:none;border:none;outline:none;padding:4px 4px 8px;background:transparent;color:#191c20;font-size:15.5px;line-height:1.55"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button title="Прикрепить файл" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border:1px solid #eceef1;background:transparent;color:#6a7178" style-hover="background:#f5f6f8">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            </button>
+            <div style="display:inline-flex;align-items:center;gap:0;padding:0;border:1px solid #eceef1;background:#fbfbfc;overflow:hidden">
+              <button style="display:inline-flex;align-items:center;gap:6px;align-self:stretch;padding:8px 14px;background:#ffffff;color:#233b92;font-size:13px;font-weight:500;white-space:nowrap;border-right:1px solid #eceef1">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+                <span>Веб-поиск</span>
+              </button>
+              <button style="display:inline-flex;align-items:center;gap:6px;align-self:stretch;padding:8px 14px;background:transparent;color:#6a7178;font-size:13px;font-weight:500;white-space:nowrap" style-hover="color:#191c20">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44"></path><path d="m13.56 11.747 4.332-.924"></path><path d="m16 21-3.105-6.21"></path><path d="M16.485 5.94a2 2 0 0 1 1.455-2.415l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z"></path><path d="m6.158 8.633 1.114 4.456"></path><path d="m8 21 3.105-6.21"></path><circle cx="12" cy="13" r="2"></circle></svg>
+                <span>Глубокое исследование</span>
+              </button>
+            </div>
+            <div style="flex:1"></div>
+                        <button type="submit" title="Отправить" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;border-radius:50%;background:#233b92;color:#ffffff;box-shadow:0 1px 3px rgba(35,59,146,0.35)" style-hover="background:#1b2f78">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section style="margin-top:44px">
+        <div style="display:flex;align-items:center;gap:12px;margin:0 0 18px">
+          <h2 style="margin:0;color:#191c20;font-size:17.5px;font-weight:600">Трендовые статьи</h2>
+          <div style="display:inline-flex;align-items:center;gap:0;padding:0;border:1px solid #eceef1;background:#fbfbfc;overflow:hidden;margin-left:auto;flex-shrink:0">
+            <button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:6.5rem;align-self:stretch;padding:8px 14px;background:#ffffff;color:#233b92;font-size:13px;font-weight:500;white-space:nowrap;border-right:1px solid #eceef1">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path></svg>
+              <span>Новое</span>
+            </button>
+            <button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:6.5rem;align-self:stretch;padding:8px 14px;background:transparent;color:#6a7178;font-size:13px;font-weight:500;white-space:nowrap" style-hover="color:#191c20">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+              <span>Горячее</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;border:1px solid #eceef1;background:#ffffff">
+          <sc-for list="{{ papers }}" as="p" hint-placeholder-count="3">
+            <article style="display:flex;gap:20px;padding:20px 20px 18px;border-top:1px solid #eceef1;background:#ffffff;margin-top:-1px" style-hover="background:#fbfbfc">
+              <div style="display:flex;min-width:0;flex:1;flex-direction:column">
+                <button style="display:block;width:100%;padding:0;background:transparent;color:#191c20;font-size:17.5px;font-weight:600;line-height:1.3;text-align:left" style-hover="color:#233b92">{{ p.title }}</button>
+                <div style="display:flex;align-items:center;gap:12px;margin:7px 0 14px;color:#8b9198;font-size:12.5px;flex-wrap:wrap">
+                  <span>{{ p.date }}</span>
+                  <span style="display:inline-block;width:1px;height:11px;background:#d9dde4"></span>
+                  <span>{{ p.authors }}</span>
+                </div>
+                <p style="display:-webkit-box;overflow:hidden;margin:0;color:#6a7178;font-size:13.5px;line-height:1.55;-webkit-box-orient:vertical;-webkit-line-clamp:3;text-wrap:pretty">{{ p.abstract }}</p>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+                  <button style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #eceef1;background:transparent;color:#191c20;font-size:13px;font-weight:500;white-space:nowrap" style-hover="background:#f5f6f8">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+                    <span>Хочу прочитать</span>
+                  </button>
+                  <a href="#" style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid #eceef1;background:transparent;color:#191c20;font-size:13px;font-weight:500;white-space:nowrap" style-hover="background:#f5f6f8">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+                    <span>arXiv</span>
+                  </a>
+                  <sc-if value="{{ p.cites }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;background:#f5f6f8;color:#6a7178;font-size:13px;font-weight:500">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path></svg>
+                      <span style="font-variant-numeric:tabular-nums">{{ p.cites }}</span>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+              <button style="position:relative;display:flex;width:148px;min-height:186px;flex:none;align-self:stretch;flex-direction:column;gap:6px;overflow:hidden;padding:10px 11px 9px;border:1px solid #d9dde4;background:linear-gradient(165deg,#e6e9f5 0%,#fbfaf7 42%,#f4f1ea 100%);text-align:left;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.55)" style-hover="transform:translateY(-1px)">
+                <div style="color:#233b92;font-size:9px;font-weight:700;letter-spacing:0.02em">{{ p.year }}</div>
+                <div style="display:-webkit-box;overflow:hidden;color:#1c1917;font-size:11px;font-weight:700;line-height:1.25;-webkit-line-clamp:3;-webkit-box-orient:vertical">{{ p.title }}</div>
+                <div style="display:-webkit-box;flex:1;overflow:hidden;color:#57534e;font-size:9.5px;line-height:1.35;-webkit-line-clamp:7;-webkit-box-orient:vertical">{{ p.abstract }}</div>
+                <div style="color:#a8a29e;font-size:8.5px">arXiv:{{ p.id }}</div>
+              </button>
+            </article>
+          </sc-for>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      papers: [
+        { id: '2609.01842', title: 'Test-Time Gradient Guidance of Flow Policies in Reinforcement Learning', date: '8 сен 2026', rel: 'вчера', authors: 'L. Chen, M. Okafor, R. Vasquez', cat: 'cs.LG', year: '2026', cites: '12', abstract: 'Предлагаем метод управления flow-matching-политиками на этапе инференса с помощью градиентов обученной функции ценности, что повышает эффективность выборки без переобучения базовой политики. Эксперименты на бенчмарках непрерывного управления показывают стабильный выигрыш над диффузионными базовыми моделями.' },
+        { id: '2609.01377', title: 'Sparse Retrieval Heads Explain Long-Context Failures in Transformers', date: '7 сен 2026', rel: '2 дн. назад', authors: 'A. Petrov, S. Nakamura', cat: 'cs.CL', year: '2026', cites: '', abstract: 'Мы выделяем небольшой набор голов внимания, отвечающих за копирование из длинного контекста, и показываем, что их насыщение предсказывает сбои извлечения. Точечное дообучение этих голов восстанавливает точность на задачах «иголка в стоге сена» при 128k токенов.' },
+        { id: '2609.00921', title: 'Verifiable Tool Use: Certifying Agent Trajectories with Program Traces', date: '6 сен 2026', rel: '3 дн. назад', authors: 'D. Harrington, Y. Zhou, K. Adeyemi', cat: 'cs.AI', year: '2026', cites: '4', abstract: 'Агентные системы, вызывающие внешние инструменты, сложно аудировать. Мы вводим формат трассы и верификатор, который подтверждает, что траектория удовлетворяет заданным пользователем ограничениям, и оцениваем его на 1 200 реальных запусках агентов.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

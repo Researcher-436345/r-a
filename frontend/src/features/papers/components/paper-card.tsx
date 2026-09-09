@@ -1,3 +1,4 @@
+import { MetadataLine } from '../../../shared/ui/metadata-line';
 import { useNavigate } from '@tanstack/react-router';
 import { Bookmark, BookmarkCheck, ExternalLink, LoaderCircle, Quote } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -33,50 +34,11 @@ function formatDate(value: string, locale: Locale) {
   } ${publishedDate.getUTCFullYear()}`;
 }
 
-function formatRelativeDate(value: string, locale: Locale) {
-  const publishedDate = new Date(value);
-  const now = new Date();
-  const diffMs = now.getTime() - publishedDate.getTime();
-  const diffDays = Math.max(0, Math.floor(diffMs / 86_400_000));
-
-  if (locale === 'ru') {
-    if (diffDays === 0) {
-      return 'сегодня';
-    }
-    if (diffDays === 1) {
-      return 'вчера';
-    }
-    if (diffDays < 7) {
-      return `${diffDays} дн. назад`;
-    }
-    return `${Math.floor(diffDays / 7)} нед. назад`;
-  }
-
-  if (diffDays === 0) {
-    return 'today';
-  }
-  if (diffDays === 1) {
-    return 'yesterday';
-  }
-  if (diffDays < 7) {
-    return `${diffDays}d ago`;
-  }
-  return `${Math.floor(diffDays / 7)}w ago`;
-}
-
 function formatCitationCount(value: number) {
   if (value >= 1000) {
     return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   }
   return String(value);
-}
-
-function hashHue(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
-  }
-  return hash % 360;
 }
 
 export function PaperCard({
@@ -129,14 +91,13 @@ export function PaperCard({
 
   const isSaved = Boolean(savedPaperId);
   const SaveIcon = isSaved ? BookmarkCheck : Bookmark;
-  const previewHue = useMemo(() => hashHue(paper.arxivId || paper.title), [paper.arxivId, paper.title]);
   const previewYear = useMemo(() => {
     const year = new Date(paper.publishedAt).getUTCFullYear();
     return Number.isFinite(year) ? String(year) : '';
   }, [paper.publishedAt]);
   const previewSnippet = useMemo(() => {
     const text = (paper.description || paper.title).replace(/\s+/g, ' ').trim();
-    return text.length > 160 ? `${text.slice(0, 157)}…` : text;
+    return text;
   }, [paper.description, paper.title]);
 
   const openInReader = async () => {
@@ -203,23 +164,10 @@ export function PaperCard({
               paper.title
             )}
           </button>
-          <div className="paper-card__meta">
-            <span>{formatDate(paper.publishedAt, locale)}</span>
-            <span aria-hidden="true">·</span>
-            <span>{formatRelativeDate(paper.publishedAt, locale)}</span>
-            {paper.authors ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>{paper.authors}</span>
-              </>
-            ) : null}
-            {paper.category ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>{paper.category}</span>
-              </>
-            ) : null}
-          </div>
+          <MetadataLine
+            className="paper-card__meta"
+            items={[formatDate(paper.publishedAt, locale), paper.authors || '']}
+          />
           {paper.description ? (
             <RichText className="paper-card__abstract" compact>
               {paper.description}
@@ -286,10 +234,8 @@ export function PaperCard({
         aria-label={t('papers.pdfPreview')}
         disabled={isOpening}
         onClick={() => void openInReader()}
-        style={{ ['--preview-hue' as string]: String(previewHue) }}
       >
         <div className="paper-card__preview-top">
-          <span className="paper-card__preview-cat">{paper.category || 'arXiv'}</span>
           {previewYear ? <span className="paper-card__preview-year">{previewYear}</span> : null}
         </div>
         <div className="paper-card__preview-title">{paper.title}</div>

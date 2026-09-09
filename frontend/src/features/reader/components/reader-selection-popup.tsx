@@ -287,7 +287,7 @@ export function ReaderSelectionPopup({
           <div className="reader-selection-popup__toolbar">
             <button type="button" className="reader-selection-popup__tool" onClick={askAssistant}>
               <MessageSquareText aria-hidden="true" size={15} strokeWidth={2} />
-              В чат
+              Спросить
             </button>
             <button type="button" className="reader-selection-popup__tool" onClick={() => setMode('note')}>
               <NotebookPen aria-hidden="true" size={15} strokeWidth={2} />
@@ -331,13 +331,11 @@ export function ReaderSelectionPopup({
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Комментарий к выделению…"
+            aria-label="Комментарий к выделению"
             disabled={isSaving}
             onMouseDown={(event) => event.stopPropagation()}
           />
           <div className="reader-selection-popup__actions">
-            <button type="button" onClick={() => setMode('choose')} disabled={isSaving}>
-              Назад
-            </button>
             <button type="submit" className="reader-selection-popup__save" disabled={isSaving}>
               {isSaving ? '…' : 'Сохранить'}
             </button>

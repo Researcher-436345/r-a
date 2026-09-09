@@ -1,10 +1,10 @@
 /** Спокойные пастельные цвета для выделения в PDF */
 export const HIGHLIGHT_COLORS = [
-  { id: 'butter', hex: '#f0e0a0', label: 'Жёлтый' },
-  { id: 'mint', hex: '#b5d9c4', label: 'Мятный' },
-  { id: 'sky', hex: '#a9c7e0', label: 'Голубой' },
-  { id: 'peach', hex: '#e8c4b0', label: 'Персиковый' },
-  { id: 'lilac', hex: '#cbb8de', label: 'Сиреневый' },
+  { id: 'butter', hex: '#f2d35c', label: 'Жёлтый' },
+  { id: 'mint', hex: '#7fcf9e', label: 'Мятный' },
+  { id: 'sky', hex: '#7fb3e6', label: 'Голубой' },
+  { id: 'peach', hex: '#f2a67f', label: 'Персиковый' },
+  { id: 'lilac', hex: '#b993e0', label: 'Сиреневый' },
 ] as const;
 
 export const DEFAULT_HIGHLIGHT_COLOR = HIGHLIGHT_COLORS[0].hex;

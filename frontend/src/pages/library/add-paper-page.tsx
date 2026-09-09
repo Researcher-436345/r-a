@@ -1,3 +1,4 @@
+import { SegmentedControl } from '../../shared/ui/segmented-control';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
@@ -72,24 +73,13 @@ export function AddPaperPage() {
       </div>
 
       <form className="add-paper-form" onSubmit={onSubmit}>
-        <div className="add-paper-tabs" role="tablist">
-          {(
-            [
-              ['arxiv', 'arXiv'],
-              ['doi', 'DOI'],
-              ['pdf', 'PDF'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={mode === value ? 'is-active' : undefined}
-              onClick={() => setMode(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="add-paper-tabs"
+          ariaLabel="Источник статьи"
+          value={mode}
+          onChange={setMode}
+          options={[{ value: 'arxiv', label: 'arXiv' }, { value: 'doi', label: 'DOI' }, { value: 'pdf', label: 'PDF' }]}
+        />
 
         {mode === 'arxiv' ? (
           <label className="auth-field">

@@ -9,6 +9,8 @@ import {
   FolderPlus,
   LoaderCircle,
   Plus,
+  PanelLeftClose,
+  PanelLeftOpen,
   RotateCcw,
   Trash2,
   X,
@@ -178,6 +180,7 @@ function FolderRow({
 
 export function LibraryPage() {
   const navigate = useNavigate();
+  const [foldersCollapsed, setFoldersCollapsed] = useState(false);
   const routeSearch = useSearch({ strict: false }) as { folder?: string };
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState(routeSearch.folder ?? '');
@@ -390,7 +393,7 @@ export function LibraryPage() {
 
   return (
     <div className="library-workspace">
-      <aside className="library-folders" aria-label="Папки библиотеки">
+      {!foldersCollapsed && <aside className="library-folders" aria-label="Папки библиотеки">
         <div className="library-folders__header">
           <button
             className="library-folders__new"
@@ -400,6 +403,7 @@ export function LibraryPage() {
             <Plus aria-hidden="true" size={15} strokeWidth={2} />
             <span>Новая папка</span>
           </button>
+          <button className="panel-collapse" type="button" title="Свернуть папки" aria-label="Свернуть папки" onClick={() => setFoldersCollapsed(true)}><PanelLeftClose size={16} /></button>
         </div>
 
         <nav className="library-folders__tree" aria-label="Дерево папок">
@@ -424,10 +428,11 @@ export function LibraryPage() {
           ))}
         </nav>
         {folderError ? <p className="library-folders__error">{folderError}</p> : null}
-      </aside>
+      </aside>}
 
       <section className="library-page">
         <div className="library-page__header">
+          {foldersCollapsed && <button className="panel-collapse" type="button" title="Развернуть папки" aria-label="Развернуть папки" onClick={() => setFoldersCollapsed(false)}><PanelLeftOpen size={16} /></button>}
           <div>
             <h1>{selectedFolder?.name ?? 'Библиотека'}</h1>
             <p>{total > 0 ? `${total} статей` : 'В этой папке пока нет статей'}</p>
@@ -439,7 +444,8 @@ export function LibraryPage() {
             aria-label="Добавить статью"
             title="Добавить статью"
           >
-            <FilePlus2 aria-hidden="true" size={20} strokeWidth={1.8} />
+            <FilePlus2 aria-hidden="true" size={16} strokeWidth={2} />
+            <span>Добавить статью</span>
           </Link>
         </div>
 

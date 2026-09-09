@@ -1,5 +1,6 @@
 import {
   Outlet,
+  lazyRouteComponent,
   createRootRouteWithContext,
   createRoute,
   createRouter,
@@ -117,7 +118,14 @@ const readerPaperRoute = createRoute({
   component: ReaderPage,
 });
 
+const designSystemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/design-system',
+  component: lazyRouteComponent(() => import('../pages/design-system/design-system-page'), 'DesignSystemPage'),
+});
+
 const routeTree = rootRoute.addChildren([
+  designSystemRoute,
   loginRoute,
   registerRoute,
   appRoute.addChildren([

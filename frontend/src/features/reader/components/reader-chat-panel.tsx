@@ -1,14 +1,15 @@
+import { MessageActions } from '../../../shared/ui/message-actions';
+import { copyText } from '../../../shared/lib/clipboard';
+import { SleepingCat } from '../../../shared/ui/sleeping-cat';
 import {
   ArrowUp,
   Check,
   CornerDownRight,
   GitCompare,
   Highlighter,
-  Layers,
   NotebookPen,
   Paperclip,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -91,14 +92,13 @@ function isPersistedMessageId(id: string): boolean {
 const readerTabs = [
   { value: 'assistant', icon: Sparkles },
   { value: 'notes', icon: NotebookPen },
-  { value: 'similar', icon: Layers },
 ] as const;
 
 interface ReaderChatPanelProps {
   paperId?: string;
   annotations: PaperAnnotation[];
   activeNoteId?: string | null;
-  /** Новое выделение — добавляется токеном в инпут (не заменяет старые) */
+  /** Новое выделение — добавляется редактируемым текстом в инпут. */
   contextAttachment?: ChatContextAttachment | null;
   focusAssistantToken?: number;
   focusNotesToken?: number;
@@ -133,6 +133,12 @@ export function ReaderChatPanel({
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
   const text = readerStrings[locale];
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!copiedMessageId) return;
+    const timer = window.setTimeout(() => setCopiedMessageId(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copiedMessageId]);
   const [activeTab, setActiveTab] = useState<ReaderTab>('assistant');
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -145,16 +151,12 @@ export function ReaderChatPanel({
   const [savingNoteMessageId, setSavingNoteMessageId] = useState<string | null>(null);
   const [savedNoteMessageId, setSavedNoteMessageId] = useState<string | null>(null);
   const [flashMessageId, setFlashMessageId] = useState<string | null>(null);
-  /** Одно выделение — цитата над инпутом; несколько — чипы в композере */
-  const [focusQuote, setFocusQuote] = useState<ChatContextAttachment | null>(null);
   const [freeNoteDraft, setFreeNoteDraft] = useState('');
   const [isSavingFreeNote, setIsSavingFreeNote] = useState(false);
   const freeNoteRef = useRef<HTMLTextAreaElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const lastInsertedId = useRef<string | null>(null);
-  const focusQuoteRef = useRef<ChatContextAttachment | null>(null);
-  focusQuoteRef.current = focusQuote;
 
   const tabs = useMemo(
     () =>
@@ -318,33 +320,21 @@ export function ReaderChatPanel({
   }, [focusChatMessageToken, focusChatMessageId]);
 
   const syncComposerEmpty = () => {
-    const emptyComposer = composerRef.current?.isEmpty() ?? true;
-    setComposerEmpty(emptyComposer && !focusQuoteRef.current);
+    setComposerEmpty(composerRef.current?.isEmpty() ?? true);
   };
 
   const addContextAttachment = (attachment: ChatContextAttachment) => {
     setActiveTab('assistant');
-    const chipCount = composerRef.current?.getSnapshot().attachments.length ?? 0;
-    const currentQuote = focusQuoteRef.current;
-
-    if (currentQuote && chipCount === 0) {
-      composerRef.current?.insertAttachment(currentQuote);
-      composerRef.current?.insertAttachment(attachment);
-      setFocusQuote(null);
-    } else if (!currentQuote && chipCount === 0) {
-      setFocusQuote(attachment);
-    } else {
-      composerRef.current?.insertAttachment(attachment);
-    }
-
-    setComposerEmpty(false);
-    composerRef.current?.focus();
+    // Wait for the assistant pane to become visible when switching from Notes.
+    window.requestAnimationFrame(() => {
+      const composer = composerRef.current;
+      if (!composer) return;
+      const separator = composer.isEmpty() ? '' : '\n\n';
+      const label = locale === 'ru' ? 'Вопрос по:' : 'Question about:';
+      composer.insertText(`${separator}${label}\n${attachment.text}\n\n`);
+      composer.focus();
+    });
   };
-
-  useEffect(() => {
-    syncComposerEmpty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when quote pin changes
-  }, [focusQuote]);
 
   useEffect(() => {
     if (!contextAttachment || contextAttachment.id === lastInsertedId.current) {
@@ -519,9 +509,7 @@ export function ReaderChatPanel({
       return;
     }
 
-    const attachments = focusQuote
-      ? [focusQuote, ...snapshot.attachments]
-      : snapshot.attachments;
+    const attachments = snapshot.attachments;
     const hasText = Boolean(snapshot.plainText);
     const defaultAsk = locale === 'ru' ? 'Объясни этот фрагмент' : 'Explain this passage';
     const content = hasText ? snapshot.plainText : attachments.length ? defaultAsk : '';
@@ -530,22 +518,17 @@ export function ReaderChatPanel({
       return;
     }
 
-    const quoteSegments: ComposerSegment[] = focusQuote
-      ? [{ type: 'chip', attachment: focusQuote }]
-      : [];
     const segments: ComposerSegment[] =
       hasText || !attachments.length
-        ? [...quoteSegments, ...snapshot.segments]
+        ? snapshot.segments
         : [
-            ...quoteSegments,
             ...snapshot.segments,
             { type: 'text', value: ` ${defaultAsk}` },
           ];
 
     const contextParts = [
-      ...(focusQuote ? [focusQuote.text] : []),
       snapshot.modelText,
-      !snapshot.modelText && !focusQuote ? snapshot.plainText : '',
+      !snapshot.modelText ? snapshot.plainText : '',
     ]
       .map((part) => part.trim())
       .filter(Boolean);
@@ -570,7 +553,6 @@ export function ReaderChatPanel({
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
     composerRef.current?.clear();
-    setFocusQuote(null);
     setComposerEmpty(true);
 
     setIsSending(true);
@@ -659,16 +641,13 @@ export function ReaderChatPanel({
         hidden={!showAssistant}
         aria-hidden={!showAssistant}
       >
-        <div className="reader-assistant">
+        <div className={`reader-assistant${messages.length ? ' reader-assistant--conversation' : ''}`}>
           {historyLoading ? (
             <div className="library-page__state">
               {locale === 'ru' ? 'Загружаем историю…' : 'Loading history…'}
             </div>
           ) : messages.length === 0 ? (
             <>
-              <div className="reader-assistant__icon">
-                <Sparkles aria-hidden="true" size={24} strokeWidth={2} />
-              </div>
 
               <div className="reader-suggestion-card">
                 <div className="reader-suggestion-card__header">
@@ -771,24 +750,16 @@ export function ReaderChatPanel({
                     </div>
                   </div>
                   {message.role === 'assistant' && canSaveMessageAsNote(message) ? (
-                    <button
-                      type="button"
-                      className={
-                        savedNoteMessageId === message.id || savingNoteMessageId === message.id
-                          ? 'reader-chat-row__note-btn reader-chat-row__note-btn--visible'
-                          : 'reader-chat-row__note-btn'
-                      }
-                      title={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
-                      aria-label={locale === 'ru' ? 'Добавить в заметки' : 'Save to notes'}
-                      disabled={savingNoteMessageId === message.id}
-                      onClick={() => void handleSaveMessageAsNote(message)}
-                    >
-                      {savedNoteMessageId === message.id ? (
-                        <Check aria-hidden="true" size={14} strokeWidth={2.2} />
-                      ) : (
-                        <NotebookPen aria-hidden="true" size={14} strokeWidth={2} />
-                      )}
-                    </button>
+                    <MessageActions
+                      className="reader-message-actions"
+                      copied={copiedMessageId === message.id}
+                      copyLabel={copiedMessageId === message.id ? (locale === 'ru' ? 'Скопировано' : 'Copied') : (locale === 'ru' ? 'Копировать' : 'Copy')}
+                      onCopy={() => { void copyText(message.content).then(() => setCopiedMessageId(message.id)).catch(() => setError(locale === 'ru' ? 'Не удалось скопировать' : 'Could not copy')); }}
+                      saveLabel={savedNoteMessageId === message.id ? (locale === 'ru' ? 'Сохранено' : 'Saved') : (locale === 'ru' ? 'В заметки' : 'Save to notes')}
+                      onSave={() => void handleSaveMessageAsNote(message)}
+                      saving={savingNoteMessageId === message.id}
+                      saved={savedNoteMessageId === message.id}
+                    />
                   ) : null}
                 </div>
               ))}
@@ -808,48 +779,13 @@ export function ReaderChatPanel({
         </div>
 
         <div className="reader-chat-input-wrap">
-          {focusQuote ? (
-            <div className="reader-chat-focus-quote">
-              <button
-                type="button"
-                className="reader-chat-focus-quote__body"
-                title={focusQuote.preview || focusQuote.text}
-                onClick={() => onPassageSelect?.(focusQuote)}
-              >
-                <span className="reader-chat-focus-quote__marks" aria-hidden="true">
-                  “”
-                </span>
-                <span className="reader-chat-focus-quote__content">
-                  <span className="reader-chat-focus-quote__label">{focusQuote.locationLabel}</span>
-                  <span className="reader-chat-focus-quote__text">
-                    {focusQuote.preview || focusQuote.text}
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="reader-chat-focus-quote__close"
-                title={locale === 'ru' ? 'Убрать фрагмент' : 'Remove passage'}
-                aria-label={locale === 'ru' ? 'Убрать фрагмент' : 'Remove passage'}
-                onClick={() => {
-                  setFocusQuote(null);
-                  setComposerEmpty(composerRef.current?.isEmpty() ?? true);
-                }}
-              >
-                <X aria-hidden="true" size={14} strokeWidth={2} />
-              </button>
-            </div>
-          ) : null}
+          <SleepingCat variant="reader" />
           <div className="reader-chat-input">
             <ChatComposer
               ref={composerRef}
               placeholder={
-                focusQuote
-                  ? locale === 'ru'
-                    ? 'Спроси об этом фрагменте…'
-                    : 'Ask about this passage…'
-                  : locale === 'ru'
-                    ? 'Спроси или добавь фрагменты из PDF…'
+                locale === 'ru'
+                    ? 'Спросите что угодно по статье…'
                     : 'Ask or add passages from the PDF…'
               }
               onChange={syncComposerEmpty}
@@ -887,7 +823,7 @@ export function ReaderChatPanel({
                 </div>
               ) : null}
               <div className="reader-chat-input__spacer" />
-              <span>{text.sendHint}</span>
+              <span className="sr-only">{text.sendHint}</span>
               <button
                 className="reader-send-button"
                 type="button"

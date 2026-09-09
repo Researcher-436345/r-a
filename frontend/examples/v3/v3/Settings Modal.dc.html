@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#fbfbfc;color:#191c20;font-family:"Golos Text",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button{font:inherit;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+a{color:inherit;text-decoration:none}
+a:hover{color:#233b92}
+textarea{font:inherit}
+::placeholder{color:#a2a8af}
+@keyframes catBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes catTail{0%,100%{transform:translateX(0)}50%{transform:translateX(-4px)}}
+@keyframes catZ{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}75%{opacity:0;transform:translateY(-8px)}100%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+input{font:inherit}
+</style>
+</helmet>
+<div style="position:relative;min-height:100vh;width:100%;background:#fbfbfc;color:#191c20;line-height:1.5">
+  <div style="display:flex;min-height:100vh"><aside style="position:sticky;top:0;display:flex;flex:0 0 208px;flex-direction:column;width:208px;height:100vh;gap:6px;padding:18px 14px 14px;border-right:1px solid #eceef1;background:#ffffff">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 6px 14px">
+      <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0">
+        <img src="../assets/logo-ra.png" alt="" style="display:block;width:44px;height:44px;object-fit:contain">
+        <span style="font-family:Fraunces,Georgia,serif;font-size:21px;font-weight:700;letter-spacing:-0.015em;color:#233b92;line-height:1;font-variation-settings:'opsz' 144">Odyssey</span>
+      </div>
+      <button title="Свернуть панель" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="0"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg></button>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:6px">
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:#f3f5fb;color:#233b92;font-size:14px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span>Исследовать</span></a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44"></path><path d="m13.56 11.747 4.332-.924"></path><path d="m16 21-3.105-6.21"></path><path d="M16.485 5.94a2 2 0 0 1 1.455-2.415l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z"></path><path d="m6.158 8.633 1.114 4.456"></path><path d="m8 21 3.105-6.21"></path><circle cx="12" cy="13" r="2"></circle></svg><span>Ассистент</span></a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8l3-3 3 3V2"></path><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"></path></svg><span>Библиотека</span></a>
+    </nav>
+    <div style="display:flex;flex-direction:column;margin-top:auto;padding-top:8px;border-top:1px solid #eceef1">
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Настройки</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Обратная связь</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg><span>Тёмная тема</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Выйти</span></button>
+    </div>
+  </aside><main style="flex:1"></main></div>
+  <div role="presentation" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(25,28,32,0.35)">
+    <div role="dialog" style="display:flex;width:min(500px,100%);flex-direction:column;padding:20px 24px 8px;border-radius:10px;border:1px solid #d9dde4;background:#ffffff;box-shadow:0 20px 48px rgba(20,24,30,0.2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px">
+        <h3 style="margin:0;color:#191c20;font-size:17px;font-weight:600">Настройки</h3>
+        <button title="Закрыть" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;padding:16px 0;border-top:1px solid #eceef1">
+  <div style="flex:1;min-width:0"><div style="color:#191c20;font-size:14px;font-weight:500">Язык интерфейса</div><span style="display:block;margin-top:2px;color:#8b9198;font-size:12.5px">Меню, подсказки и системные тексты</span></div>
+  <div style="display:inline-flex;align-items:center;gap:0;padding:0;border:1px solid #eceef1;background:#fbfbfc;overflow:hidden;"><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:#ffffff;color:#233b92;font-size:13px;font-weight:500;white-space:nowrap;border-right:1px solid #eceef1"><span>RU</span></button><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:transparent;color:#6a7178;font-size:13px;font-weight:500;white-space:nowrap;" style-hover="color:#191c20"><span>EN</span></button></div>
+</div>
+      <div style="display:flex;align-items:center;gap:20px;padding:16px 0;border-top:1px solid #eceef1">
+  <div style="flex:1;min-width:0"><div style="color:#191c20;font-size:14px;font-weight:500">Тема</div><span style="display:block;margin-top:2px;color:#8b9198;font-size:12.5px">Оформление интерфейса</span></div>
+  <div style="display:inline-flex;align-items:center;gap:0;padding:0;border:1px solid #eceef1;background:#fbfbfc;overflow:hidden;"><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:#ffffff;color:#233b92;font-size:13px;font-weight:500;white-space:nowrap;border-right:1px solid #eceef1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg><span>Светлая</span></button><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:transparent;color:#6a7178;font-size:13px;font-weight:500;white-space:nowrap;" style-hover="color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg><span>Тёмная</span></button></div>
+</div>
+      <div style="display:flex;align-items:center;gap:20px;padding:16px 0;border-top:1px solid #eceef1">
+  <div style="flex:1;min-width:0"><div style="color:#191c20;font-size:14px;font-weight:500">Тема в ридере</div><span style="display:block;margin-top:2px;color:#8b9198;font-size:12.5px">Применять тёмную тему к странице PDF</span></div>
+  <div style="display:inline-flex;align-items:center;gap:0;padding:0;border:1px solid #eceef1;background:#fbfbfc;overflow:hidden;"><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:#ffffff;color:#233b92;font-size:13px;font-weight:500;white-space:nowrap;border-right:1px solid #eceef1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="7" x="3" y="3" rx="0"></rect><rect width="9" height="7" x="3" y="14" rx="0"></rect><rect width="5" height="7" x="16" y="14" rx="0"></rect></svg><span>Вместе</span></button><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:stretch;padding:8px 14px;background:transparent;color:#6a7178;font-size:13px;font-weight:500;white-space:nowrap;" style-hover="color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg><span>Только UI</span></button></div>
+</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

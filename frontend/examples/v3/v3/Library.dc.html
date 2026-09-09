@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#fbfbfc;color:#191c20;font-family:"Golos Text",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button{font:inherit;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+a{color:inherit;text-decoration:none}
+a:hover{color:#233b92}
+textarea{font:inherit}
+::placeholder{color:#a2a8af}
+@keyframes catBreathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes catTail{0%,100%{transform:translateX(0)}50%{transform:translateX(-4px)}}
+@keyframes catZ{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}75%{opacity:0;transform:translateY(-8px)}100%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+input{font:inherit}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;width:100%;background:#fbfbfc;color:#191c20;line-height:1.5">
+  <aside style="position:sticky;top:0;display:flex;flex:0 0 208px;flex-direction:column;width:208px;height:100vh;gap:6px;padding:18px 14px 14px;border-right:1px solid #eceef1;background:#ffffff">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 6px 14px">
+      <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0">
+        <img src="../assets/logo-ra.png" alt="" style="display:block;width:44px;height:44px;object-fit:contain">
+        <span style="font-family:Fraunces,Georgia,serif;font-size:21px;font-weight:700;letter-spacing:-0.015em;color:#233b92;line-height:1;font-variation-settings:'opsz' 144">Odyssey</span>
+      </div>
+      <button title="Свернуть панель" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="0"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg></button>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:6px">
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span>Исследовать</span></a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44"></path><path d="m13.56 11.747 4.332-.924"></path><path d="m16 21-3.105-6.21"></path><path d="M16.485 5.94a2 2 0 0 1 1.455-2.415l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z"></path><path d="m6.158 8.633 1.114 4.456"></path><path d="m8 21 3.105-6.21"></path><circle cx="12" cy="13" r="2"></circle></svg><span>Ассистент</span></a>
+      <a href="#" style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:#f3f5fb;color:#233b92;font-size:14px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8l3-3 3 3V2"></path><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"></path></svg><span>Библиотека</span></a>
+    </nav>
+    <div style="display:flex;flex-direction:column;margin-top:auto;padding-top:8px;border-top:1px solid #eceef1">
+      <button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Настройки</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg><span>Обратная связь</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg><span>Тёмная тема</span></button><button style="display:flex;align-items:center;width:100%;min-height:36px;gap:11px;padding:9px 12px;background:transparent;color:#191c20;font-size:14px;font-weight:500;text-align:left" style-hover="background:#f5f6f8"><svg style="color:#6a7178" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg><span>Выйти</span></button>
+    </div>
+  </aside>
+  <main style="display:flex;flex:1;min-width:0;height:100vh">
+  <aside style="display:flex;flex:0 0 216px;flex-direction:column;width:216px;border-right:1px solid #eceef1;background:#ffffff">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 8px 4px">
+      <button style="display:inline-flex;flex:1;align-items:center;gap:8px;padding:8px 12px;border:1px solid #eceef1;background:#ffffff;color:#191c20;font-size:13.5px;font-weight:500;flex:none" style-hover="background:#f5f6f8"><svg style="color:#233b92" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg><span>Новая папка</span></button>
+      <button title="Свернуть папки" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="0"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg></button>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px;padding:22px 8px 4px">
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 10px;background:#f3f5fb;color:#233b92" style-hover="background:#f3f5fb">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:600;text-align:left" title="Хочу прочитать"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Хочу прочитать</span></button>
+  
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">12</span>
+</div>
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 10px;background:transparent;color:#191c20" style-hover="background:#f5f6f8">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:400;text-align:left" title="Читаю"><svg style="color:#6a7178" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16.5 12"></polyline></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Читаю</span></button>
+  
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">3</span>
+</div>
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 10px;background:transparent;color:#191c20" style-hover="background:#f5f6f8">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:400;text-align:left" title="Другое"><svg style="color:#6a7178" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="0"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Другое</span></button>
+  
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">7</span>
+</div>
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 10px;background:transparent;color:#191c20" style-hover="background:#f5f6f8">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:400;text-align:left" title="RL / Flow policies"><svg style="color:#6a7178" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">RL / Flow policies</span></button>
+  <button style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;color:#8b9198"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">5</span>
+</div>
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 26px;background:transparent;color:#191c20" style-hover="background:#f5f6f8">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:400;text-align:left" title="Test-time compute"><svg style="color:#6a7178" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Test-time compute</span></button>
+  
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">2</span>
+</div>
+      <div style="display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px 0 10px;background:transparent;color:#191c20" style-hover="background:#f5f6f8">
+  <button style="display:flex;flex:1;min-width:0;align-items:center;gap:9px;padding:7px 0;background:transparent;color:inherit;font-size:13.5px;font-weight:400;text-align:left" title="Агенты и инструменты"><svg style="color:#6a7178" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Агенты и инструменты</span></button>
+  
+  <span style="min-width:18px;color:#8b9198;font-size:12px;text-align:right;font-variant-numeric:tabular-nums">4</span>
+</div>
+    </nav>
+  </aside>
+  <section style="flex:1;min-width:0;height:100vh;overflow-y:auto">
+    <div style="width:min(680px,100%);margin:0 auto;padding:40px 40px 80px">
+      <div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:18px">
+        <div>
+          <h1 style="margin:0;color:#191c20;font-size:24px;font-weight:600;letter-spacing:-0.01em">Хочу прочитать</h1>
+          <p style="margin:4px 0 0;color:#8b9198;font-size:13.5px">12 статей</p>
+        </div>
+        <span style="flex:1"></span>
+        <a href="#" title="Добавить статью" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid #eceef1;background:#ffffff;color:#191c20;font-size:13.5px;font-weight:500;flex:none" style-hover="background:#f5f6f8"><svg style="color:#233b92" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M3 15h6"></path><path d="M6 12v6"></path></svg><span style="white-space:nowrap">Добавить статью</span></a>
+      </div>
+      <div style="display:flex;flex-direction:column;border:1px solid #eceef1;background:#ffffff">
+        <article style="display:flex;flex-direction:column;gap:0;padding:18px 20px 16px;border-top:1px solid #eceef1;background:#ffffff;margin-top:-1px" style-hover="background:#fbfbfc">
+  <div style="display:flex;align-items:flex-start;gap:14px">
+    <a href="#" style="flex:1;min-width:0;color:#191c20;font-size:17.5px;font-weight:600;line-height:1.3" style-hover="color:#233b92">Test-Time Gradient Guidance of Flow Policies in Reinforcement Learning</a>
+    <div style="display:flex;align-items:center;gap:8px;flex:none;height:23px;margin-right:-6px">
+      <span style="color:#a2a8af;font-size:12.5px">arXiv:2609.01842</span>
+      <button title="Удалить из библиотеки" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
+    </div>
+  </div>
+  <div style="margin:7px 0 14px;color:#8b9198;font-size:12.5px">L. Chen, M. Okafor, R. Vasquez</div>
+  
+  <p style="display:-webkit-box;overflow:hidden;margin:0;color:#6a7178;font-size:13.5px;line-height:1.55;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty">Предлагаем метод управления flow-matching-политиками на этапе инференса с помощью градиентов обученной функции ценности, что повышает эффективность выборки без переобучения базовой политики.</p>
+</article>
+        <article style="display:flex;flex-direction:column;gap:0;padding:18px 20px 16px;border-top:1px solid #eceef1;background:#ffffff;margin-top:-1px" style-hover="background:#fbfbfc">
+  <div style="display:flex;align-items:flex-start;gap:14px">
+    <a href="#" style="flex:1;min-width:0;color:#191c20;font-size:17.5px;font-weight:600;line-height:1.3" style-hover="color:#233b92">Sparse Retrieval Heads Explain Long-Context Failures in Transformers</a>
+    <div style="display:flex;align-items:center;gap:8px;flex:none;height:23px;margin-right:-6px">
+      <span style="color:#a2a8af;font-size:12.5px">arXiv:2609.01377</span>
+      <button title="Удалить из библиотеки" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
+    </div>
+  </div>
+  <div style="margin:7px 0 14px;color:#8b9198;font-size:12.5px">A. Petrov, S. Nakamura</div>
+  
+  <p style="display:-webkit-box;overflow:hidden;margin:0;color:#6a7178;font-size:13.5px;line-height:1.55;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty">Мы выделяем небольшой набор голов внимания, отвечающих за копирование из длинного контекста, и показываем, что их насыщение предсказывает сбои извлечения.</p>
+</article>
+        <article style="display:flex;flex-direction:column;gap:0;padding:18px 20px 16px;border-top:1px solid #eceef1;background:#ffffff;margin-top:-1px" style-hover="background:#fbfbfc">
+  <div style="display:flex;align-items:flex-start;gap:14px">
+    <a href="#" style="flex:1;min-width:0;color:#191c20;font-size:17.5px;font-weight:600;line-height:1.3" style-hover="color:#233b92">Scaling Laws for Verifiable Reward Models</a>
+    <div style="display:flex;align-items:center;gap:8px;flex:none;height:23px;margin-right:-6px">
+      <span style="color:#a2a8af;font-size:12.5px">DOI:10.1145/3712.0091</span>
+      <button title="Удалить из библиотеки" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
+    </div>
+  </div>
+  <div style="margin:7px 0 14px;color:#8b9198;font-size:12.5px">K. Adeyemi, D. Harrington</div>
+  <div style="display:flex;flex-direction:column;gap:6px;margin:0 0 12px"><div><button style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid #eceef1;background:transparent;color:#191c20;font-size:13px;font-weight:500;white-space:nowrap" style-hover="background:#f5f6f8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg><span>Повторить обработку PDF</span></button></div><p style="margin:0;color:#a13d3d;font-size:12.5px">Не удалось получить PDF: источник вернул 403.</p></div>
+  <p style="display:-webkit-box;overflow:hidden;margin:0;color:#6a7178;font-size:13.5px;line-height:1.55;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty">Изучаем, как качество верифицируемых наград масштабируется с размером модели и объёмом проверочных данных, и находим режим насыщения.</p>
+</article>
+        <article style="display:flex;flex-direction:column;gap:0;padding:18px 20px 16px;border-top:1px solid #eceef1;background:#ffffff;margin-top:-1px" style-hover="background:#fbfbfc">
+  <div style="display:flex;align-items:flex-start;gap:14px">
+    <a href="#" style="flex:1;min-width:0;color:#191c20;font-size:17.5px;font-weight:600;line-height:1.3" style-hover="color:#233b92">Consistency Models for Fast Policy Generation</a>
+    <div style="display:flex;align-items:center;gap:8px;flex:none;height:23px;margin-right:-6px">
+      <span style="color:#a2a8af;font-size:12.5px">arXiv:2608.22014</span>
+      <button title="Удалить из библиотеки" style="display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;background:transparent;color:#6a7178" style-hover="background:#f5f6f8;color:#191c20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
+    </div>
+  </div>
+  <div style="margin:7px 0 14px;color:#8b9198;font-size:12.5px">Y. Song, P. Dhariwal</div>
+  
+  <p style="display:-webkit-box;overflow:hidden;margin:0;color:#6a7178;font-size:13.5px;line-height:1.55;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:pretty">Consistency-модели позволяют генерировать действия за один шаг без потери качества, что делает их привлекательными для управления в реальном времени.</p>
+</article>
+      </div>
+    </div>
+  </section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

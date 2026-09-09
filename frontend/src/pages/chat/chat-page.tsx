@@ -1,12 +1,12 @@
+import { MessageActions } from '../../shared/ui/message-actions';
+import { copyText } from '../../shared/lib/clipboard';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
   Check,
-  Copy,
   CornerDownRight,
   Loader2,
   PanelLeftClose,
   PanelLeftOpen,
-  Sparkles,
   SquarePen,
   Trash2,
 } from 'lucide-react';
@@ -329,26 +329,6 @@ function PendingResearchMessage({
   );
 }
 
-async function copyText(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-  if (!copied) {
-    throw new Error('Clipboard copy failed');
-  }
-}
-
 interface SourceState {
   status: 'adding' | 'added' | 'error';
   error?: string;
@@ -622,22 +602,12 @@ function AssistantMessage({
           );
         }}
       />
-      <div className="chat-message__actions">
-        <button
-          className="chat-message__copy"
-          type="button"
-          onClick={() => void handleCopy()}
-          aria-label={label}
-          title={label}
-        >
-          {copied ? (
-            <Check aria-hidden="true" size={14} strokeWidth={2} />
-          ) : (
-            <Copy aria-hidden="true" size={14} strokeWidth={2} />
-          )}
-          <span>{label}</span>
-        </button>
-      </div>
+      <MessageActions
+        className="chat-message__actions"
+        copied={copied}
+        copyLabel={label}
+        onCopy={() => void handleCopy()}
+      />
     </article>
   );
 }
@@ -717,8 +687,8 @@ export function ChatPage() {
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
   const title = useMemo(
-    () => activeQuestion ? conversationTitle(activeQuestion, locale) : copy.newChat,
-    [activeQuestion, locale],
+    () => chatHistory.find((chat) => chat.id === chatId)?.title || (activeQuestion ? conversationTitle(activeQuestion, locale) : copy.newChat),
+    [chatHistory, chatId, activeQuestion, locale, copy.newChat],
   );
 
   const refreshChatHistory = async () => {
@@ -1214,15 +1184,6 @@ export function ChatPage() {
           ) : null}
           <h1>{screen === 'new' ? copy.newChat : title}</h1>
           <span className="chat-header__spacer" />
-          <button
-            className="chat-header__upgrade"
-            type="button"
-            aria-label={copy.upgrade}
-            title={copy.upgrade}
-          >
-            <Sparkles aria-hidden="true" size={15} strokeWidth={2} />
-            <span>{copy.upgrade}</span>
-          </button>
         </header>
 
         {screen === 'new' ? (

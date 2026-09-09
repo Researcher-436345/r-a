@@ -65,10 +65,10 @@ export function ReaderPage() {
   const readerPageRef = useRef<HTMLDivElement | null>(null);
   const [chatWidth, setChatWidth] = useState(() => {
     if (typeof window === 'undefined') {
-      return 420;
+      return 360;
     }
     const raw = Number(window.localStorage.getItem('researcher.reader.chatWidth'));
-    return Number.isFinite(raw) && raw >= 280 ? raw : 420;
+    return Number.isFinite(raw) && raw >= 280 ? raw : 360;
   });
   const [isResizingChat, setIsResizingChat] = useState(false);
 
@@ -427,13 +427,14 @@ export function ReaderPage() {
     return <div className="library-page__error">{error}</div>;
   }
 
-  const authors = paper?.authors.map((author) => author.name).join(', ') ?? '';
+  const authorNames = paper?.authors.map((author) => author.name.trim()).filter(Boolean) ?? [];
+  const firstAuthor = authorNames[0] ?? '';
+  const surname = firstAuthor.includes(',') ? firstAuthor.split(',')[0].trim() : firstAuthor.split(/\s+/).slice(-1)[0];
+  const authors = surname ? `${surname}${authorNames.length > 1 ? ' et al.' : ''}` : '';
   const metaParts = [
     authors,
     paper?.arxiv_id ? `arXiv:${paper.arxiv_id}` : null,
     paper?.doi ? `DOI:${paper.doi}` : null,
-    paper?.year ? String(paper.year) : null,
-    paper?.latest_version ? `PDF: ${paper.latest_version.status}` : null,
   ].filter(Boolean);
 
   return (
