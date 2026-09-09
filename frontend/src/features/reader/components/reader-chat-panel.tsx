@@ -887,27 +887,19 @@ export function ReaderChatPanel({
                 </div>
               </form>
 
-              {(annotations?.length ?? 0) === 0 ? (
-                <div className="library-page__state">
-                  {locale === 'ru'
-                    ? 'Пока пусто — напишите выше или выделите текст в PDF / чате'
-                    : 'Empty so far — write above or select text in the PDF / chat'}
-                </div>
-              ) : (
-                (annotations ?? []).map((note) => (
-                  <ReaderNoteCard
-                    key={note.id}
-                    note={note}
-                    locale={locale}
-                    isActive={activeNoteId === note.id}
-                    isDeleting={deletingId === note.id}
-                    onOpen={(item) => onNoteSelect?.(item)}
-                    onSave={handleUpdateNote}
-                    onDelete={(id) => void handleDelete(id)}
-                    onPageCite={onPageCite}
-                  />
-                ))
-              )}
+              {(annotations ?? []).map((note) => (
+                <ReaderNoteCard
+                  key={note.id}
+                  note={note}
+                  locale={locale}
+                  isActive={activeNoteId === note.id}
+                  isDeleting={deletingId === note.id}
+                  onOpen={(item) => onNoteSelect?.(item)}
+                  onSave={handleUpdateNote}
+                  onDelete={(id) => void handleDelete(id)}
+                  onPageCite={onPageCite}
+                />
+              ))}
             </>
           )}
         </div>

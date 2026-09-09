@@ -22,9 +22,9 @@ export interface SessionInfo {
   current: boolean;
 }
 
-/** Регистрация: письмо со ссылкой для подтверждения, входа сразу нет. */
-export async function register(email: string, password: string): Promise<void> {
-  await apiRequest('/auth/register', {
+/** Сервер сообщает, нужно ли подтверждать email перед входом. */
+export async function register(email: string, password: string): Promise<{ email_verification_required?: boolean }> {
+  return apiRequest<{ email_verification_required?: boolean }>('/auth/register', {
     method: 'POST',
     body: { email, password },
   });

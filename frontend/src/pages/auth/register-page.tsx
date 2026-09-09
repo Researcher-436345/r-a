@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
 import { register } from '../../features/auth/auth-api';
@@ -6,6 +6,7 @@ import { ApiError } from '../../shared/api/client';
 import { LogoMark } from '../../shared/ui/logo-mark';
 
 export function RegisterPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +19,11 @@ export function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await register(email.trim(), password);
+      const result = await register(email.trim(), password);
+      if (result.email_verification_required === false) {
+        await navigate({ to: '/login' });
+        return;
+      }
       setSubmittedEmail(email.trim());
     } catch (err) {
       if (err instanceof ApiError) {

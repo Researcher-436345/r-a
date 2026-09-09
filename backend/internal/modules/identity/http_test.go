@@ -285,7 +285,7 @@ func (f *fakeMail) lastToken() string {
 
 // --- harness -------------------------------------------------------------------
 
-func newTestAPI(t *testing.T) (http.Handler, *fakeStore, *fakeMail) {
+func newTestAPI(t *testing.T, verificationEnabled ...bool) (http.Handler, *fakeStore, *fakeMail) {
 	t.Helper()
 	fs := newFakeStore()
 	fm := &fakeMail{}
@@ -293,18 +293,50 @@ func newTestAPI(t *testing.T) (http.Handler, *fakeStore, *fakeMail) {
 
 	api := API{
 		Config: config.Config{
-			JWTSecret:       "test-secret",
-			AccessTokenTTL:  30 * time.Minute,
-			RefreshTokenTTL: 14 * 24 * time.Hour,
-			FrontendURL:     "http://localhost:5173",
+			EmailVerificationEnabled: true,
+			JWTSecret:                "test-secret",
+			AccessTokenTTL:           30 * time.Minute,
+			RefreshTokenTTL:          14 * 24 * time.Hour,
+			FrontendURL:              "http://localhost:5173",
 		},
 		Store: fs,
 		Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
 		Mail:  fm,
 	}
+	if len(verificationEnabled) > 0 {
+		api.Config.EmailVerificationEnabled = verificationEnabled[0]
+	}
 	r := chi.NewRouter()
 	api.Mount(r)
 	return r, fs, fm
+}
+
+func TestVerificationDisabled(t *testing.T) {
+	h, fs, fm := newTestAPI(t, false)
+	credentials := map[string]string{"email": "no-verify@example.com", "password": "Password123"}
+	for i := 0; i < 2; i++ {
+		rec := doJSON(t, h, http.MethodPost, "/auth/register", credentials, nil, "")
+		if rec.Code != 200 || loginBody(t, rec)["email_verification_required"] != false {
+			t.Fatalf("registration should allow sign-in without email: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	u, _ := fs.GetByEmail(context.Background(), credentials["email"])
+	if u.Verified() {
+		t.Fatal("disabling verification must not mark an email as verified")
+	}
+	rec := doJSON(t, h, http.MethodPost, "/auth/login", credentials, nil, "")
+	if rec.Code != 200 {
+		t.Fatalf("unverified login: %d %s", rec.Code, rec.Body.String())
+	}
+	refreshCookieOf(t, rec)
+	wrong := doJSON(t, h, http.MethodPost, "/auth/login", map[string]string{"email": credentials["email"], "password": "WrongPassword"}, nil, "")
+	if wrong.Code != 401 {
+		t.Fatalf("wrong password must still fail: %d", wrong.Code)
+	}
+	doJSON(t, h, http.MethodPost, "/auth/resend-verification", map[string]string{"email": credentials["email"]}, nil, "")
+	if fm.count() != 0 || len(fs.tokens) != 0 {
+		t.Fatal("disabled verification must not send emails or create verification tokens")
+	}
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path string, body any, cookie *http.Cookie, bearer string) *httptest.ResponseRecorder {

@@ -26,11 +26,10 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      if (nextPath.startsWith('/')) {
-        window.location.assign(nextPath);
-      } else {
-        await navigate({ to: '/' });
-      }
+      const destination = nextPath.startsWith('/') && !nextPath.startsWith('//') && !nextPath.includes('\\')
+        ? nextPath
+        : '/';
+      await navigate({ to: destination });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'email_not_verified') {

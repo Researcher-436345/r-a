@@ -1,6 +1,6 @@
 import { setAccessToken } from './token-storage';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+import { API_URL } from '../../shared/api/base-url';
 
 let refreshInFlight: Promise<boolean> | null = null;
 

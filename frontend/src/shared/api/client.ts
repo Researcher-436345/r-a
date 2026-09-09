@@ -1,7 +1,7 @@
 import { getAccessToken, clearTokens } from '../../features/auth/token-storage';
 import { tryRefreshSession } from '../../features/auth/refresh-session';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+import { API_URL } from './base-url';
 
 export class ApiError extends Error {
   status: number;

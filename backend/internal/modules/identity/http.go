@@ -185,6 +185,10 @@ func (a API) register(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, "Failed to create user")
 		return
 	}
+	if !a.Config.EmailVerificationEnabled {
+		httpx.JSON(w, 200, map[string]any{"message": "you can sign in", "email_verification_required": false})
+		return
+	}
 	httpx.JSON(w, 200, map[string]string{"message": "check your email"})
 }
 
@@ -229,7 +233,7 @@ func (a API) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 401, "Incorrect email or password")
 		return
 	}
-	if !u.Verified() {
+	if a.Config.EmailVerificationEnabled && !u.Verified() {
 		a.sendVerification(r, u)
 		httpx.JSON(w, 403, map[string]any{
 			"detail": "Email is not verified. We sent you a new confirmation link.",
@@ -480,6 +484,9 @@ func refreshCookie(r *http.Request) string {
 // --- one-time emails ------------------------------------------------------------
 
 func (a API) sendVerification(r *http.Request, u User) {
+	if !a.Config.EmailVerificationEnabled {
+		return
+	}
 	raw, hash, err := newToken()
 	if err != nil {
 		slog.Error("failed to generate verify token", "error", err)

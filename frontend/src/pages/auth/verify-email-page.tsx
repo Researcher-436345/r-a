@@ -27,7 +27,7 @@ export function VerifyEmailPage() {
     verifyEmail(token)
       .then(() => {
         // Авто-вход выполнен: access-токен уже в памяти.
-        window.location.assign('/');
+        return navigate({ to: '/' });
       })
       .catch((err) => {
         setStatus('error');
