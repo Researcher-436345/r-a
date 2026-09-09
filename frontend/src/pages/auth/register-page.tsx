@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
 import { register } from '../../features/auth/auth-api';
@@ -6,10 +6,10 @@ import { ApiError } from '../../shared/api/client';
 import { LogoMark } from '../../shared/ui/logo-mark';
 
 export function RegisterPage() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
@@ -19,7 +19,7 @@ export function RegisterPage() {
 
     try {
       await register(email.trim(), password);
-      await navigate({ to: '/' });
+      setSubmittedEmail(email.trim());
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.detail);
@@ -30,6 +30,29 @@ export function RegisterPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (submittedEmail) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-card__brand">
+            <LogoMark />
+            <div>
+              <h1>Проверьте почту</h1>
+              <p>Подтвердите регистрацию, чтобы войти</p>
+            </div>
+          </div>
+          <p className="auth-note">
+            Мы отправили письмо со ссылкой для подтверждения на{' '}
+            <strong>{submittedEmail}</strong>. Ссылка действует 24 часа.
+          </p>
+          <p className="auth-switch">
+            Подтвердили email? <Link to="/login">Войти</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">

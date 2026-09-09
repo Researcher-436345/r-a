@@ -10,15 +10,18 @@ export function LoginPage() {
   const searchParams =
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const sessionExpired = searchParams?.get('expired') === '1';
+  const passwordReset = searchParams?.get('reset') === '1';
   const nextPath = searchParams?.get('next') || '/';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+    setInfo(null);
     setIsSubmitting(true);
 
     try {
@@ -30,7 +33,11 @@ export function LoginPage() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.detail);
+        if (err.code === 'email_not_verified') {
+          setInfo(`Мы отправили письмо для подтверждения на ${email.trim()}. Перейдите по ссылке из письма, чтобы войти.`);
+        } else {
+          setError(err.detail);
+        }
       } else {
         setError('Не удалось войти. Проверьте, что API запущен.');
       }
@@ -76,12 +83,19 @@ export function LoginPage() {
         </label>
 
         {sessionExpired ? <div className="auth-error">Сессия истекла. Войдите заново.</div> : null}
+        {passwordReset ? (
+          <div className="auth-info">Пароль обновлён. Войдите с новым паролем.</div>
+        ) : null}
+        {info ? <div className="auth-info">{info}</div> : null}
         {error ? <div className="auth-error">{error}</div> : null}
 
         <button className="auth-submit" type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Входим…' : 'Войти'}
         </button>
 
+        <p className="auth-switch">
+          <Link to="/forgot-password">Забыли пароль?</Link>
+        </p>
         <p className="auth-switch">
           Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
         </p>

@@ -20,6 +20,16 @@ type Config struct {
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 
+	// Auth sessions / email verification (identity).
+	FrontendURL  string
+	CookieSecure bool
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUser     string
+	SMTPPass     string
+	SMTPFrom     string
+	MailEnabled  bool
+
 	S3Endpoint       string
 	S3PublicEndpoint string
 	S3AccessKey      string
@@ -86,6 +96,15 @@ func Load() Config {
 		JWTAlgorithm:    getenv("JWT_ALGORITHM", "HS256"),
 		AccessTokenTTL:  minutes(getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"), 30),
 		RefreshTokenTTL: days(getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"), 14),
+
+		FrontendURL:  strings.TrimRight(getenv("FRONTEND_URL", "http://localhost:5173"), "/"),
+		CookieSecure: getenv("COOKIE_SECURE", "false") == "true",
+		SMTPHost:     getenv("SMTP_HOST", "localhost"),
+		SMTPPort:     getenv("SMTP_PORT", "1025"),
+		SMTPUser:     getenv("SMTP_USER", ""),
+		SMTPPass:     getenv("SMTP_PASS", ""),
+		SMTPFrom:     getenv("SMTP_FROM", getenv("MAIL_FROM", "researcher@localhost")),
+		MailEnabled:  getenv("MAIL_ENABLED", "false") == "true",
 
 		S3Endpoint:       getenv("S3_ENDPOINT_URL", "http://localhost:9000"),
 		S3PublicEndpoint: getenv("S3_PUBLIC_ENDPOINT_URL", "http://localhost:9000"),

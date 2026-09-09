@@ -82,6 +82,7 @@ npm run dev -- --port 5173
 | MinIO API | http://localhost:**9002** (не 9000!) |
 | MinIO Console | http://localhost:**9003** |
 | Postgres | localhost:5433 (`researcher` / `researcher`) |
+| Mailpit (dev-почта) | http://localhost:8025 (SMTP :1025) |
 | Redis | localhost:6379 |
 
 Проверка API: `curl http://localhost:8080/health` → `status: ok`.
@@ -94,8 +95,8 @@ npm run dev -- --port 5173
 Browser (5173)
     │  JWT Bearer
     ▼
-Go API (:8080)  ──► Postgres (схема из `migrations/`)
-    │           ──► Redis (asynq queue + feed cache)
+Go API (:8080)  ──► pgbouncer (transaction pool) ──► Postgres (схема из `migrations/`)
+    │           ──► Redis (asynq queue + feed cache + auth throttle)
     │           ──► MinIO (PDF), внутри Docker: minio:9000
     │
     └── GET /papers/{id}/pdf  ← стрим PDF через API
@@ -111,10 +112,15 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 ### Auth
 
-- JWT HS256, claims: `sub` = user UUID, `type` = `access` | `refresh`
-- Access ~30 мин, refresh ~14 дней
-- Пароли: bcrypt  
-- Контракт как у старого FastAPI — фронт не менялся по полям токенов
+- **Сессии:** access JWT HS256 (~30 мин, claims `sub`, `sid` = auth_sessions.id, `type=access`) в памяти вкладки; refresh — **httpOnly cookie** (`researcher_refresh`, SameSite=Lax, Path=/) → серверная сессия в БД (`auth_sessions`, только sha256-хеш токена)
+- **Ротация + reuse detection:** каждый `POST /auth/refresh` отзывает старую сессию (`replaced_by`) и выдаёт новую; повтор отозванной cookie → 401 и отзыв **всех** сессий пользователя
+- **Верификация email:** жёсткий блок — без подтверждения логин запрещён (403 `code=email_not_verified` + авто-resend); одноразовые токены в `auth_tokens` (verify 24ч, reset 1ч), в БД только sha256-хеш
+- **Сброс пароля:** forgot (всегда generic 200) → письмо → reset → bcrypt-хеш обновлён + все сессии отозваны
+- **Throttle:** Redis fixed window (`internal/platform/throttle`), 429 + Retry-After, fail-open при недоступном Redis
+- **Письма:** `internal/platform/mailer` — SMTP env (`SMTP_*`), `MAIL_ENABLED=false` → stdout; в compose Mailpit (UI http://localhost:8025), отправка — горутина, без ретраев
+- **Фронт:** access в памяти модуля (`token-storage.ts`), silent refresh по cookie при старте и на 401 (`credentials: 'include'` для `/auth/*`), страницы verify-email / forgot / reset / `/settings/sessions`
+- Пароли: bcrypt; generic-ответы register/forgot/resend против user enumeration
+- ⚠️ Старые stateless refresh-JWT из localStorage после этого релиза не работают — перелогин; тесты identity — `http_test.go` (fake store + miniredis)
 
 ### LLM
 
@@ -181,6 +187,8 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 - `backend/cmd/worker/main.go` — asynq PDF jobs  
 - `backend/internal/app/router.go` — wiring модулей  
 - `backend/internal/modules/*` — домены (identity, catalog, library, annotations, feed, assistant)  
+- `backend/internal/modules/identity/http.go` — все `/auth/*` хендлеры; `http_test.go` — тесты (fake store + miniredis)
+- `backend/internal/platform/mailer`, `backend/internal/platform/throttle` — письма (SMTP/stdout) и Redis rate-limit
 - `backend/internal/platform/*` — config, db, queue, MinIO, httpx  
 
 **Frontend**
@@ -188,11 +196,14 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 - `frontend/src/features/library/api.ts` — library + `waitForPdfUrl` / blob  
 - `frontend/src/pages/reader/reader-page.tsx` — ридер  
 - `frontend/src/features/reader/components/` — popup, chat, PDF canvas  
-- `frontend/src/shared/api/client.ts` — JWT + refresh  
+- `frontend/src/features/auth/` — token-storage (access в памяти), refresh-session (cookie), auth-api  
+- `frontend/src/pages/auth/`, `frontend/src/pages/settings/sessions-page.tsx` — auth-флоу и активные сессии  
+- `frontend/src/shared/api/client.ts` — JWT + refresh + credentials для `/auth/*`  
 
 **Схема БД**
 
 - `migrations/001_init.sql` — baseline schema  
+- `migrations/007_auth_sessions.sql` — серверные сессии, одноразовые токены, `email_verified_at`  
 - `migrations/migrate.sh` — apply / mark applied  
 
 ---
@@ -241,7 +252,10 @@ Cursor на macOS часто занимает порты **9000/9002**. Signed U
 
 Все приватные: `Authorization: Bearer <access>`.
 
-- `POST /auth/register|login|refresh`, `GET /auth/me`  
+- `POST /auth/register` → 200 `{"message":"check your email"}` (без токенов); `POST /auth/verify-email {token}` → авто-вход (access + cookie)
+- `POST /auth/login` → access + refresh-cookie; `POST /auth/refresh` (cookie, fallback `{refresh_token}` в body) → ротация; `POST /auth/logout`
+- `POST /auth/forgot-password | reset-password | resend-verification` — все generic
+- `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `DELETE /auth/sessions` (выйти со всех устройств), `GET /auth/me` (+`email_verified`)
 - `POST /papers/arxiv|doi|upload`  
 - `GET /papers/{id}`, `GET /papers/{id}/pdf-url`, `GET /papers/{id}/pdf`, `POST .../retry-pdf`  
 - `POST /papers/{id}/chat|explain|translate`  

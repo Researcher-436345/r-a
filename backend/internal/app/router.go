@@ -14,6 +14,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/mailer"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -39,7 +40,12 @@ func Router(d Deps) http.Handler {
 		Queue:      d.Queue,
 		Membership: libStore,
 	}
-	identityAPI := identity.API{Config: d.Config, DB: d.DB}
+	identityAPI := identity.API{
+		Config: d.Config,
+		DB:     d.DB,
+		Redis:  d.Redis,
+		Mail:   mailer.FromConfig(d.Config),
+	}
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{

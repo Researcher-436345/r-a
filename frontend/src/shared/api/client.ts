@@ -6,12 +6,15 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 export class ApiError extends Error {
   status: number;
   detail: string;
+  /** Optional machine-readable code, e.g. "email_not_verified". */
+  code?: string;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, code?: string) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -51,19 +54,24 @@ function shouldAttemptRefresh(path: string, status: number, retried: boolean) {
   return !path.startsWith('/auth/');
 }
 
-async function parseErrorDetail(response: Response) {
+async function parseErrorBody(response: Response): Promise<{ detail: string; code?: string }> {
   let detail = `Request failed with status ${response.status}`;
+  let code: string | undefined;
   try {
-    const data = (await response.json()) as { detail?: string | Array<{ msg?: string }> };
+    const data = (await response.json()) as {
+      detail?: string | Array<{ msg?: string }>;
+      code?: string;
+    };
     if (typeof data.detail === 'string') {
       detail = data.detail;
     } else if (Array.isArray(data.detail) && data.detail[0]?.msg) {
       detail = data.detail[0].msg;
     }
+    code = typeof data.code === 'string' ? data.code : undefined;
   } catch {
     // ignore JSON parse errors
   }
-  return detail;
+  return { detail, code };
 }
 
 export async function apiFetch(path: string, options: RequestOptions = {}): Promise<Response> {
@@ -80,6 +88,7 @@ export async function apiFetch(path: string, options: RequestOptions = {}): Prom
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
+    credentials: path.startsWith('/auth/') ? 'include' : (options.credentials ?? 'same-origin'),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
@@ -99,7 +108,8 @@ export async function apiFetch(path: string, options: RequestOptions = {}): Prom
       redirectToLoginOnExpiredSession();
     }
 
-    throw new ApiError(response.status, await parseErrorDetail(response));
+    const { detail, code } = await parseErrorBody(response);
+    throw new ApiError(response.status, detail, code);
   }
 
   return response;

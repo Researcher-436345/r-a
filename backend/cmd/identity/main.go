@@ -10,7 +10,9 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/mailer"
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -23,7 +25,19 @@ func main() {
 	}
 	defer pool.Close()
 
-	api := identity.API{Config: cfg, DB: pool}
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rdb := redis.NewClient(redisOpts)
+	defer rdb.Close()
+
+	api := identity.API{
+		Config: cfg,
+		DB:     pool,
+		Redis:  rdb,
+		Mail:   mailer.FromConfig(cfg),
+	}
 	r := chi.NewRouter()
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, 200, map[string]string{"status": "ok", "service": "identity"})
