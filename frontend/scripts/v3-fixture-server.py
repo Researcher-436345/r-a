@@ -4,6 +4,7 @@ Then: VITE_API_URL=http://127.0.0.1:8089 npm run dev -- --host 127.0.0.1 --port 
 Sign in with any test email and an 8+ character test password. No real credentials.
 All writes are in memory and disappear when this process exits.
 Set FIXTURE_STREAM_DELAY_SECONDS=15 to test navigation during a running answer.
+Add FIXTURE_STREAM_CHUNK_CHARS=50 for gradual text growth and scroll testing.
 """
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -55,10 +56,24 @@ messages={'chat-0':[message('user','Собери обзор по свежим м
 notes=[dict(id='note-'+str(i),paper_id='paper-1',page=1,rect=None,selected_text=q,note=n,color=c,created_at=now.isoformat(),updated_at=now.isoformat()) for i,(q,n,c) in enumerate([('…incorporating them into RL pipelines for policy improvement has proven more difficult.','Ключевая мотивация: flow/diffusion-политики плохо встраиваются в RL из-за нестабильности обучения актора.','#f2d35c'),('…using the value gradient to guide the reference policy to generate higher-value actions.','Проверить вывод оценки градиента критика в разделе 5 — кажется, тут вся новизна.','#7fcf9e')])]
 paper_messages = {}
 STREAM_DELAY = float(os.environ.get('FIXTURE_STREAM_DELAY_SECONDS', '0'))
+STREAM_CHUNK_CHARS = int(os.environ.get('FIXTURE_STREAM_CHUNK_CHARS', '0'))
 class Handler(BaseHTTPRequestHandler):
  def log_message(self, *args): pass
  def send(self,data,status=200,mime='application/json'):
   body=json.dumps(data,ensure_ascii=False).encode() if mime=='application/json' else data
+  if mime=='text/event-stream' and STREAM_CHUNK_CHARS > 0:
+   events=[]
+   for event in body.decode().split('\n\n'):
+    if not event:continue
+    lines=event.splitlines();data=next((line[6:] for line in lines if line.startswith('data: ')),None)
+    payload=json.loads(data) if data else {}
+    field='content' if 'event: delta' in lines else 'text' if payload.get('type')=='delta' else None
+    if field and isinstance(payload.get(field),str):
+     for start in range(0,len(payload[field]),STREAM_CHUNK_CHARS):
+      piece=dict(payload);piece[field]=payload[field][start:start+STREAM_CHUNK_CHARS]
+      events.append('\n'.join(line if not line.startswith('data: ') else 'data: '+json.dumps(piece) for line in lines))
+    else:events.append(event)
+   body=('\n\n'.join(events)+'\n\n').encode()
   self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:5174'); self.send_header('Access-Control-Allow-Credentials','true'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS'); self.send_header('Content-Length',str(len(body))); self.end_headers()
   if mime=='text/event-stream' and STREAM_DELAY:
    for index,event in enumerate(body.split(b'\n\n')):

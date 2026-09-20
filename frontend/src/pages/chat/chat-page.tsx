@@ -1,3 +1,4 @@
+import { useFollowScroll } from '../../shared/lib/use-follow-scroll';
 import { isAuthenticated } from '../../features/auth/token-storage';
 import { getConversationStore } from '../../shared/lib/conversation-store';
 import { useConversationStore } from '../../shared/lib/use-conversation-store';
@@ -688,7 +689,7 @@ export function ChatPage() {
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const loadedRouteConversationKeyRef = useRef('');
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const threadEndRef = useRef<HTMLDivElement | null>(null);
+  const { scrollRef, onThreadScroll, onThreadWheel } = useFollowScroll(chatId, messages, screen === 'conversation');
 
   const title = useMemo(
     () => chatHistory.find((chat) => chat.id === chatId)?.title || (activeQuestion ? conversationTitle(activeQuestion, locale) : copy.newChat),
@@ -909,13 +910,6 @@ export function ChatPage() {
       }
     })();
   }, [chatId, initialQuestion, routeConversationKey, routeMode, conversation]);
-
-  useEffect(() => {
-    if (messages.length <= 2) {
-      return;
-    }
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages]);
 
   const openNewChat = () => {
     setDraft('');
@@ -1194,7 +1188,12 @@ export function ChatPage() {
             </div>
           </section>
         ) : (
-          <div className="chat-page__scroll">
+          <div
+            className="chat-page__scroll"
+            ref={scrollRef}
+            onScroll={onThreadScroll}
+            onWheel={onThreadWheel}
+          >
             <div className="chat-thread">
               {messages.map((message) => (
                 <Fragment key={message.id}>
@@ -1208,7 +1207,6 @@ export function ChatPage() {
               ))}
               <div
                 className="chat-thread__end"
-                ref={threadEndRef}
                 aria-hidden="true"
               />
             </div>

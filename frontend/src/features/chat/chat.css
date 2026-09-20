@@ -325,7 +325,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
+  overflow-anchor: none;
   scrollbar-gutter: auto;
 }
 
