@@ -20,12 +20,14 @@ type Message struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// A pair shares now() within its transaction; UUIDs do not encode message order.
+// At equal timestamps, the user question must precede the assistant answer.
 func (s Store) List(ctx context.Context, userID, paperID uuid.UUID) ([]Message, error) {
 	rows, err := s.DB.Query(ctx, `
 		SELECT id, paper_id, user_id, role, content, context_text, created_at
 		FROM chat_messages
 		WHERE user_id = $1 AND paper_id = $2
-		ORDER BY created_at ASC, id ASC`, userID, paperID)
+		ORDER BY created_at ASC, CASE role WHEN 'user' THEN 0 ELSE 1 END ASC, id ASC`, userID, paperID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +55,10 @@ func (s Store) ListRecent(ctx context.Context, userID, paperID uuid.UUID, limit 
 			SELECT id, paper_id, user_id, role, content, context_text, created_at
 			FROM chat_messages
 			WHERE user_id = $1 AND paper_id = $2
-			ORDER BY created_at DESC, id DESC
+			ORDER BY created_at DESC, CASE role WHEN 'user' THEN 0 ELSE 1 END DESC, id DESC
 			LIMIT $3
 		) recent
-		ORDER BY created_at ASC, id ASC`, userID, paperID, limit)
+		ORDER BY created_at ASC, CASE role WHEN 'user' THEN 0 ELSE 1 END ASC, id ASC`, userID, paperID, limit)
 	if err != nil {
 		return nil, err
 	}
