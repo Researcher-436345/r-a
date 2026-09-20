@@ -59,3 +59,15 @@ func TestOldUntitledPDFFixture(t *testing.T) {
 		t.Fatalf("bad title %q", info.Title)
 	}
 }
+
+func TestArxivIDNeedsItsPrefix(t *testing.T) {
+	if id := findArxivID([]byte("%PDF-1.5\nstream 1234.56789 0 obj [2306.16004] endstream"), ""); id != "" {
+		t.Fatalf("a bare number must not become the arXiv id, got %q", id)
+	}
+	if id := findArxivID([]byte("%PDF-1.5\n/Title (arXiv:2306.16004v1 [cs.IR] 28 Jun 2023)"), ""); id != "2306.16004" {
+		t.Fatalf("arXiv stamp: got %q", id)
+	}
+	if id := findArxivID(nil, "see https://arxiv.org/abs/1512.03385"); id != "1512.03385" {
+		t.Fatalf("arXiv URL: got %q", id)
+	}
+}

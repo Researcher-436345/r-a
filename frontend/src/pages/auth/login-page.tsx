@@ -98,6 +98,9 @@ export function LoginPage() {
         <p className="auth-switch">
           Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
         </p>
+        <p className="auth-switch">
+          <Link to="/welcome">← О сервисе</Link>
+        </p>
       </form>
     </div>
   );

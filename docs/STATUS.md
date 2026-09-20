@@ -17,13 +17,18 @@
 | EPIC-06 Заметки | P1 | ✅ | CRUD + notes from chat / reply selection + jump back to message |
 | EPIC-07 Trending | P1 | ✅ | feed + Redis |
 | EPIC-11 Фронт без моков | P0 | 🟡 | сайдбар проектов и Similar — моки |
-| EPIC-08 AI | P1 | 🟡 | full-text chat + SSE + cites; LLM зависит от ключа/баланса; нет RAG/span-highlight |
+| EPIC-08 AI | P1 | 🟡 | full-text chat + SSE + cites; AI-обзор статьи (alphaXiv-style); LLM зависит от ключа/баланса; нет RAG/span-highlight |
 | EPIC-05 Проекты | P2 | ❌ | не начато (sidebar моки) |
 | EPIC-09 Web-search | P2 | ❌ | ветка `feature/web-search`, не в main |
 | EPIC-10 Теги | P3 | ❌ | нет |
 
 ## Недавние изменения (changelog)
 
+- **2026-09-09 — paper overview в стиле alphaXiv (ветка `feature/paper-summary`, main влит):** вкладка «Обзор»
+  в ридере — переведённый заголовок, карточка Резюме / Проблема / Метод / Результаты / Выводы / Ограничения
+  + длинный «Разбор» с формулами и цитатами `[p.N «…»]` → PDF; `GET/POST /papers/{id}/summary` (+SSE),
+  кэш `paper_summaries` (`008`), инвалидация по `version_id`, `425` пока текст парсится, защита от
+  обрезанного ответа (`max_tokens` + `finish_reason`)
 - **2026-09-09 — pgbouncer:** connection pooler (transaction mode, `MAX_PREPARED_STATEMENTS=200` для pgx) перед postgres; 7 Go-сервисов ходят через `pgbouncer:5432`, миграции — напрямую в postgres. Серверные коннекты к БД ограничены `MAX_DB_CONNECTIONS=60` — фиксы риск `too many clients` при 7 пулах × MaxConns=20 против дефолтных 100 коннектов postgres
 - **2026-09-08 — production-ready auth:** серверные сессии (`007_auth_sessions.sql`), refresh в httpOnly cookie с ротацией и reuse detection (повтор старой cookie отзывает все сессии), подтверждение email (жёсткий блок + resend), сброс пароля (письмо → смена → отзыв всех сессий), Redis-троттлинг (429 + Retry-After), страница `/settings/sessions`, Mailpit в compose (SMTP :1025, UI http://localhost:8025). ⚠️ Старые stateless refresh-JWT из localStorage перестали работать — пользователи перелогинятся; регистрация больше не возвращает токены (200 «check your email»)
 - **2026-08-11 — notes scroll:** длинный список заметок скроллится, карточки не сжимаются

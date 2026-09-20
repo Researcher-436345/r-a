@@ -116,7 +116,8 @@ export function ReaderPdfCanvasViewer({
 
   useEffect(() => {
     let isMounted = true;
-    const loadingTask = getDocument(src);
+    // PDFs come from any URL a chat link names: no eval-compiled glyph paths (CVE-2024-4367).
+    const loadingTask = getDocument({ url: src, isEvalSupported: false });
 
     setPdf(null);
     setPageNumbers([]);

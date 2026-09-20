@@ -104,6 +104,9 @@ export function RegisterPage() {
         <p className="auth-switch">
           Уже есть аккаунт? <Link to="/login">Войти</Link>
         </p>
+        <p className="auth-switch">
+          <Link to="/welcome">← О сервисе</Link>
+        </p>
       </form>
     </div>
   );

@@ -1,0 +1,292 @@
+/* In-app paper opening (/open). Design system v3: straight surfaces, pill only for the main action. */
+.open-page {
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  padding: 64px 40px 80px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.open-page__inner {
+  display: flex;
+  width: min(580px, 100%);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.open-page__back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.open-page__back:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.open-card {
+  padding: 28px 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Cached papers resolve instantly: the delay keeps the card from flashing.
+   Only on the first attempt: after "Try again" the card is already on screen. */
+.open-card--enter {
+  animation: open-card-in 0.2s ease-out 0.15s both;
+}
+
+.open-card__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.open-card__eyebrow > svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
+.open-card--not_a_paper .open-card__eyebrow > svg,
+.open-card--invalid .open-card__eyebrow > svg {
+  color: var(--sub);
+}
+
+.open-card--error .open-card__eyebrow > svg {
+  color: #c44;
+}
+
+.open-card__title {
+  margin: 12px 0 0;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.open-card__meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.open-card__meta > svg {
+  flex: none;
+}
+
+.open-card__host {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-card__progress {
+  position: relative;
+  height: 2px;
+  margin: 22px 0 0;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.open-card__progress::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 36%;
+  background: var(--accent);
+  content: '';
+  animation: open-card-progress 1.4s ease-in-out infinite;
+}
+
+.open-card__body {
+  margin: 16px 0 0;
+  color: var(--sub);
+  font-size: 14px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.open-card__hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.open-card__hint > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+.open-card__detail {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.open-card__detail summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.open-card__detail p {
+  margin: 4px 0 0;
+}
+
+.open-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 0;
+}
+
+.open-card__primary,
+.open-card__secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: inherit;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.open-card__primary {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-text);
+  color: var(--panel);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.open-card__primary:hover {
+  background: var(--accent-strong);
+  color: var(--panel);
+}
+
+.open-card__secondary {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.open-card__secondary:hover {
+  background: var(--hover);
+}
+
+.open-card__external {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 8px 2px;
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.open-card__external:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@keyframes open-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes open-card-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .open-card--enter {
+    animation: none;
+  }
+
+  .open-card__progress::after {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .open-page {
+    padding: 16px 16px 32px;
+  }
+
+  .open-card {
+    padding: 20px 16px;
+  }
+
+  .open-card__title {
+    font-size: 21px;
+  }
+
+  .open-card__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .open-card__external {
+    justify-content: center;
+    margin-left: 0;
+  }
+}

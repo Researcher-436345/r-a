@@ -18,15 +18,18 @@ func (s Store) IsPublic(ctx context.Context, paperID uuid.UUID) (bool, error) {
 	err := s.DB.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM paper_versions
-			WHERE paper_id=$1 AND source IN ('arxiv', 'doi', 'web_pdf')
+			WHERE paper_id=$1 AND source IN ('arxiv', 'doi', 'web_pdf', 'openalex')
 		)`, paperID).Scan(&public)
 	return public, err
 }
 
 func (s Store) GetPaperOut(ctx context.Context, id uuid.UUID) (PaperOut, error) {
 	var p PaperOut
-	err := s.DB.QueryRow(ctx, `SELECT id,title,abstract,year,venue,doi,arxiv_id,created_at FROM papers WHERE id=$1`, id).
-		Scan(&p.ID, &p.Title, &p.Abstract, &p.Year, &p.Venue, &p.DOI, &p.ArxivID, &p.CreatedAt)
+	err := s.DB.QueryRow(ctx, `
+		SELECT id,title,abstract,year,venue,doi,arxiv_id,created_at,
+			EXISTS(SELECT 1 FROM paper_documents d WHERE d.paper_id=papers.id AND d.status='ready')
+		FROM papers WHERE id=$1`, id).
+		Scan(&p.ID, &p.Title, &p.Abstract, &p.Year, &p.Venue, &p.DOI, &p.ArxivID, &p.CreatedAt, &p.HasFullText)
 	if err != nil {
 		return p, err
 	}
@@ -90,6 +93,21 @@ func (s Store) CreatePaper(ctx context.Context, title string, abstract *string, 
 	var p Paper
 	err := s.DB.QueryRow(ctx, `INSERT INTO papers(id,title,abstract,year,venue,doi,arxiv_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,title,abstract,year,venue,doi,arxiv_id,created_at`, uuid.New(), title, abstract, year, venue, doi, arxivID).Scan(&p.ID, &p.Title, &p.Abstract, &p.Year, &p.Venue, &p.DOI, &p.ArxivID, &p.CreatedAt)
 	return p, err
+}
+
+// ClearArxivID releases an arXiv id held by a private upload, so the public
+// arXiv record can take it (ix_papers_arxiv_id is unique).
+func (s Store) ClearArxivID(ctx context.Context, id uuid.UUID) error {
+	_, err := s.DB.Exec(ctx, `UPDATE papers SET arxiv_id=NULL WHERE id=$1`, id)
+	return err
+}
+
+// HasVersionFrom reports whether any version of the paper came from one of
+// the given sources.
+func (s Store) HasVersionFrom(ctx context.Context, paperID uuid.UUID, sources ...string) (bool, error) {
+	var found bool
+	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM paper_versions WHERE paper_id=$1 AND source = ANY($2))`, paperID, sources).Scan(&found)
+	return found, err
 }
 
 func (s Store) UpdatePaperTitle(ctx context.Context, id uuid.UUID, title string) error {

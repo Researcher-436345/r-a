@@ -10,6 +10,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { isAuthenticated } from '../features/auth/token-storage';
 import { tryRefreshSession } from '../features/auth/refresh-session';
+import { LandingPage } from '../pages/landing/landing-page';
 import { LoginPage } from '../pages/auth/login-page';
 import { RegisterPage } from '../pages/auth/register-page';
 import { VerifyEmailPage } from '../pages/auth/verify-email-page';
@@ -20,6 +21,7 @@ import { ChatPage } from '../pages/chat/chat-page';
 import { HomePage } from '../pages/home/home-page';
 import { AddPaperPage } from '../pages/library/add-paper-page';
 import { LibraryPage } from '../pages/library/library-page';
+import { OpenPage, validateOpenSearch } from '../pages/open/open-page';
 import { ReaderPage } from '../pages/reader/reader-page';
 import { I18nProvider } from '../shared/i18n/i18n-context';
 import { ThemeProvider } from '../shared/theme/theme-context';
@@ -42,6 +44,19 @@ function RootComponent() {
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,
+});
+
+// Гостевая витрина: описание сервиса и призыв зарегистрироваться. Залогиненных
+// сразу уводим в приложение, гостей с любого защищённого маршрута — сюда.
+const landingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/welcome',
+  component: LandingPage,
+  beforeLoad: async () => {
+    if (isAuthenticated() || (await tryRefreshSession())) {
+      throw redirect({ to: '/' });
+    }
+  },
 });
 
 const loginRoute = createRoute({
@@ -94,7 +109,7 @@ const appRoute = createRoute({
       // молча обновляем сессию по httpOnly cookie.
       const refreshed = await tryRefreshSession();
       if (!refreshed) {
-        throw redirect({ to: '/login' });
+        throw redirect({ to: '/welcome' });
       }
     }
   },
@@ -146,6 +161,14 @@ const readerPaperRoute = createRoute({
   component: ReaderPage,
 });
 
+// Every paper link from the assistant lands here and is resolved into /reader.
+const openRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/open',
+  component: OpenPage,
+  validateSearch: validateOpenSearch,
+});
+
 const designSystemRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/design-system',
@@ -160,6 +183,7 @@ const sessionsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   designSystemRoute,
+  landingRoute,
   loginRoute,
   registerRoute,
   verifyEmailRoute,
@@ -172,6 +196,7 @@ const routeTree = rootRoute.addChildren([
     addPaperRoute,
     readerRoute,
     readerPaperRoute,
+    openRoute,
     sessionsRoute,
   ]),
 ]);

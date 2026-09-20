@@ -16,6 +16,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/centraluniversity/researcher/internal/platform/mailer"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
+	"github.com/centraluniversity/researcher/internal/platform/throttle"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/hibiken/asynq"
@@ -39,6 +40,9 @@ func Router(d Deps) http.Handler {
 		Storage:    d.Storage,
 		Queue:      d.Queue,
 		Membership: libStore,
+	}
+	if d.Redis != nil {
+		catalogAPI.Limiter = &throttle.Limiter{Redis: d.Redis}
 	}
 	identityAPI := identity.API{
 		Config: d.Config,

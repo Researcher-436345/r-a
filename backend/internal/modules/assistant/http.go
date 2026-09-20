@@ -33,6 +33,8 @@ func (a API) Mount(r chi.Router) {
 	r.Get("/assistant/models", a.listModels)
 	r.Get("/papers/{paperID}/chat/messages", a.listMessages)
 	r.Get("/papers/{paperID}/chat/context", a.chatContext)
+	r.Get("/papers/{paperID}/summary", a.getSummary)
+	r.Post("/papers/{paperID}/summary", a.createSummary)
 	r.Post("/papers/{paperID}/chat", a.chat)
 	r.Post("/papers/{paperID}/explain", a.explain)
 	r.Post("/papers/{paperID}/translate", a.translate)

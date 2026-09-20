@@ -30,7 +30,10 @@ type PaperOut struct {
 	ArxivID       *string          `json:"arxiv_id"`
 	Authors       []AuthorOut      `json:"authors"`
 	LatestVersion *PaperVersionOut `json:"latest_version"`
-	CreatedAt     time.Time        `json:"created_at"`
+	// HasFullText: a parsed or open-access text is stored, so the overview and
+	// assistant read more than the abstract even when there is no PDF.
+	HasFullText bool      `json:"has_full_text"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Paper struct {

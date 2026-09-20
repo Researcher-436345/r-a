@@ -37,11 +37,11 @@ type Chunk struct {
 }
 
 type ThreadSummary struct {
-	UserID            uuid.UUID  `json:"user_id"`
-	PaperID           uuid.UUID  `json:"paper_id"`
-	Summary           string     `json:"summary"`
-	CoveredMessageID  *uuid.UUID `json:"covered_message_id"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	UserID           uuid.UUID  `json:"user_id"`
+	PaperID          uuid.UUID  `json:"paper_id"`
+	Summary          string     `json:"summary"`
+	CoveredMessageID *uuid.UUID `json:"covered_message_id"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 func (s Store) UpsertPending(ctx context.Context, paperID, versionID uuid.UUID) error {
@@ -57,6 +57,7 @@ func (s Store) UpsertPending(ctx context.Context, paperID, versionID uuid.UUID) 
 }
 
 func (s Store) MarkFailed(ctx context.Context, paperID, versionID uuid.UUID, message string) error {
+	message = SanitizeText(message)
 	_, err := s.DB.Exec(ctx, `
 		INSERT INTO paper_documents (paper_id, version_id, engine, status, error_message)
 		VALUES ($1, $2, 'unknown', 'failed', $3)
@@ -77,6 +78,13 @@ func (s Store) SaveReady(
 	markdown, plainText string,
 	chunks []Chunk,
 ) error {
+	// Every write path (TeX and PDF parser) funnels through here, so cleaning
+	// once covers both.
+	engine = SanitizeText(engine)
+	markdown = SanitizeText(markdown)
+	plainText = SanitizeText(plainText)
+	chunks = sanitizeChunks(chunks)
+
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err

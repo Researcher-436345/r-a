@@ -2,7 +2,9 @@ package queue
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -14,6 +16,12 @@ const (
 	FinalizeUploadedPDF = "finalize_uploaded_pdf"
 	ProcessPaperParse   = "process_paper_parse"
 )
+
+// dedupeWindow: while a task for the same version is queued or running, another
+// enqueue (retry-pdf, find-fulltext, repeated resolves) is dropped instead of
+// downloading or parsing the same PDF again. asynq releases the lock when the
+// task succeeds, so a later retry still runs.
+const dedupeWindow = 30 * time.Minute
 
 type Payload struct {
 	VersionID string `json:"version_id"`
@@ -48,7 +56,10 @@ func NewServer(redisURL string) (*asynq.Server, error) {
 }
 func Enqueue(c *asynq.Client, typ, versionID string) error {
 	b, _ := json.Marshal(Payload{VersionID: versionID})
-	_, err := c.Enqueue(asynq.NewTask(typ, b))
+	_, err := c.Enqueue(asynq.NewTask(typ, b), asynq.Unique(dedupeWindow))
+	if errors.Is(err, asynq.ErrDuplicateTask) {
+		return nil
+	}
 	return err
 }
 func Decode(t *asynq.Task) (Payload, error) { var p Payload; return p, json.Unmarshal(t.Payload(), &p) }

@@ -41,7 +41,9 @@ def test_sources_are_normalized_and_deduplicated() -> None:
     assert sources[1].published_at == "2026-01-02"
 
 
-def test_provider_body_uses_openrouter_web_tools() -> None:
+def test_provider_body_uses_openrouter_web_tools(monkeypatch) -> None:
+    monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4-flash")
     body = provider_body(
         SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
     )
@@ -58,6 +60,24 @@ def test_provider_body_uses_openrouter_web_tools() -> None:
             "parameters": {"max_uses": 10, "max_content_tokens": 50_000},
         },
     ]
+
+
+def test_provider_body_skips_openrouter_tools_behind_a_proxy(monkeypatch) -> None:
+    # proxyapi rejects openrouter:* tools with 400, so the model must search itself.
+    monkeypatch.setattr(main, "LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1")
+    monkeypatch.setattr(main, "LLM_MODEL", "perplexity/sonar-pro")
+    body = provider_body(
+        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
+    )
+
+    assert body["model"] == "perplexity/sonar-pro"
+    assert "tools" not in body
+    assert "plugins" not in body
+
+
+def test_supports_openrouter_tools_only_for_direct_openrouter() -> None:
+    assert main.supports_openrouter_tools("https://openrouter.ai/api/v1")
+    assert not main.supports_openrouter_tools("https://api.proxyapi.ru/openrouter/v1")
 
 
 def test_provider_body_uses_deep_research_model() -> None:
@@ -161,3 +181,40 @@ def test_web_stream_does_not_emit_source_progress() -> None:
 
     assert response.status_code == 200
     assert "event: source_progress" not in response.text
+
+
+def test_provider_body_limits_perplexity_search_to_scholarly_domains(monkeypatch) -> None:
+    monkeypatch.setattr(main, "LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1")
+    monkeypatch.setattr(main, "LLM_MODEL", "perplexity/sonar-pro")
+    monkeypatch.setattr(main, "SEARCH_DOMAINS", ["arxiv.org", "doi.org"])
+    body = provider_body(
+        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
+    )
+    assert body["search_domain_filter"] == ["arxiv.org", "doi.org"]
+
+
+def test_provider_body_skips_domain_filter_for_non_perplexity_models(monkeypatch) -> None:
+    monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4-flash")
+    body = provider_body(
+        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
+    )
+    assert "search_domain_filter" not in body
+
+
+def test_index_pages_are_not_sources() -> None:
+    sources: list[Source] = []
+    merge_sources(
+        sources,
+        [
+            "https://www.sciencedirect.com/journal/computer-vision-and-image-understanding/vol/256",
+            "https://arxiv.org/list/cs.CV/recent",
+            "https://www.semanticscholar.org/search?q=opencv",
+            "https://arxiv.org/abs/1511.08458",
+            "https://www.semanticscholar.org/paper/Title/abc123",
+        ],
+    )
+    assert [source.url for source in sources] == [
+        "https://arxiv.org/abs/1511.08458",
+        "https://www.semanticscholar.org/paper/Title/abc123",
+    ]

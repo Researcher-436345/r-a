@@ -1,5 +1,6 @@
 import { ApiError, apiRequest } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
+import { isPrefetchablePaperUrl } from '../papers/link-kind';
 
 export type ReadingStatus = 'unread' | 'reading' | 'read';
 export type PaperVersionStatus = 'uploading' | 'processing' | 'ready' | 'failed';
@@ -21,6 +22,8 @@ export interface LibraryPaper {
     size_bytes: number | null;
     error_message: string | null;
   } | null;
+  /** Parsed or open-access full text is stored (the overview and assistant read it). */
+  has_full_text?: boolean;
   created_at: string;
 }
 
@@ -183,41 +186,130 @@ export function addByDoi(doi: string): Promise<LibraryPaper> {
   });
 }
 
-export function addByUrl(url: string, titleHint?: string): Promise<LibraryPaper> {
-  return apiRequest<LibraryPaper>('/papers/from-url', {
+// Keyed by URL and title: the backend opens the paper the link text names when
+// the model paired it with a wrong arXiv id, so one URL can mean two papers.
+const openByUrlRequests = new Map<string, Promise<LibraryPaper>>();
+const urlPrefetchQueue: Array<{ key: string; url: string; titleHint: string }> = [];
+const queuedPrefetchKeys = new Set<string>();
+// Prefetch never retries a failed link by itself; opening the link does.
+const failedPrefetchKeys = new Set<string>();
+// Resolving a web link can take 15+ s; an answer with 30 links must not fire 30 at once.
+const MAX_CONCURRENT_URL_PREFETCHES = 2;
+let activeUrlPrefetches = 0;
+
+function openKey(url: string, titleHint?: string) {
+  return `${url.trim()}\n${(titleHint ?? '').trim().toLowerCase()}`;
+}
+
+// 422 not_found / not_a_paper answers the server would repeat: /open shows them
+// at once instead of another 15 s wait, and reloads do not re-send them.
+const OPEN_FAILURE_TTL_MS = 10 * 60_000;
+const OPEN_FAILURE_STORAGE_KEY = 'odyssey.openFailures';
+type OpenFailure = { code: string; detail: string; at: number };
+const openFailures = new Map<string, OpenFailure>(readStoredOpenFailures());
+
+function readStoredOpenFailures(): Array<[string, OpenFailure]> {
+  try {
+    const raw = window.sessionStorage.getItem(OPEN_FAILURE_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    return Array.isArray(parsed)
+      ? (parsed as Array<[string, OpenFailure]>).filter(
+          (entry) => Array.isArray(entry) && entry[1] && now - entry[1].at < OPEN_FAILURE_TTL_MS,
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeOpenFailures() {
+  try {
+    window.sessionStorage.setItem(
+      OPEN_FAILURE_STORAGE_KEY,
+      JSON.stringify([...openFailures].slice(-200)),
+    );
+  } catch {
+    // Private mode or blocked storage: the in-memory copy still works.
+  }
+}
+
+function rememberOpenFailure(key: string, error: unknown) {
+  if (
+    error instanceof ApiError &&
+    error.status === 422 &&
+    (error.code === 'not_found' || error.code === 'not_a_paper')
+  ) {
+    openFailures.set(key, { code: error.code, detail: error.detail, at: Date.now() });
+    storeOpenFailures();
+  }
+}
+
+/** The remembered 422 for this link, if resolving it recently found nothing. */
+export function cachedOpenFailure(url: string, titleHint?: string): ApiError | null {
+  const key = openKey(url, titleHint);
+  const failure = openFailures.get(key);
+  if (!failure) {
+    return null;
+  }
+  if (Date.now() - failure.at > OPEN_FAILURE_TTL_MS) {
+    openFailures.delete(key);
+    storeOpenFailures();
+    return null;
+  }
+  return new ApiError(422, failure.detail, failure.code);
+}
+
+export async function addByUrl(url: string, titleHint?: string): Promise<LibraryPaper> {
+  const paper = await apiRequest<LibraryPaper>('/papers/from-url', {
     method: 'POST',
     token: authToken(),
     body: { url, title_hint: titleHint ?? '', add_to_library: true },
   });
+  // The same paper answers a later /open of this link without another resolve.
+  const key = openKey(url, titleHint);
+  if (!openByUrlRequests.has(key)) {
+    openByUrlRequests.set(key, Promise.resolve(paper));
+  }
+  return paper;
 }
 
-const openByUrlRequests = new Map<string, Promise<LibraryPaper>>();
-const preparedUrlPapers = new Map<string, LibraryPaper>();
-const unsupportedUrls = new Set<string>();
-
-/** Готовит поддерживаемую web-ссылку для reader, не добавляя её в библиотеку. */
-export function openByUrl(url: string, titleHint?: string): Promise<LibraryPaper> {
-  const key = url.trim();
-  const cached = openByUrlRequests.get(key);
-  if (cached) {
-    return cached;
+/**
+ * Готовит web-ссылку для reader, не добавляя её в библиотеку. Параллельные вызовы делят один запрос.
+ * force: the user asked to try again, so neither a remembered miss nor a cached request is reused.
+ */
+export function openByUrl(
+  url: string,
+  titleHint?: string,
+  { force = false }: { force?: boolean } = {},
+): Promise<LibraryPaper> {
+  const key = openKey(url, titleHint);
+  if (!force) {
+    const cached = openByUrlRequests.get(key);
+    if (cached) {
+      return cached;
+    }
+    const failure = cachedOpenFailure(url, titleHint);
+    if (failure) {
+      return Promise.reject(failure);
+    }
   }
 
   const request = apiRequest<LibraryPaper>('/papers/from-url', {
     method: 'POST',
     token: authToken(),
-    body: { url: key, title_hint: titleHint ?? '', add_to_library: false },
+    body: { url: url.trim(), title_hint: titleHint ?? '', add_to_library: false },
   });
   openByUrlRequests.set(key, request);
   void request
-    .then((paper) => {
-      preparedUrlPapers.set(key, paper);
-      unsupportedUrls.delete(key);
-    })
-    .catch((error) => {
-      if (error instanceof ApiError && error.status === 422) {
-        unsupportedUrls.add(key);
+    .then(() => {
+      failedPrefetchKeys.delete(key);
+      if (openFailures.delete(key)) {
+        storeOpenFailures();
       }
+    })
+    .catch((error: unknown) => {
+      rememberOpenFailure(key, error);
       if (openByUrlRequests.get(key) === request) {
         openByUrlRequests.delete(key);
       }
@@ -225,19 +317,46 @@ export function openByUrl(url: string, titleHint?: string): Promise<LibraryPaper
   return request;
 }
 
-export function preparedUrlPaper(url: string) {
-  return preparedUrlPapers.get(url.trim());
+function drainUrlPrefetchQueue() {
+  while (activeUrlPrefetches < MAX_CONCURRENT_URL_PREFETCHES) {
+    const next = urlPrefetchQueue.shift();
+    if (!next) {
+      return;
+    }
+    queuedPrefetchKeys.delete(next.key);
+    if (openByUrlRequests.has(next.key)) {
+      // Already opened by a click or added to a folder meanwhile.
+      continue;
+    }
+    activeUrlPrefetches += 1;
+    void openByUrl(next.url, next.titleHint)
+      .catch(() => {
+        failedPrefetchKeys.add(next.key);
+      })
+      .finally(() => {
+        activeUrlPrefetches -= 1;
+        drainUrlPrefetchQueue();
+      });
+  }
 }
 
-export function isUnsupportedUrl(url: string) {
-  return unsupportedUrls.has(url.trim());
-}
-
-/** Запускает подготовку URL, когда ссылка попала во viewport. */
+/** Ставит ссылку в ограниченную фоновую очередь подготовки, когда она попала во viewport. */
 export function prefetchUrl(url: string, titleHint?: string) {
-  void openByUrl(url, titleHint).catch(() => {
-    // Неподдерживаемые ссылки продолжат работать как обычные внешние ссылки.
-  });
+  const trimmed = url.trim();
+  const key = openKey(trimmed, titleHint);
+  if (
+    !trimmed ||
+    !isPrefetchablePaperUrl(trimmed) ||
+    openByUrlRequests.has(key) ||
+    queuedPrefetchKeys.has(key) ||
+    failedPrefetchKeys.has(key) ||
+    cachedOpenFailure(trimmed, titleHint)
+  ) {
+    return;
+  }
+  queuedPrefetchKeys.add(key);
+  urlPrefetchQueue.push({ key, url: trimmed, titleHint: titleHint ?? '' });
+  window.setTimeout(drainUrlPrefetchQueue, 0);
 }
 
 export async function uploadPdf(file: File): Promise<LibraryPaper> {
@@ -276,77 +395,13 @@ export async function uploadPdf(file: File): Promise<LibraryPaper> {
   return (await response.json()) as LibraryPaper;
 }
 
-export function fetchPdfUrl(
-  paperId: string,
-): Promise<{ url: string; expires_in: number; status: string; source: string }> {
-  return apiRequest<{ url: string; expires_in: number; status: string; source: string }>(
-    `/papers/${paperId}/pdf-url`,
-    {
-      token: authToken(),
-    },
-  );
-}
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
-
-/** Скачивает PDF через API (не через MinIO напрямую) и отдаёт blob URL для PDF.js. */
-export async function fetchPdfObjectUrl(paperId: string): Promise<string> {
-  const token = authToken();
-  const response = await fetch(`${API_URL}/papers/${paperId}/pdf`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`;
-    try {
-      const data = (await response.json()) as { detail?: string };
-      if (data.detail) {
-        detail = data.detail;
-      }
-    } catch {
-      // ignore
-    }
-    throw new ApiError(response.status, detail);
-  }
-  const blob = await response.blob();
-  return URL.createObjectURL(blob);
-}
-
 export function fetchPaper(paperId: string): Promise<LibraryPaper> {
   return apiRequest<LibraryPaper>(`/papers/${paperId}`, {
     token: authToken(),
   });
 }
 
-/** Ждём, пока worker положит PDF в MinIO, затем отдаём blob URL. */
-export async function waitForPdfUrl(
-  paperId: string,
-  {
-    attempts = 40,
-    delayMs = 750,
-  }: { attempts?: number; delayMs?: number } = {},
-): Promise<{ url: string; expires_in: number; status: string; source: string }> {
-  let lastError: unknown;
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      await fetchPdfUrl(paperId);
-      const objectUrl = await fetchPdfObjectUrl(paperId);
-      return { url: objectUrl, expires_in: 0, status: 'ready', source: 'api' };
-    } catch (err) {
-      lastError = err;
-      const detail = err instanceof ApiError ? err.detail : '';
-      const stillProcessing =
-        err instanceof ApiError &&
-        (err.status === 409 || detail.toLowerCase().includes('processing'));
-      if (!stillProcessing && err instanceof ApiError && err.status !== 404) {
-        throw err;
-      }
-      await new Promise((resolve) => {
-        window.setTimeout(resolve, delayMs);
-      });
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('PDF не готов');
-}
+// PDF loading and the B3 pdf-url status codes live in features/reader/pdf-status.ts.
 
 export function retryPdf(paperId: string): Promise<LibraryPaper> {
   return apiRequest<LibraryPaper>(`/papers/${paperId}/retry-pdf`, {

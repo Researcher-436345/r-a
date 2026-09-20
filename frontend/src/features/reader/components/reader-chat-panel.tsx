@@ -9,6 +9,7 @@ import {
   Highlighter,
   NotebookPen,
   Paperclip,
+  ScrollText,
   Sparkles,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -42,6 +43,7 @@ import {
 } from './chat-composer';
 import { AssistantReplySelectionBar } from './assistant-reply-selection-bar';
 import { ReaderNoteCard } from './reader-note-card';
+import { ReaderSummaryPanel } from './reader-summary-panel';
 
 const MODEL_STORAGE_KEY = 'researcher.chat.model';
 const CHAT_NOTE_COLOR = '#cbb8de';
@@ -90,6 +92,7 @@ function isPersistedMessageId(id: string): boolean {
 }
 
 const readerTabs = [
+  { value: 'summary', icon: ScrollText },
   { value: 'assistant', icon: Sparkles },
   { value: 'notes', icon: NotebookPen },
 ] as const;
@@ -112,6 +115,10 @@ interface ReaderChatPanelProps {
   onAnnotationsChange?: () => void;
   focusChatMessageId?: string | null;
   focusChatMessageToken?: number;
+  /** What the assistant reads: the PDF text, open full text without a PDF, or only the abstract. */
+  contentMode?: 'pdf' | 'text' | 'abstract';
+  /** Changes when the paper's text changed; remounts the overview so it is not built from stale text. */
+  contentKey?: string;
 }
 
 export function ReaderChatPanel({
@@ -130,6 +137,8 @@ export function ReaderChatPanel({
   onAnnotationsChange,
   focusChatMessageId = null,
   focusChatMessageToken = 0,
+  contentMode = 'pdf',
+  contentKey,
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
   const text = readerStrings[locale];
@@ -158,19 +167,14 @@ export function ReaderChatPanel({
   const threadRef = useRef<HTMLDivElement | null>(null);
   const lastInsertedId = useRef<string | null>(null);
 
-  const tabs = useMemo(
-    () =>
-      readerTabs.map((tab) => ({
-        ...tab,
-        label:
-          tab.value === 'assistant'
-            ? text.tabAssistant
-            : tab.value === 'notes'
-              ? text.tabNotes
-              : text.tabSimilar,
-      })),
-    [text.tabAssistant, text.tabNotes, text.tabSimilar],
-  );
+  const tabs = useMemo(() => {
+    const labels: Record<(typeof readerTabs)[number]['value'], string> = {
+      summary: text.tabSummary,
+      assistant: text.tabAssistant,
+      notes: text.tabNotes,
+    };
+    return readerTabs.map((tab) => ({ ...tab, label: labels[tab.value] }));
+  }, [text.tabSummary, text.tabAssistant, text.tabNotes]);
 
   const contextTone =
     !contextUsage
@@ -654,7 +658,13 @@ export function ReaderChatPanel({
                   <Highlighter aria-hidden="true" size={18} strokeWidth={2} />
                   <span>{text.cardTitle}</span>
                 </div>
-                <p>{text.cardSub}</p>
+                <p>
+                  {contentMode === 'pdf'
+                    ? text.cardSub
+                    : contentMode === 'text'
+                      ? text.cardSubText
+                      : text.cardSubAbstract}
+                </p>
 
                 <div className="reader-prompts">
                   {readerPrompts[locale].map((prompt) => (
@@ -675,7 +685,7 @@ export function ReaderChatPanel({
                 </div>
               </div>
 
-              <div className="reader-assistant__hint">{text.tryHint}</div>
+              <div className="reader-assistant__hint">{contentMode === 'pdf' ? text.tryHint : text.tryHintNoPdf}</div>
             </>
           ) : (
             <div className="reader-chat-thread" ref={threadRef}>
@@ -786,7 +796,9 @@ export function ReaderChatPanel({
               placeholder={
                 locale === 'ru'
                     ? 'Спросите что угодно по статье…'
-                    : 'Ask or add passages from the PDF…'
+                    : contentMode === 'pdf'
+                      ? 'Ask or add passages from the PDF…'
+                      : 'Ask anything about this paper…'
               }
               onChange={syncComposerEmpty}
               onSubmit={handleSend}
@@ -837,6 +849,11 @@ export function ReaderChatPanel({
           </div>
         </div>
       </div>
+
+      {/* Монтируем только на активной вкладке: обзор генерируется лениво, по первому открытию */}
+      {activeTab === 'summary' ? (
+        <ReaderSummaryPanel key={contentKey} paperId={paperId} onPageCite={onPageCite} />
+      ) : null}
 
       {activeTab === 'notes' ? (
         <div className="reader-notes">

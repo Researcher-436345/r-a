@@ -14,7 +14,9 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
+	"github.com/centraluniversity/researcher/internal/platform/throttle"
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -38,6 +40,12 @@ func main() {
 		log.Fatal(err)
 	}
 	defer q.Close()
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rdb := redis.NewClient(redisOpts)
+	defer rdb.Close()
 
 	libStore := library.Store{DB: pool, Catalog: catalog.Store{DB: pool}}
 	api := catalog.API{
@@ -45,6 +53,7 @@ func main() {
 		Storage:    s3,
 		Queue:      q,
 		Membership: libStore,
+		Limiter:    &throttle.Limiter{Redis: rdb},
 	}
 
 	r := chi.NewRouter()

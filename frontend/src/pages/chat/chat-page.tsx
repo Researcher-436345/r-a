@@ -1,7 +1,8 @@
 import { MessageActions } from '../../shared/ui/message-actions';
 import { copyText } from '../../shared/lib/clipboard';
-import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
+  ArrowUpRight,
   Check,
   CornerDownRight,
   Loader2,
@@ -37,18 +38,19 @@ import {
 import {
   addByUrl,
   fetchLibraryFolders,
-  isUnsupportedUrl,
-  openByUrl,
   patchLibraryItem,
   prefetchUrl,
-  preparedUrlPaper,
   type LibraryFolder,
-  type LibraryPaper,
 } from '../../features/library/api';
 import {
   flattenLibraryFolders,
   LibraryFolderIcon,
 } from '../../features/library/folder-icons';
+import {
+  cleanPaperTitle,
+  isNonPaperUrl,
+  textFromChildren,
+} from '../../features/papers/link-kind';
 import { ApiError } from '../../shared/api/client';
 import { useI18n, type Locale } from '../../shared/i18n/i18n-context';
 
@@ -99,7 +101,7 @@ const chatCopy = {
     addedSource: 'Добавлено',
     chooseFolder: 'Добавить в папку',
     foldersLoading: 'Загружаем папки…',
-    openingSource: 'Открываем статью…',
+    externalLink: 'Внешний сайт — откроется в новой вкладке',
     inputLabel: 'Сообщение',
     modeLabel: 'Режим исследования',
     suggestions: [
@@ -143,7 +145,7 @@ const chatCopy = {
     addedSource: 'Added',
     chooseFolder: 'Add to folder',
     foldersLoading: 'Loading folders…',
-    openingSource: 'Opening article…',
+    externalLink: 'External site — opens in a new tab',
     inputLabel: 'Message',
     modeLabel: 'Research mode',
     suggestions: [
@@ -176,7 +178,7 @@ const chatCopy = {
     addedSource: string;
     chooseFolder: string;
     foldersLoading: string;
-    openingSource: string;
+    externalLink: string;
     inputLabel: string;
     modeLabel: string;
     suggestions: string[];
@@ -333,16 +335,56 @@ interface SourceState {
   status: 'adding' | 'added' | 'error';
   error?: string;
   paperId?: string;
-  readerCapable?: boolean;
 }
 
-function canOpenInReader(paper: LibraryPaper) {
-  const version = paper.latest_version;
-  return Boolean(
-    version?.pdf_key ||
-      version?.source === 'arxiv' ||
-      version?.source === 'web_pdf' ||
-      version?.source === 'upload',
+function comparableUrl(value: string) {
+  return value
+    .trim()
+    .replace(/^https?:\/\/(?:www\.)?/i, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+function findSource(sources: NonNullable<ChatMessage['sources']>, href: string) {
+  const exact = sources.find((candidate) => candidate.url === href);
+  if (exact) {
+    return exact;
+  }
+  const wanted = comparableUrl(href);
+  return sources.find((candidate) => comparableUrl(candidate.url) === wanted);
+}
+
+function isKeyboardFocus(target: EventTarget) {
+  try {
+    return target instanceof Element && target.matches(':focus-visible');
+  } catch {
+    // Browsers without :focus-visible: keep the popover reachable by keyboard.
+    return true;
+  }
+}
+
+/** Listing, home and help pages: leaving the app is explicit, marked with ↗. */
+function ExternalSourceLink({
+  href,
+  children,
+  locale,
+}: {
+  href: string;
+  children: React.ReactNode;
+  locale: Locale;
+}) {
+  const label = chatCopy[locale].externalLink;
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" title={label}>
+      {children}
+      <ArrowUpRight
+        className="external-link-icon"
+        aria-hidden="true"
+        size={13}
+        strokeWidth={2}
+      />
+      <span className="sr-only"> ({label})</span>
+    </a>
   );
 }
 
@@ -365,17 +407,15 @@ function InlineSourceLink({
   locale: Locale;
   onAdd: (url: string, title: string, folderId: string) => Promise<void>;
 }) {
-  const navigate = useNavigate();
-  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+  const wrapperRef = useRef<HTMLSpanElement | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [isOpening, setIsOpening] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
   const copy = chatCopy[locale];
   const choices = useMemo(() => flattenLibraryFolders(folders), [folders]);
 
+  // Warm the resolver so the click through /open is usually instant.
   useEffect(() => {
-    const anchor = anchorRef.current;
-    if (!anchor) {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
       return;
     }
     if (typeof IntersectionObserver === 'undefined') {
@@ -391,83 +431,41 @@ function InlineSourceLink({
       },
       { rootMargin: '240px 0px' },
     );
-    observer.observe(anchor);
+    observer.observe(wrapper);
     return () => observer.disconnect();
   }, [href, title]);
 
-  const openInReader = async (event: React.MouseEvent<HTMLAnchorElement>) => {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-
-    const prepared = preparedUrlPaper(href);
-    if (
-      isUnsupportedUrl(href) ||
-      (prepared && !canOpenInReader(prepared)) ||
-      (sourceState?.paperId && sourceState.readerCapable === false)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    setOpenError(null);
-    setIsOpening(true);
-    try {
-      const paper = sourceState?.paperId
-        ? null
-        : await openByUrl(href, title);
-      if (paper && !canOpenInReader(paper)) {
-        window.open(href, '_blank', 'noopener,noreferrer');
-        return;
-      }
-      const paperId = sourceState?.paperId ?? paper?.id;
-      if (paperId) {
-        await navigate({ to: '/reader/$paperId', params: { paperId } });
-      }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      setOpenError(detail);
-      // Unsupported formats retain the original link behavior.
-      if (error instanceof ApiError && error.status === 422) {
-        window.open(href, '_blank', 'noopener,noreferrer');
-      }
-    } finally {
-      setIsOpening(false);
-    }
-  };
-
   return (
     <span
+      ref={wrapperRef}
       className="chat-inline-source"
-      onMouseEnter={() => setIsPopoverOpen(true)}
+      // Only a real mouse or keyboard focus opens the folder popover: a tap
+      // emulates hover, and new content under the finger makes iOS drop the
+      // tap on the link. On touch, folders are in the reader after opening.
+      onPointerEnter={(event) => {
+        if (event.pointerType === 'mouse') {
+          setIsPopoverOpen(true);
+        }
+      }}
       onMouseLeave={() => setIsPopoverOpen(false)}
-      onFocus={() => setIsPopoverOpen(true)}
+      onFocus={(event) => {
+        if (isKeyboardFocus(event.target)) {
+          setIsPopoverOpen(true);
+        }
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setIsPopoverOpen(false);
         }
       }}
     >
-      <a
-        ref={anchorRef}
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-        aria-busy={isOpening || undefined}
-        onClick={(event) => void openInReader(event)}
-      >
+      {/* A real in-app href: middle-click and "open in new tab" stay in Odyssey too. */}
+      <Link to="/open" search={{ url: href, title }}>
         {children}
-      </a>
+      </Link>
       {isPopoverOpen ? (
         <span className="chat-inline-source__popover" role="dialog">
-          <span className="chat-inline-source__heading">
-            {isOpening ? copy.openingSource : copy.chooseFolder}
-          </span>
+          <span className="chat-inline-source__heading">{copy.chooseFolder}</span>
           {sourceState?.status === 'added' ? (
             <span className="chat-inline-source__success">
               <Check aria-hidden="true" size={14} strokeWidth={2} />
@@ -508,10 +506,8 @@ function InlineSourceLink({
               {copy.addingSource}
             </span>
           ) : null}
-          {sourceState?.error || openError ? (
-            <span className="chat-inline-source__error">
-              {sourceState?.error || openError}
-            </span>
+          {sourceState?.error ? (
+            <span className="chat-inline-source__error">{sourceState.error}</span>
           ) : null}
         </span>
       ) : null}
@@ -562,11 +558,7 @@ function AssistantMessage({
       await patchLibraryItem(paper.id, { folder_id: folderId });
       setSourceStates((current) => ({
         ...current,
-        [url]: {
-          status: 'added',
-          paperId: paper.id,
-          readerCapable: canOpenInReader(paper),
-        },
+        [url]: { status: 'added', paperId: paper.id },
       }));
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -585,8 +577,19 @@ function AssistantMessage({
           if (!/^https?:\/\//i.test(href)) {
             return <a {...anchorProps} href={href}>{children}</a>;
           }
-          const source = sources.find((candidate) => candidate.url === href);
-          const title = source?.title || href;
+          if (isNonPaperUrl(href)) {
+            return (
+              <ExternalSourceLink href={href} locale={locale}>
+                {children}
+              </ExternalSourceLink>
+            );
+          }
+          // Visible label first; numeric citations like [5] fall back to the source title.
+          const source = findSource(sources, href);
+          const title =
+            cleanPaperTitle(textFromChildren(children)) ||
+            cleanPaperTitle(source?.title ?? '') ||
+            '';
           return (
             <InlineSourceLink
               href={href}

@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// maxPDFBytes is the worker's download limit; the probe rejects larger files up front.
+const maxPDFBytes = 50 << 20
+
 var arxivRE = regexp.MustCompile(`(?i)(?:https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/)?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?)`)
 
 type ArxivPaper struct {
@@ -155,11 +158,11 @@ func downloadPDFOnce(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("PDF download returned %s", resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, (50<<20)+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxPDFBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > 50<<20 {
+	if len(data) > maxPDFBytes {
 		return nil, fmt.Errorf("PDF is too large (max 50MB)")
 	}
 	if !hasPDFHeader(data) {

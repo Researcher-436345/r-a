@@ -12,3 +12,9 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# server credentials
+.password.txt
+
+# presentations
+*.key

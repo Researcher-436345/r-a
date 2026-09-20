@@ -13,7 +13,7 @@ Last refreshed: 2026-08-11
 | catalog | 8102 | `/papers/*` (кроме chat/annotations), internal ACL |
 | library | 8103 | `/library` |
 | annotations | 8104 | annotations CRUD |
-| assistant | 8105 | chat SSE, explain, models, translate proxy |
+| assistant | 8105 | chat SSE, explain, summary, models, translate proxy |
 | feed | 8106 | `/feed/trending` |
 | searchapi | 8107 | `/search/*`, chat ownership/history, SSE proxy |
 | translator | 8090 | перевод |
@@ -34,7 +34,7 @@ Legacy monolith binary `api` ещё собирается в образе (rollba
 | papers, paper_documents, paper_chunks… | catalog (+ worker writes parse results) |
 | library_* | library (catalog also uses membership for ACL) |
 | annotations | annotations |
-| chat_messages, chat_thread_summaries | assistant |
+| chat_messages, chat_thread_summaries, paper_summaries | assistant |
 | search_chats, search_chat_messages | searchapi |
 
 ## Internal
