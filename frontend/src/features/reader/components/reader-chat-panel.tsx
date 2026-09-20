@@ -1,3 +1,5 @@
+import { useAuthenticated } from '../../auth/token-storage';
+import { requireAuthentication } from '../../auth/require-auth';
 import { MessageActions } from '../../../shared/ui/message-actions';
 import { copyText } from '../../../shared/lib/clipboard';
 import { SleepingCat } from '../../../shared/ui/sleeping-cat';
@@ -132,6 +134,7 @@ export function ReaderChatPanel({
   focusChatMessageToken = 0,
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
+  const authenticated = useAuthenticated();
   const text = readerStrings[locale];
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   useEffect(() => {
@@ -182,6 +185,7 @@ export function ReaderChatPanel({
           : 'ok';
 
   useEffect(() => {
+    if (!authenticated) return;
     let cancelled = false;
     void fetchAssistantModels()
       .then((res) => {
@@ -203,7 +207,7 @@ export function ReaderChatPanel({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     if (selectedModel) {
@@ -212,7 +216,8 @@ export function ReaderChatPanel({
   }, [selectedModel]);
 
   useEffect(() => {
-    if (!paperId) {
+    if (!paperId || !authenticated) {
+      setHistoryLoading(false);
       setMessages([]);
       setContextUsage(null);
       return;
@@ -260,10 +265,10 @@ export function ReaderChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [paperId, locale]);
+  }, [paperId, locale, authenticated]);
 
   useEffect(() => {
-    if (!paperId || !selectedModel) {
+    if (!authenticated || !paperId || !selectedModel) {
       return;
     }
     let cancelled = false;
@@ -281,7 +286,7 @@ export function ReaderChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [paperId, selectedModel, messages.length]);
+  }, [authenticated, paperId, selectedModel, messages.length]);
 
   useEffect(() => {
     if (!focusAssistantToken) {
@@ -518,6 +523,8 @@ export function ReaderChatPanel({
       return;
     }
 
+    if (!requireAuthentication()) return;
+
     const segments: ComposerSegment[] =
       hasText || !attachments.length
         ? snapshot.segments
@@ -631,7 +638,10 @@ export function ReaderChatPanel({
           className="segmented-control--reader-tabs"
           options={tabs}
           value={activeTab}
-          onChange={setActiveTab}
+          onChange={(tab) => {
+            if (tab === 'notes' && !requireAuthentication()) return;
+            setActiveTab(tab);
+          }}
         />
       </div>
 

@@ -56,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
  def log_message(self, *args): pass
  def send(self,data,status=200,mime='application/json'):
   body=json.dumps(data,ensure_ascii=False).encode() if mime=='application/json' else data
-  self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:5174'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS'); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+  self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:5174'); self.send_header('Access-Control-Allow-Credentials','true'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS'); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
  def do_OPTIONS(self):self.send({})
  def do_GET(self):self.dispatch()
  def do_POST(self):self.dispatch()
@@ -68,8 +68,13 @@ class Handler(BaseHTTPRequestHandler):
   if self.command in ['POST','PATCH']:
    data=self.rfile.read(int(self.headers.get('Content-Length',0)))
    if 'application/json' in self.headers.get('Content-Type',''):body=json.loads(data or '{}')
+  if path=='/auth/refresh':return self.send(dict(detail='Not authenticated'),401)
+  if path=='/auth/logout':return self.send({})
   if path.startswith('/auth/'):
-   return self.send(dict(access_token='local-visual-fixture',refresh_token='local-visual-fixture',token_type='bearer'))
+   return self.send(dict(access_token='local-visual-fixture',token_type='bearer'))
+  public = path=='/feed/trending' or path=='/papers/arxiv/open' or (self.command=='GET' and re.fullmatch(r'/papers/[^/]+(?:/pdf(?:-url)?)?',path)) or path.endswith('/translate')
+  if not public and not self.headers.get('Authorization'):return self.send(dict(detail='Not authenticated'),401)
+  if path=='/papers/arxiv/open':return self.send(next((p for p in papers if p['arxiv_id']==body.get('arxiv_id')),papers[0]))
   if path=='/feed/trending':return self.send(dict(items=feed,category='cs.AI',cached=True))
   if path=='/library/folders':
    if self.command=='POST':
@@ -111,7 +116,12 @@ class Handler(BaseHTTPRequestHandler):
    return self.send(note)
   if path.endswith('/pdf'):return self.send((ROOT/'src/shared/assets/qgf-flow-policies.pdf').read_bytes(),mime='application/pdf')
   if path.endswith('/pdf-url'):return self.send(dict(url='http://127.0.0.1:8089/papers/paper-1/pdf',expires_in=3600,status='ready',source='arxiv'))
-  if path.endswith('/translate'):return self.send(dict(translation='…но встроить их в RL-пайплайны для улучшения политики оказалось сложнее.'))
+  if path.endswith('/translate'):
+   result=dict(translation='…но встроить их в RL-пайплайны для улучшения политики оказалось сложнее.',target_lang='ru')
+   if query.get('stream')==['1']:
+    data='data: '+json.dumps(dict(type='done',**result))+'\n\n'
+    return self.send(data.encode(),mime='text/event-stream')
+   return self.send(result)
   if path.startswith('/papers/'):
    return self.send(next((p for p in papers if p['id']==path.split('/')[-1] or p['arxiv_id']==body.get('arxiv_id')),papers[0]))
   self.send(dict(detail='Unknown fixture route: '+path),404)

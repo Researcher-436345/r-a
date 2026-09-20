@@ -1,3 +1,5 @@
+import { useAuthenticated } from '../../features/auth/token-storage';
+import { requireAuthentication } from '../../features/auth/require-auth';
 import { useParams } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -36,6 +38,7 @@ import type {
 import { ApiError } from '../../shared/api/client';
 
 export function ReaderPage() {
+  const authenticated = useAuthenticated();
   const { paperId } = useParams({ strict: false }) as { paperId?: string };
   const [paper, setPaper] = useState<LibraryPaper | null>(null);
   const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
@@ -187,7 +190,7 @@ export function ReaderPage() {
         setPaper(nextPaper);
         setIsLoading(false);
 
-        const nextAnnotations = await fetchAnnotations(paperId);
+        const nextAnnotations = authenticated ? await fetchAnnotations(paperId) : [];
         if (!cancelled) {
           setAnnotations(nextAnnotations);
         }
@@ -232,10 +235,10 @@ export function ReaderPage() {
         pdfObjectUrlRef.current = null;
       }
     };
-  }, [paperId]);
+  }, [paperId, authenticated]);
 
   useEffect(() => {
-    if (!paperId) {
+    if (!paperId || !authenticated) {
       setLibraryFolders([]);
       setLibraryItem(null);
       setFoldersLoading(false);
@@ -276,12 +279,13 @@ export function ReaderPage() {
     return () => {
       cancelled = true;
     };
-  }, [paperId]);
+  }, [paperId, authenticated]);
 
   const handleFolderSelect = async (folderId: string) => {
     if (!paperId) {
       return;
     }
+    if (!requireAuthentication()) return;
     setSavingFolderId(folderId);
     setFolderError(null);
     try {
@@ -406,6 +410,7 @@ export function ReaderPage() {
   };
 
   const handleAskAssistant = (attachment: ChatContextAttachment) => {
+    if (!requireAuthentication()) return;
     setChatAttachment(attachment);
     setFocusAssistantToken((token) => token + 1);
     closeSelection();
@@ -454,6 +459,7 @@ export function ReaderPage() {
         savingFolderId={savingFolderId}
         folderError={folderError}
         onFolderSelect={handleFolderSelect}
+        onBeforeOpenFolders={requireAuthentication}
         onTextSelect={handleTextSelect}
         focusAnnotation={flashFocus}
         onFocusComplete={() => setFlashFocus(null)}

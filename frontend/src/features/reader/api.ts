@@ -1,4 +1,4 @@
-import { apiRequest, ApiError } from '../../shared/api/client';
+import { apiRequest, apiFetch, ApiError } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
 
 export interface AnnotationRect {
@@ -161,51 +161,11 @@ export async function chatPaperStream(
     onDelta?: (text: string) => void;
   } = {},
 ): Promise<PaperChatReply> {
-  const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    Accept: 'text/event-stream',
-  });
-  const token = authToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  let response = await fetch(`${API_URL}/papers/${paperId}/chat?stream=1`, {
+  const response = await apiFetch(`/papers/${paperId}/chat?stream=1`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(request),
+    headers: { Accept: 'text/event-stream' },
+    body: request,
   });
-
-  if (response.status === 401) {
-    const { tryRefreshSession } = await import('../auth/refresh-session');
-    const { getAccessToken, clearTokens } = await import('../auth/token-storage');
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
-      headers.set('Authorization', `Bearer ${getAccessToken()}`);
-      response = await fetch(`${API_URL}/papers/${paperId}/chat?stream=1`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(request),
-      });
-    } else {
-      clearTokens();
-      throw new ApiError(401, 'Session expired');
-    }
-  }
-
-  if (!response.ok) {
-    let detail = `Request failed with status ${response.status}`;
-    try {
-      const data = (await response.json()) as { detail?: string };
-      if (typeof data.detail === 'string') {
-        detail = data.detail;
-      }
-    } catch {
-      // ignore
-    }
-    throw new ApiError(response.status, detail);
-  }
 
   if (!response.body) {
     throw new ApiError(502, 'Empty stream body');
@@ -307,6 +267,7 @@ export async function translateText(
     throw new Error(`Для перевода можно выделить не более ${TRANSLATION_MAX_CHARS} символов`);
   }
   return apiRequest<TranslateReply>(`/papers/${paperId}/translate`, {
+    public: true,
     method: 'POST',
     token: authToken(),
     signal,
@@ -331,49 +292,14 @@ export async function translateTextStream(
     throw new Error(`Для перевода можно выделить не более ${TRANSLATION_MAX_CHARS} символов`);
   }
 
-  const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    Accept: 'text/event-stream',
+  const response = await apiFetch(`/papers/${paperId}/translate?stream=1`, {
+    method: 'POST',
+    public: true,
+    headers: { Accept: 'text/event-stream' },
+    body: { text: normalized, target_lang: targetLang },
+    signal,
   });
-  const token = authToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  const body = JSON.stringify({ text: normalized, target_lang: targetLang });
-  const request = () =>
-    fetch(`${API_URL}/papers/${paperId}/translate?stream=1`, {
-      method: 'POST',
-      headers,
-      body,
-      signal,
-    });
 
-  let response = await request();
-  if (response.status === 401) {
-    const { tryRefreshSession } = await import('../auth/refresh-session');
-    const { getAccessToken, clearTokens } = await import('../auth/token-storage');
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
-      headers.set('Authorization', `Bearer ${getAccessToken()}`);
-      response = await request();
-    } else {
-      clearTokens();
-      throw new ApiError(401, 'Session expired');
-    }
-  }
-  if (!response.ok) {
-    let detail = `Request failed with status ${response.status}`;
-    try {
-      const data = (await response.json()) as { detail?: string };
-      if (data.detail) {
-        detail = data.detail;
-      }
-    } catch {
-      // ignore invalid error payloads
-    }
-    throw new ApiError(response.status, detail);
-  }
   if (!response.body) {
     throw new ApiError(502, 'Empty translation stream');
   }

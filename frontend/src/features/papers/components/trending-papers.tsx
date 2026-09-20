@@ -1,3 +1,4 @@
+import { useAuthenticated } from '../../auth/token-storage';
 import { useQuery } from '@tanstack/react-query';
 import { Flame, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,6 +27,7 @@ function readStoredSort(): TrendingSort {
 
 export function TrendingPapers() {
   const { t } = useI18n();
+  const authenticated = useAuthenticated();
   const [sort, setSort] = useState<TrendingSort>(readStoredSort);
   const { data: papers = [], isLoading, isError, isFetching } = useQuery(trendingPapersQuery(sort));
   const [libraryByArxiv, setLibraryByArxiv] = useState<Record<string, string>>({});
@@ -42,6 +44,10 @@ export function TrendingPapers() {
 
 
   const refreshLibraryMap = useCallback(async () => {
+    if (!authenticated) {
+      setLibraryByArxiv({});
+      return;
+    }
     try {
       const data = await fetchLibrary(1, 100);
       const map: Record<string, string> = {};
@@ -54,7 +60,7 @@ export function TrendingPapers() {
     } catch {
       // лента работает и без карты библиотеки
     }
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     void refreshLibraryMap();

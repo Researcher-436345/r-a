@@ -45,6 +45,7 @@ export async function fetchTrendingPapers(
   });
   const data = await apiRequest<TrendingApiResponse>(`/feed/trending?${params}`, {
     token: getAccessToken(),
+    public: true,
   });
 
   return data.items.map((item) => ({

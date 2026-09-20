@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from '../../shared/api/client';
+import { ApiError, apiFetch, apiRequest } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
 
 export type ReadingStatus = 'unread' | 'reading' | 'read';
@@ -129,7 +129,8 @@ export function openByArxiv(arxivId: string): Promise<LibraryPaper> {
     return cached;
   }
 
-  const request = apiRequest<LibraryPaper>('/papers/arxiv', {
+  const request = apiRequest<LibraryPaper>('/papers/arxiv/open', {
+    public: true,
     method: 'POST',
     token: authToken(),
     body: { arxiv_id: key, add_to_library: false },
@@ -282,19 +283,15 @@ export function fetchPdfUrl(
   return apiRequest<{ url: string; expires_in: number; status: string; source: string }>(
     `/papers/${paperId}/pdf-url`,
     {
+      public: true,
       token: authToken(),
     },
   );
 }
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
-
 /** Скачивает PDF через API (не через MinIO напрямую) и отдаёт blob URL для PDF.js. */
 export async function fetchPdfObjectUrl(paperId: string): Promise<string> {
-  const token = authToken();
-  const response = await fetch(`${API_URL}/papers/${paperId}/pdf`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const response = await apiFetch(`/papers/${paperId}/pdf`, { public: true });
   if (!response.ok) {
     let detail = `HTTP ${response.status}`;
     try {
@@ -313,6 +310,7 @@ export async function fetchPdfObjectUrl(paperId: string): Promise<string> {
 
 export function fetchPaper(paperId: string): Promise<LibraryPaper> {
   return apiRequest<LibraryPaper>(`/papers/${paperId}`, {
+    public: true,
     token: authToken(),
   });
 }

@@ -35,6 +35,7 @@ interface ReaderPdfViewerProps {
   foldersLoading?: boolean;
   savingFolderId?: string | null;
   folderError?: string | null;
+  onBeforeOpenFolders?: () => boolean;
   onFolderSelect?: (folderId: string) => Promise<void>;
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
@@ -71,6 +72,7 @@ export function ReaderPdfViewer({
   savingFolderId = null,
   folderError = null,
   onFolderSelect,
+  onBeforeOpenFolders,
   onTextSelect,
   focusAnnotation,
   onFocusComplete,
@@ -191,7 +193,10 @@ export function ReaderPdfViewer({
             aria-label={text.bookmarkAdd}
             aria-haspopup="dialog"
             aria-expanded={isFolderMenuOpen}
-            onClick={() => setIsFolderMenuOpen((value) => !value)}
+            onClick={() => {
+              if (onBeforeOpenFolders && !onBeforeOpenFolders()) return;
+              setIsFolderMenuOpen((value) => !value);
+            }}
           >
             <BookmarkIcon aria-hidden="true" size={19} strokeWidth={2} />
           </button>

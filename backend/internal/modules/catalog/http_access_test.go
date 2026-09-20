@@ -15,3 +15,16 @@ func TestAddToLibraryDefaultsToTrue(t *testing.T) {
 		t.Fatal("explicit true must add the paper to the library")
 	}
 }
+
+func TestGuestCannotReadUploadedVersion(t *testing.T) {
+	for _, source := range []string{"upload", "", "unknown"} {
+		if publicVersion(Version{Source: source}) {
+			t.Fatalf("guest can access %q", source)
+		}
+	}
+	for _, source := range []string{"arxiv", "doi", "web_pdf"} {
+		if !publicVersion(Version{Source: source}) {
+			t.Fatalf("guest cannot read public source %q", source)
+		}
+	}
+}

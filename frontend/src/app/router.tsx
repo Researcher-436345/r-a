@@ -8,6 +8,8 @@ import {
 } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 
+import { features } from '../shared/config/features';
+import { loginHref } from '../features/auth/require-auth';
 import { isAuthenticated } from '../features/auth/token-storage';
 import { tryRefreshSession } from '../features/auth/refresh-session';
 import { LoginPage } from '../pages/auth/login-page';
@@ -88,17 +90,16 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   component: AppLayout,
-  beforeLoad: async () => {
-    if (!isAuthenticated()) {
-      // Access-токен живёт в памяти и умирает с вкладкой: после перезагрузки
-      // молча обновляем сессию по httpOnly cookie.
-      const refreshed = await tryRefreshSession();
-      if (!refreshed) {
-        throw redirect({ to: '/login' });
-      }
-    }
+  beforeLoad: async (context) => {
+    if (!isAuthenticated()) await tryRefreshSession();
+    if (features.requireLoginOnEntry) requireUser(context);
   },
 });
+
+// Preserve the destination (including a search question) through sign-in.
+function requireUser({ location }: { location: { href: string } }) {
+  if (!isAuthenticated()) throw redirect({ href: loginHref(location.href) });
+}
 
 const homeRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -109,6 +110,7 @@ const homeRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/chat/$chatId',
+  beforeLoad: requireUser,
   component: ChatPage,
   validateSearch: (search: Record<string, unknown>) => ({
     q: typeof search.q === 'string' ? search.q : '',
@@ -119,6 +121,7 @@ const chatRoute = createRoute({
 const libraryRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library',
+  beforeLoad: requireUser,
   component: LibraryPage,
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === 'string' ? search.folder : '',
@@ -128,6 +131,7 @@ const libraryRoute = createRoute({
 const addPaperRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/library/add',
+  beforeLoad: requireUser,
   component: AddPaperPage,
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === 'string' ? search.folder : '',
@@ -156,6 +160,10 @@ const sessionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings/sessions',
   component: SessionsPage,
+  beforeLoad: (context) => {
+    if (!features.activeSessions) throw redirect({ to: '/' });
+    requireUser(context);
+  },
 });
 
 const routeTree = rootRoute.addChildren([

@@ -53,7 +53,7 @@ func main() {
 	})
 	api.MountInternal(r)
 	r.Group(func(r chi.Router) {
-		r.Use(identity.MiddlewareFromGateway)
+		r.Use(identity.GuestOrAuthenticatedFromGateway)
 		api.Mount(r)
 	})
 

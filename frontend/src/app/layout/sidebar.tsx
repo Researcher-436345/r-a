@@ -1,8 +1,12 @@
+import { features } from '../../shared/config/features';
+import { useAuthenticated } from '../../features/auth/token-storage';
+import { queryClient } from '../query-client';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   BookMarked,
   Globe,
   LogOut,
+  LogIn,
   MessageSquare,
   MonitorSmartphone,
   Moon,
@@ -41,6 +45,7 @@ interface SidebarFooterProps {
   settingsLabel: string;
   feedbackLabel: string;
   themeLabel: string;
+  authenticated: boolean;
   logoutLabel: string;
   ThemeIcon: LucideIcon;
   onOpenSettings: () => void;
@@ -56,6 +61,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const authenticated = useAuthenticated();
   const pathname = useLocation({ select: (location) => location.pathname });
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
@@ -67,7 +73,8 @@ export function Sidebar({
   const handleLogout = () => {
     // Отзываем серверную сессию (cookie) и чистим access-токен в памяти.
     void logout().finally(() => {
-      void navigate({ to: '/login' });
+      queryClient.clear();
+      void navigate({ to: '/' });
     });
   };
 
@@ -110,11 +117,12 @@ export function Sidebar({
         settingsLabel={t('nav.settings')}
         feedbackLabel={t('nav.feedback')}
         themeLabel={themeLabel}
-        logoutLabel="Выйти"
+        authenticated={authenticated}
+        logoutLabel={authenticated ? 'Выйти' : 'Войти'}
         ThemeIcon={ThemeIcon}
         onOpenSettings={onOpenSettings}
         onToggleTheme={() => onThemeChange(nextTheme)}
-        onLogout={handleLogout}
+        onLogout={authenticated ? handleLogout : () => { void navigate({ to: '/login' }); }}
       />
     </aside>
   );
@@ -197,6 +205,7 @@ function SidebarFooter({
   settingsLabel,
   feedbackLabel,
   themeLabel,
+  authenticated,
   logoutLabel,
   ThemeIcon,
   onOpenSettings,
@@ -205,7 +214,7 @@ function SidebarFooter({
 }: SidebarFooterProps) {
   return (
     <div className="sidebar__footer">
-      <SidebarSessionsLink isCollapsed={isCollapsed} />
+      {features.activeSessions && authenticated ? <SidebarSessionsLink isCollapsed={isCollapsed} /> : null}
 
       <button
         className="sidebar__nav-button"
@@ -238,7 +247,7 @@ function SidebarFooter({
         title={logoutLabel}
         onClick={onLogout}
       >
-        <LogOut aria-hidden="true" size={18} strokeWidth={2} />
+        {authenticated ? <LogOut aria-hidden="true" size={18} strokeWidth={2} /> : <LogIn aria-hidden="true" size={18} strokeWidth={2} />}
         {!isCollapsed ? <span>{logoutLabel}</span> : null}
       </button>
     </div>

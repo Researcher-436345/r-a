@@ -51,17 +51,21 @@ func Handler(cfg config.Config) http.Handler {
 			return
 		}
 
-		v := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if v == r.Header.Get("Authorization") || v == "" {
-			httpx.Error(w, 401, "Not authenticated")
-			return
+		// Never trust a user id supplied by a public client, including guests.
+		r.Header.Del(identity.UserIDHeader)
+		if r.Header.Get("Authorization") != "" || !identity.IsPublicRequest(r) {
+			v := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if v == r.Header.Get("Authorization") || v == "" {
+				httpx.Error(w, 401, "Not authenticated")
+				return
+			}
+			id, err := identity.ParseToken(cfg.JWTSecret, v, "access")
+			if err != nil || id == uuid.Nil {
+				httpx.Error(w, 401, "Could not validate credentials")
+				return
+			}
+			r.Header.Set(identity.UserIDHeader, id.String())
 		}
-		id, err := identity.ParseToken(cfg.JWTSecret, v, "access")
-		if err != nil {
-			httpx.Error(w, 401, "Could not validate credentials")
-			return
-		}
-		r.Header.Set(identity.UserIDHeader, id.String())
 
 		switch {
 		case strings.HasPrefix(path, "/annotations") || paperSubresource(path, "annotations"):

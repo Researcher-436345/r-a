@@ -88,7 +88,7 @@ func Router(d Deps) http.Handler {
 	identityAPI.Mount(r)
 
 	r.Group(func(r chi.Router) {
-		r.Use(identityAPI.Middleware)
+		r.Use(identityAPI.GuestOrAuthenticated)
 		catalogAPI.Mount(r)
 		library.API{Store: libStore}.Mount(r)
 		annotations.API{Store: annotations.Store{DB: d.DB}, Papers: catalogAPI}.Mount(r)

@@ -1,6 +1,7 @@
 import { getAccessToken, clearTokens } from '../../features/auth/token-storage';
 import { tryRefreshSession } from '../../features/auth/refresh-session';
 
+import { loginHref, requireAuthentication } from '../../features/auth/require-auth';
 import { API_URL } from './base-url';
 
 export class ApiError extends Error {
@@ -21,6 +22,8 @@ export class ApiError extends Error {
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
   token?: string | null;
+  /** Public reads/translation must never interrupt browsing with a login screen. */
+  public?: boolean;
   /** Внутренний флаг: не пытаться refresh повторно */
   _authRetried?: boolean;
 };
@@ -40,11 +43,7 @@ function redirectToLoginOnExpiredSession() {
     return;
   }
 
-  const params = new URLSearchParams({
-    expired: '1',
-    next: currentPath,
-  });
-  window.location.assign(`/login?${params.toString()}`);
+  window.location.assign(loginHref(currentPath, true));
 }
 
 function shouldAttemptRefresh(path: string, status: number, retried: boolean) {
@@ -75,13 +74,16 @@ async function parseErrorBody(response: Response): Promise<{ detail: string; cod
 }
 
 export async function apiFetch(path: string, options: RequestOptions = {}): Promise<Response> {
+  if (!options.public && !path.startsWith('/auth/') && !options._authRetried && !requireAuthentication()) {
+    throw new ApiError(401, 'Войдите, чтобы продолжить');
+  }
   const headers = new Headers(options.headers);
 
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const token = options.token ?? getAccessToken();
+  const token = options.token !== undefined ? options.token : getAccessToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -103,9 +105,15 @@ export async function apiFetch(path: string, options: RequestOptions = {}): Prom
           _authRetried: true,
         });
       }
+      if (options.public) {
+        clearTokens();
+        const guestHeaders = new Headers(options.headers);
+        guestHeaders.delete('Authorization');
+        return apiFetch(path, { ...options, headers: guestHeaders, token: null, _authRetried: true });
+      }
       redirectToLoginOnExpiredSession();
     } else if (response.status === 401 && !path.startsWith('/auth/')) {
-      redirectToLoginOnExpiredSession();
+      if (!options.public) redirectToLoginOnExpiredSession();
     }
 
     const { detail, code } = await parseErrorBody(response);

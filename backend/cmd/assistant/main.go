@@ -31,7 +31,7 @@ func main() {
 		httpx.JSON(w, 200, map[string]string{"status": "ok", "service": "assistant"})
 	})
 	r.Group(func(r chi.Router) {
-		r.Use(identity.MiddlewareFromGateway)
+		r.Use(identity.GuestOrAuthenticatedFromGateway)
 		assistant.API{Config: cfg, DB: pool, Papers: papers}.Mount(r)
 	})
 

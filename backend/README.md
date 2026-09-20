@@ -83,3 +83,16 @@ go run ./cmd/worker
 ```
 
 See [docs/GO_MIGRATION.md](../docs/GO_MIGRATION.md) and [docs/HANDOFF.md](../docs/HANDOFF.md).
+
+## Guest access
+
+The gateway, domain services and monolith allow unauthenticated `GET /feed/trending`,
+`GET /papers/{id}`, `GET /papers/{id}/pdf`, `GET /papers/{id}/pdf-url`, and
+`POST /papers/{id}/translate` (including SSE). Guest paper access is limited to a
+latest version from a public source; uploaded PDFs remain private.
+
+`POST /papers/arxiv/open` accepts `{ "arxiv_id": "..." }` and prepares a public
+paper for reading without adding it to any library. It ignores `add_to_library`,
+even when explicitly true. Existing import/save endpoints, all library and
+annotation operations, paper chat/explanations and research search still require
+authentication. The gateway discards client-supplied `X-User-Id` before forwarding.

@@ -32,6 +32,7 @@ func (a API) store() Store { return Store{DB: a.DB} }
 
 func (a API) Mount(r chi.Router) {
 	r.Post("/papers/arxiv", a.addArxiv)
+	r.Post("/papers/arxiv/open", a.openArxiv)
 	r.Post("/papers/doi", a.addDOI)
 	r.Post("/papers/from-url", a.addFromURL)
 	r.Post("/papers/upload", a.upload)
@@ -66,11 +67,20 @@ func (a API) requirePaper(w http.ResponseWriter, r *http.Request) (uuid.UUID, bo
 }
 
 func (a API) canAccessPaper(ctx context.Context, userID, paperID uuid.UUID) (bool, error) {
+	if userID == uuid.Nil {
+		version, err := a.store().LatestVersion(ctx, paperID)
+		return err == nil && publicVersion(version), err
+	}
 	inLibrary, err := a.Membership.Has(ctx, userID, paperID)
 	if err != nil || inLibrary {
 		return inLibrary, err
 	}
 	return a.store().IsPublic(ctx, paperID)
+}
+
+// A public identifier does not make a user-uploaded PDF public.
+func publicVersion(v Version) bool {
+	return v.Source == "arxiv" || v.Source == "doi" || v.Source == "web_pdf"
 }
 
 func addToLibrary(value *bool) bool {
@@ -87,6 +97,15 @@ func (a API) paperResponse(w http.ResponseWriter, r *http.Request, id uuid.UUID,
 }
 
 func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
+	a.arxiv(w, r, false)
+}
+
+// Opening a public paper never modifies a user library, regardless of the body.
+func (a API) openArxiv(w http.ResponseWriter, r *http.Request) {
+	a.arxiv(w, r, true)
+}
+
+func (a API) arxiv(w http.ResponseWriter, r *http.Request, openOnly bool) {
 	var b struct {
 		ArxivID      string `json:"arxiv_id"`
 		AddToLibrary *bool  `json:"add_to_library"`
@@ -100,7 +119,7 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := CanonicalArxivID(raw)
-	paperID, e := a.addArxivPaper(r.Context(), identity.UserID(r), id, addToLibrary(b.AddToLibrary))
+	paperID, e := a.addArxivPaper(r.Context(), identity.UserID(r), id, !openOnly && addToLibrary(b.AddToLibrary))
 	if e != nil {
 		var sourceErr *sourceFetchError
 		if errors.As(e, &sourceErr) {
@@ -109,6 +128,13 @@ func (a API) addArxiv(w http.ResponseWriter, r *http.Request) {
 		}
 		httpx.Error(w, 500, e.Error())
 		return
+	}
+	if identity.UserID(r) == uuid.Nil {
+		allowed, err := a.canAccessPaper(r.Context(), uuid.Nil, paperID)
+		if err != nil || !allowed {
+			httpx.Error(w, 404, "Paper not found")
+			return
+		}
 	}
 	a.paperResponse(w, r, paperID, 201)
 }

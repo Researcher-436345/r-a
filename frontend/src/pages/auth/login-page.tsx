@@ -52,7 +52,7 @@ export function LoginPage() {
           <LogoMark />
           <div>
             <h1>Вход</h1>
-            <p>Войдите, чтобы открыть личную библиотеку</p>
+            <p>Войдите, чтобы пользоваться ассистентом и сохранять статьи</p>
           </div>
         </div>
 
@@ -92,6 +92,9 @@ export function LoginPage() {
           {isSubmitting ? 'Входим…' : 'Войти'}
         </button>
 
+        <p className="auth-switch">
+          <Link to="/">Продолжить без входа</Link>
+        </p>
         <p className="auth-switch">
           <Link to="/forgot-password">Забыли пароль?</Link>
         </p>
