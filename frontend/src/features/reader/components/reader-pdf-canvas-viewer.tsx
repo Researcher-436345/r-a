@@ -35,6 +35,7 @@ interface ReaderPdfCanvasViewerProps {
   src: string;
   scale: number;
   onPageCount: (pageCount: number) => void;
+  onCurrentPageChange: (page: number) => void;
   /** Ширина первой страницы при scale=1 — для fit-to-width */
   onBasePageWidth?: (width: number) => void;
   onTextSelect?: (selection: ReaderTextSelection) => void;
@@ -98,6 +99,7 @@ export function ReaderPdfCanvasViewer({
   src,
   scale,
   onPageCount,
+  onCurrentPageChange,
   onBasePageWidth,
   onTextSelect,
   focusAnnotation,
@@ -179,6 +181,44 @@ export function ReaderPdfCanvasViewer({
       isMounted = false;
     };
   }, [pdf, scale]);
+
+  useEffect(() => {
+    onCurrentPageChange(1);
+    const document = documentRef.current;
+    const viewport = document?.closest('.reader-pdf-frame-wrap');
+    if (!document || !viewport || !pdf) return;
+
+    const pages = Array.from(document.querySelectorAll<HTMLElement>('.reader-pdf-page'));
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const bounds = viewport.getBoundingClientRect();
+      let current = 1;
+      let largestVisibleHeight = 0;
+      pages.forEach((page, index) => {
+        const rect = page.getBoundingClientRect();
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, bounds.bottom) - Math.max(rect.top, bounds.top));
+        if (visibleHeight > largestVisibleHeight) {
+          largestVisibleHeight = visibleHeight;
+          current = index + 1;
+        }
+      });
+      if (largestVisibleHeight > 0) onCurrentPageChange(current);
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const observer = new ResizeObserver(scheduleUpdate);
+    observer.observe(viewport);
+    pages.forEach((page) => observer.observe(page));
+    viewport.addEventListener('scroll', scheduleUpdate, { passive: true });
+    scheduleUpdate();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      viewport.removeEventListener('scroll', scheduleUpdate);
+    };
+  }, [pdf, onCurrentPageChange]);
 
   const navigateToDestination = async (destination: PdfLinkDestination) => {
     if (!pdf) {

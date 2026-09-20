@@ -85,6 +85,7 @@ export function ReaderPdfViewer({
   const { readerDark } = useTheme();
   const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false);
   const [pageCount, setPageCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1);
   /** Пока true — масштаб подстраивается под ширину области PDF */
   const [fitToWidth, setFitToWidth] = useState(true);
@@ -300,7 +301,7 @@ export function ReaderPdfViewer({
         <div className="reader-toolbar__divider reader-toolbar__divider--group" />
         <div className="reader-page-count">
           <FileText aria-hidden="true" size={15} strokeWidth={2} />
-          <span>{pageCount > 0 ? `1 / ${pageCount}` : '—'}</span>
+          <span>{pageCount > 0 ? `${currentPage} / ${pageCount}` : '—'}</span>
         </div>
 
         {pdfUrl && <div className="reader-toolbar__divider reader-toolbar__divider--group" />}
@@ -350,6 +351,7 @@ export function ReaderPdfViewer({
             src={pdfUrl}
             scale={scale}
             onPageCount={setPageCount}
+            onCurrentPageChange={setCurrentPage}
             onBasePageWidth={handleBasePageWidth}
             onTextSelect={onTextSelect}
             focusAnnotation={focusAnnotation}
