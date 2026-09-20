@@ -2131,8 +2131,7 @@ textarea:focus-visible {
 .reader-summary__body h3 {
   margin: 20px 0 8px;
   color: var(--text);
-  font-family: var(--font-display, inherit);
-  font-variation-settings: 'opsz' 144;
+  font-family: inherit;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.005em;
