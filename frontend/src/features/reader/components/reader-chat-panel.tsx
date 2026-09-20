@@ -1,3 +1,4 @@
+import { useConversationStore } from '../../../shared/lib/use-conversation-store';
 import { useAuthenticated } from '../../auth/token-storage';
 import { requireAuthentication } from '../../auth/require-auth';
 import { MessageActions } from '../../../shared/ui/message-actions';
@@ -152,12 +153,11 @@ export function ReaderChatPanel({
     return () => window.clearTimeout(timer);
   }, [copiedMessageId]);
   const [activeTab, setActiveTab] = useState<ReaderTab>('assistant');
-  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
+  const { messages, setMessages, isSending, setIsSending, store: conversation } = useConversationStore<LocalChatMessage>(`paper:${paperId ?? 'none'}`);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [composerEmpty, setComposerEmpty] = useState(true);
-  const [isSending, setIsSending] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null);
   const [savingNoteMessageId, setSavingNoteMessageId] = useState<string | null>(null);
@@ -169,6 +169,8 @@ export function ReaderChatPanel({
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const lastInsertedId = useRef<string | null>(null);
+  const activePaperRef = useRef(paperId);
+  activePaperRef.current = paperId;
 
   const tabs = useMemo(() => {
     const labels: Record<(typeof readerTabs)[number]['value'], string> = {
@@ -227,23 +229,28 @@ export function ReaderChatPanel({
       return;
     }
 
+    if (conversation.getSnapshot().isSending) {
+      setHistoryLoading(false);
+      return;
+    }
     let cancelled = false;
-    setHistoryLoading(true);
+    const historyRevision = conversation.revision;
+    setHistoryLoading(!conversation.getSnapshot().loaded);
     setError(null);
-    setMessages([]);
 
     void fetchChatMessages(paperId)
       .then((items) => {
         if (cancelled) {
           return;
         }
-        setMessages(
+        conversation.hydrate(
           items.map((item) => ({
             id: item.id,
             role: item.role,
             content: item.content,
             modelPayload: item.context_text ? `${item.content}\n\n${item.context_text}` : item.content,
           })),
+          historyRevision,
         );
       })
       .catch((err) => {
@@ -269,7 +276,7 @@ export function ReaderChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [paperId, locale, authenticated]);
+  }, [paperId, locale, authenticated, conversation]);
 
   useEffect(() => {
     if (!authenticated || !paperId || !selectedModel) {
@@ -507,7 +514,7 @@ export function ReaderChatPanel({
   };
 
   const handleSend = async () => {
-    if (isSending) {
+    if (conversation.getSnapshot().isSending) {
       return;
     }
     if (!paperId) {
@@ -591,7 +598,7 @@ export function ReaderChatPanel({
         },
       );
 
-      if (res.context_usage) {
+      if (res.context_usage && activePaperRef.current === paperId) {
         setContextUsage(res.context_usage);
       }
 
@@ -626,7 +633,7 @@ export function ReaderChatPanel({
             : msg,
         ),
       );
-      setError(detail);
+      if (activePaperRef.current === paperId) setError(detail);
     } finally {
       setIsSending(false);
     }

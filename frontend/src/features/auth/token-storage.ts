@@ -1,3 +1,4 @@
+import { clearConversationStores } from '../../shared/lib/conversation-store';
 import { useSyncExternalStore } from 'react';
 
 // Access token lives only in module memory (dies with the tab).
@@ -25,6 +26,7 @@ export function setAccessToken(token: string): void {
 
 export function clearTokens(): void {
   accessToken = null;
+  clearConversationStores();
   listeners.forEach((listener) => listener());
 }
 

@@ -3,12 +3,13 @@ Run: python3 scripts/v3-fixture-server.py
 Then: VITE_API_URL=http://127.0.0.1:8089 npm run dev -- --host 127.0.0.1 --port 5174
 Sign in with any test email and an 8+ character test password. No real credentials.
 All writes are in memory and disappear when this process exits.
+Set FIXTURE_STREAM_DELAY_SECONDS=15 to test navigation during a running answer.
 """
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timezone, timedelta
-import json, re, uuid
+import json, re, uuid, os, time
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT/'examples/v3/v3/Home.dc.html').read_text()
 raw = re.findall(r"\{ id: '(.*?)', title: '(.*?)', date: '(.*?)', rel: '(.*?)', authors: '(.*?)', cat: '(.*?)', year: '(.*?)', cites: '(.*?)', abstract: '(.*?)' \}", source)
@@ -52,11 +53,19 @@ def message(role, content, chat='chat-0'):
  return dict(id=str(uuid.uuid4()),chat_id=chat,role=role,content=content,sources=[],created_at=now.isoformat())
 messages={'chat-0':[message('user','Собери обзор по свежим методам RLHF за последние полгода — что реально работает лучше PPO?'),message('assistant',answer)]}
 notes=[dict(id='note-'+str(i),paper_id='paper-1',page=1,rect=None,selected_text=q,note=n,color=c,created_at=now.isoformat(),updated_at=now.isoformat()) for i,(q,n,c) in enumerate([('…incorporating them into RL pipelines for policy improvement has proven more difficult.','Ключевая мотивация: flow/diffusion-политики плохо встраиваются в RL из-за нестабильности обучения актора.','#f2d35c'),('…using the value gradient to guide the reference policy to generate higher-value actions.','Проверить вывод оценки градиента критика в разделе 5 — кажется, тут вся новизна.','#7fcf9e')])]
+paper_messages = {}
+STREAM_DELAY = float(os.environ.get('FIXTURE_STREAM_DELAY_SECONDS', '0'))
 class Handler(BaseHTTPRequestHandler):
  def log_message(self, *args): pass
  def send(self,data,status=200,mime='application/json'):
   body=json.dumps(data,ensure_ascii=False).encode() if mime=='application/json' else data
-  self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:5174'); self.send_header('Access-Control-Allow-Credentials','true'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS'); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+  self.send_response(status); self.send_header('Content-Type',mime); self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:5174'); self.send_header('Access-Control-Allow-Credentials','true'); self.send_header('Access-Control-Allow-Headers','Content-Type, Authorization'); self.send_header('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS'); self.send_header('Content-Length',str(len(body))); self.end_headers()
+  if mime=='text/event-stream' and STREAM_DELAY:
+   for index,event in enumerate(body.split(b'\n\n')):
+    if not event:continue
+    if index:time.sleep(STREAM_DELAY)
+    self.wfile.write(event+b'\n\n');self.wfile.flush()
+  else:self.wfile.write(body)
  def do_OPTIONS(self):self.send({})
  def do_GET(self):self.dispatch()
  def do_POST(self):self.dispatch()
@@ -106,10 +115,13 @@ class Handler(BaseHTTPRequestHandler):
    summary=dict(paper_id=path.split('/')[2],lang=query.get('lang',['ru'])[0],model='fixture',content=content,status='ready',error_message=None,updated_at=now.isoformat(),stale=False)
    events=[dict(type='delta',text=content),dict(type='done',summary=summary)]
    return self.send(''.join('data: '+json.dumps(event)+'\n\n' for event in events).encode(),mime='text/event-stream')
-  if path.endswith('/chat/messages'):return self.send(dict(items=[]))
+  if path.endswith('/chat/messages'):return self.send(dict(items=paper_messages.get(path.split('/')[2],[])))
   if path.endswith('/chat'):
    reply='Коротко: actor-critic требует градиента log-вероятности действия, а у flow/diffusion-политик она задана неявно — через многошаговый процесс сэмплирования.\n\nАвторы используют критик на инференсе как направляющий градиент [p.1].'
-   payload=dict(type='done',reply=reply,message_id=str(uuid.uuid4()))
+   paper_id=path.split('/')[2]
+   pair=[dict(id=str(uuid.uuid4()),paper_id=paper_id,user_id='fixture',role=role,content=content,context_text=body.get('context_text') if role=='user' else None,created_at=now.isoformat()) for role,content in [('user',body['message']),('assistant',reply)]]
+   paper_messages.setdefault(paper_id,[]).extend(pair)
+   payload=dict(type='done',reply=reply,message_id=pair[1]['id'],user_message_id=pair[0]['id'])
    return self.send(('data: '+json.dumps(dict(type='delta',text=reply))+'\n\ndata: '+json.dumps(payload)+'\n\n').encode(),mime='text/event-stream')
   if path.endswith('/annotations'):
    if self.command=='POST':

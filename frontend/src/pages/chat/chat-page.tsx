@@ -1,3 +1,6 @@
+import { isAuthenticated } from '../../features/auth/token-storage';
+import { getConversationStore } from '../../shared/lib/conversation-store';
+import { useConversationStore } from '../../shared/lib/use-conversation-store';
 import { MessageActions } from '../../shared/ui/message-actions';
 import { copyText } from '../../shared/lib/clipboard';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -677,15 +680,13 @@ export function ChatPage() {
   );
   const [activeQuestion, setActiveQuestion] = useState(initialQuestion);
   const [composerMode, setComposerMode] = useState<ResearchMode>(routeMode);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, setMessages, isSending, setIsSending, store: conversation } = useConversationStore<ChatMessage>(`search:${chatId ?? 'new'}`);
   const [chatHistory, setChatHistory] = useState<ResearchChatSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
   const [foldersLoading, setFoldersLoading] = useState(true);
   const [draft, setDraft] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const loadedRouteConversationKeyRef = useRef('');
-  const activeStreamRef = useRef<AbortController | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -695,6 +696,7 @@ export function ChatPage() {
   );
 
   const refreshChatHistory = async () => {
+    if (!isAuthenticated()) return;
     try {
       setChatHistory(await listResearchChats());
     } catch {
@@ -707,10 +709,10 @@ export function ChatPage() {
     content: string,
     mode: ResearchMode,
     assistantId: string,
-    requestKey: string,
   ) => {
     const controller = new AbortController();
-    activeStreamRef.current = controller;
+    if (conversation.getSnapshot().isSending) return;
+    conversation.controller = controller;
     setIsSending(true);
     try {
       const storedMessage = await streamResearchMessage({
@@ -719,9 +721,6 @@ export function ChatPage() {
         mode,
         signal: controller.signal,
         onProgress: (progress) => {
-          if (loadedRouteConversationKeyRef.current !== requestKey) {
-            return;
-          }
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId && !message.content
@@ -736,9 +735,6 @@ export function ChatPage() {
           );
         },
         onSourceProgress: (sourceProgress) => {
-          if (loadedRouteConversationKeyRef.current !== requestKey) {
-            return;
-          }
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId && !message.content
@@ -753,9 +749,6 @@ export function ChatPage() {
           );
         },
         onDelta: (delta) => {
-          if (loadedRouteConversationKeyRef.current !== requestKey) {
-            return;
-          }
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
@@ -771,24 +764,23 @@ export function ChatPage() {
           );
         },
       });
-      if (loadedRouteConversationKeyRef.current === requestKey) {
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  id: storedMessage.id,
-                  sources: storedMessage.sources,
-                  pending: false,
-                  progress: undefined,
-                  sourceProgress: undefined,
-                }
-              : message,
-          ),
-        );
-      }
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                id: storedMessage.id,
+                content: storedMessage.content,
+                sources: storedMessage.sources,
+                pending: false,
+                progress: undefined,
+                sourceProgress: undefined,
+              }
+            : message,
+        ),
+      );
     } catch (error) {
-      if (controller.signal.aborted || loadedRouteConversationKeyRef.current !== requestKey) {
+      if (controller.signal.aborted) {
         return;
       }
       const detail = error instanceof Error ? error.message : String(error);
@@ -804,11 +796,9 @@ export function ChatPage() {
         ),
       );
     } finally {
-      if (activeStreamRef.current === controller) {
-        activeStreamRef.current = null;
-        if (loadedRouteConversationKeyRef.current === requestKey) {
-          setIsSending(false);
-        }
+      if (conversation.controller === controller) {
+        conversation.controller = null;
+        setIsSending(false);
       }
       void refreshChatHistory();
     }
@@ -827,11 +817,8 @@ export function ChatPage() {
       return;
     }
 
-    activeStreamRef.current?.abort();
-    activeStreamRef.current = null;
     loadedRouteConversationKeyRef.current = routeConversationKey;
     setDraft('');
-    setIsSending(false);
 
     if (!chatId || chatId === 'new') {
       setActiveQuestion('');
@@ -844,7 +831,10 @@ export function ChatPage() {
     setScreen('conversation');
     setActiveQuestion(initialQuestion);
     setComposerMode(routeMode);
-    setMessages([]);
+    const first = conversation.getSnapshot().messages.find((message) => message.role === 'user');
+    if (first) setActiveQuestion(first.content);
+    if (conversation.getSnapshot().isSending) return;
+    const historyRevision = conversation.revision;
 
     void (async () => {
       try {
@@ -857,19 +847,22 @@ export function ChatPage() {
           storedChat.title;
         setActiveQuestion(firstQuestion);
         setComposerMode(storedChat.mode);
-        setMessages(
+        conversation.hydrate(
           storedChat.messages.map((message) => ({
             id: message.id,
             role: message.role,
             content: message.content,
             sources: message.sources,
           })),
+          historyRevision,
         );
       } catch (error) {
         if (
           error instanceof ApiError &&
           error.status === 404 &&
           initialQuestion &&
+          conversation.revision === historyRevision &&
+          !conversation.getSnapshot().loaded &&
           loadedRouteConversationKeyRef.current === routeConversationKey
         ) {
           const assistantId = createMessageId('assistant');
@@ -899,11 +892,10 @@ export function ChatPage() {
             initialQuestion,
             routeMode,
             assistantId,
-            routeConversationKey,
           );
           return;
         }
-        if (loadedRouteConversationKeyRef.current !== routeConversationKey) {
+        if (loadedRouteConversationKeyRef.current !== routeConversationKey || conversation.revision !== historyRevision) {
           return;
         }
         const detail = error instanceof Error ? error.message : String(error);
@@ -916,7 +908,7 @@ export function ChatPage() {
         ]);
       }
     })();
-  }, [chatId, initialQuestion, routeConversationKey, routeMode]);
+  }, [chatId, initialQuestion, routeConversationKey, routeMode, conversation]);
 
   useEffect(() => {
     if (messages.length <= 2) {
@@ -926,10 +918,7 @@ export function ChatPage() {
   }, [messages]);
 
   const openNewChat = () => {
-    activeStreamRef.current?.abort();
-    activeStreamRef.current = null;
     setDraft('');
-    setIsSending(false);
     setScreen('new');
     if (window.matchMedia('(max-width: 640px)').matches) {
       setIsHistoryOpen(false);
@@ -957,7 +946,7 @@ export function ChatPage() {
   };
 
   const sendFollowUp = (content: string) => {
-    if (!chatId || chatId === 'new') {
+    if (!chatId || chatId === 'new' || conversation.getSnapshot().isSending) {
       return;
     }
     const assistantId = createMessageId('assistant');
@@ -984,7 +973,6 @@ export function ChatPage() {
       content,
       responseMode,
       assistantId,
-      routeConversationKey,
     );
   };
 
@@ -1024,11 +1012,10 @@ export function ChatPage() {
       return;
     }
 
-    if (chat.id === chatId) {
-      activeStreamRef.current?.abort();
-      activeStreamRef.current = null;
-      setIsSending(false);
-    }
+    const deletedConversation = getConversationStore<ChatMessage>(`search:${chat.id}`);
+    deletedConversation.controller?.abort();
+    deletedConversation.controller = null;
+    deletedConversation.setIsSending(false);
     setDeletingChatId(chat.id);
     try {
       await deleteResearchChat(chat.id);
