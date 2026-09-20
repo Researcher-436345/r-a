@@ -3,6 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
 import { login } from '../../features/auth/auth-api';
+import { guestReturnHref } from '../../features/auth/require-auth';
 import { ApiError } from '../../shared/api/client';
 import { LogoMark } from '../../shared/ui/logo-mark';
 
@@ -13,6 +14,7 @@ export function LoginPage() {
   const sessionExpired = searchParams?.get('expired') === '1';
   const passwordReset = searchParams?.get('reset') === '1';
   const nextPath = searchParams?.get('next') || '/';
+  const returnPath = guestReturnHref(searchParams?.get('from') ?? nextPath);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function LoginPage() {
         </button>
 
         <p className="auth-switch">
-          <Link to="/">Продолжить без входа</Link>
+          <Link to={returnPath} replace>Продолжить без входа</Link>
         </p>
         <p className="auth-switch">
           <Link to="/forgot-password">Забыли пароль?</Link>

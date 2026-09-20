@@ -1,5 +1,6 @@
 import { features } from '../../shared/config/features';
 import { useAuthenticated } from '../../features/auth/token-storage';
+import { loginHref } from '../../features/auth/require-auth';
 import { queryClient } from '../query-client';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
@@ -122,7 +123,7 @@ export function Sidebar({
         ThemeIcon={ThemeIcon}
         onOpenSettings={onOpenSettings}
         onToggleTheme={() => onThemeChange(nextTheme)}
-        onLogout={authenticated ? handleLogout : () => { void navigate({ to: '/login' }); }}
+        onLogout={authenticated ? handleLogout : () => { void navigate({ to: loginHref() }); }}
       />
     </aside>
   );

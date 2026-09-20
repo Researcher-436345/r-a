@@ -112,7 +112,9 @@ const appRoute = createRoute({
 
 // Preserve the destination (including a search question) through sign-in.
 function requireUser({ location }: { location: { href: string } }) {
-  if (!isAuthenticated()) throw redirect({ href: loginHref(location.href) });
+  if (!isAuthenticated()) {
+    throw redirect({ href: loginHref(location.href, false, router.state.resolvedLocation?.href ?? '/') });
+  }
 }
 
 const homeRoute = createRoute({
