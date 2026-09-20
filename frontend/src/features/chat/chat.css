@@ -387,10 +387,6 @@
   display: inline;
 }
 
-.chat-inline-source > a[aria-busy="true"] {
-  opacity: 0.65;
-}
-
 .chat-inline-source__popover {
   position: absolute;
   bottom: 100%;

@@ -5,15 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"math"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
+	"github.com/centraluniversity/researcher/internal/platform/throttle"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -26,6 +30,48 @@ type API struct {
 	Storage    *storage.Client
 	Queue      *asynq.Client
 	Membership Membership
+	// Limiter bounds the endpoints that fan out to external indexes; nil disables it (tests).
+	Limiter *throttle.Limiter
+}
+
+// Per-user limits for resolving and discovery. Chat prefetch sends at most two
+// resolves at a time, so a normal session stays far below them.
+var (
+	ruleResolveUser  = throttle.Rule{Name: "papers:resolve:user", Limit: 60, Window: time.Minute}
+	ruleFullTextUser = throttle.Rule{Name: "papers:fulltext:user", Limit: 20, Window: time.Minute}
+)
+
+// allow writes 429 rate_limited (with Retry-After) when the user hit rule.
+func (a API) allow(w http.ResponseWriter, r *http.Request, rule throttle.Rule) bool {
+	if a.Limiter == nil {
+		return true
+	}
+	allowed, after := a.Limiter.Hit(r.Context(), rule, resolveRateSubject(r))
+	if allowed {
+		return true
+	}
+	if after > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(after.Seconds()))))
+	}
+	httpx.ErrorCode(w, http.StatusTooManyRequests, "rate_limited", "Too many requests, try again in a minute")
+	return false
+}
+
+// Gateway appends the actual peer to X-Forwarded-For. Use that last address,
+// never the caller-supplied first address; internal services are not public.
+func resolveRateSubject(r *http.Request) string {
+	if id := identity.UserID(r); id != uuid.Nil {
+		return id.String()
+	}
+	peer := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		peer = strings.TrimSpace(parts[len(parts)-1])
+	}
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
+	}
+	return "guest:" + peer
 }
 
 func (a API) store() Store { return Store{DB: a.DB} }
@@ -40,6 +86,7 @@ func (a API) Mount(r chi.Router) {
 	r.Get("/papers/{paperID}/pdf-url", a.pdfURL)
 	r.Get("/papers/{paperID}/pdf", a.pdfStream)
 	r.Post("/papers/{paperID}/retry-pdf", a.retryPDF)
+	r.Post("/papers/{paperID}/find-fulltext", a.findFullText)
 }
 
 func parseID(w http.ResponseWriter, r *http.Request, key string) (uuid.UUID, bool) {
@@ -80,7 +127,7 @@ func (a API) canAccessPaper(ctx context.Context, userID, paperID uuid.UUID) (boo
 
 // A public identifier does not make a user-uploaded PDF public.
 func publicVersion(v Version) bool {
-	return v.Source == "arxiv" || v.Source == "doi" || v.Source == "web_pdf"
+	return v.Source == "arxiv" || v.Source == "doi" || v.Source == "web_pdf" || v.Source == "openalex"
 }
 
 func addToLibrary(value *bool) bool {
@@ -110,7 +157,7 @@ func (a API) arxiv(w http.ResponseWriter, r *http.Request, openOnly bool) {
 		ArxivID      string `json:"arxiv_id"`
 		AddToLibrary *bool  `json:"add_to_library"`
 	}
-	if !httpx.DecodeJSON(w, r, &b) {
+	if !httpx.DecodeJSON(w, r, &b) || !a.allow(w, r, ruleResolveUser) {
 		return
 	}
 	raw, e := NormalizeArxivID(b.ArxivID)
@@ -144,7 +191,7 @@ func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 		DOI          string `json:"doi"`
 		AddToLibrary *bool  `json:"add_to_library"`
 	}
-	if !httpx.DecodeJSON(w, r, &b) {
+	if !httpx.DecodeJSON(w, r, &b) || !a.allow(w, r, ruleResolveUser) {
 		return
 	}
 	doi, e := NormalizeDOI(b.DOI)
@@ -152,14 +199,10 @@ func (a API) addDOI(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 400, e.Error())
 		return
 	}
-	paperID, e := a.addDOIPaper(r.Context(), identity.UserID(r), doi, addToLibrary(b.AddToLibrary))
+	paperID, e := a.addOpenDOIPaper(r.Context(), identity.UserID(r), doi, "", addToLibrary(b.AddToLibrary))
 	if e != nil {
-		var sourceErr *sourceFetchError
-		if errors.As(e, &sourceErr) {
-			httpx.Error(w, 502, sourceErr.Error())
-			return
-		}
-		httpx.Error(w, 500, e.Error())
+		// Container DOIs answer 422 not_a_paper, unknown DOIs 422 not_found.
+		writeResolveError(w, e, false)
 		return
 	}
 	a.paperResponse(w, r, paperID, 201)
@@ -246,64 +289,86 @@ func (a API) getPaper(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a API) pdfURL(w http.ResponseWriter, r *http.Request) {
+// Codes the reader branches on (contract B3). Only pdf_processing means
+// "keep polling"; pdf_unavailable means no PDF appears without user action.
+const (
+	pdfCodeProcessing  = "pdf_processing"
+	pdfCodeUnavailable = "pdf_unavailable"
+)
+
+type pdfState struct {
+	HTTPStatus int
+	Code       string
+	Detail     string
+}
+
+// pdfStateFor maps the latest paper version to the pdf-url / pdf response.
+func pdfStateFor(v Version) pdfState {
+	switch {
+	case v.Status == "ready" && v.PDFKey != nil:
+		return pdfState{HTTPStatus: http.StatusOK}
+	case v.Status == "processing":
+		return pdfState{HTTPStatus: http.StatusConflict, Code: pdfCodeProcessing, Detail: "PDF is still processing"}
+	case v.Status == "failed":
+		return pdfState{
+			HTTPStatus: http.StatusUnprocessableEntity,
+			Code:       pdfCodeUnavailable,
+			// The worker stores a user-readable reason (e.g. which host refused).
+			Detail: orString(v.ErrorMessage, "PDF processing failed"),
+		}
+	default:
+		// Metadata-only versions (doi, openalex) are "ready" without a file.
+		return pdfState{
+			HTTPStatus: http.StatusUnprocessableEntity,
+			Code:       pdfCodeUnavailable,
+			Detail:     "Full text is not available in open access for this paper",
+		}
+	}
+}
+
+// readyPDFVersion writes the B3 error response and returns ok=false unless
+// the latest version has a stored PDF.
+func (a API) readyPDFVersion(w http.ResponseWriter, r *http.Request) (uuid.UUID, Version, bool) {
 	id, ok := a.requirePaper(w, r)
 	if !ok {
-		return
+		return id, Version{}, false
 	}
 	v, e := a.store().LatestVersion(r.Context(), id)
-	if e == pgx.ErrNoRows {
+	if errors.Is(e, pgx.ErrNoRows) {
 		httpx.Error(w, 404, "PDF not available yet")
-		return
+		return id, v, false
 	}
 	if e != nil {
 		httpx.Error(w, 500, e.Error())
+		return id, v, false
+	}
+	if st := pdfStateFor(v); st.HTTPStatus != http.StatusOK {
+		httpx.ErrorCode(w, st.HTTPStatus, st.Code, st.Detail)
+		return id, v, false
+	}
+	return id, v, true
+}
+
+func (a API) pdfURL(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := a.readyPDFVersion(w, r)
+	if !ok {
 		return
 	}
-	if v.Status == "ready" && v.PDFKey != nil {
-		httpx.JSON(w, 200, map[string]any{
-			"url":        "/papers/" + id.String() + "/pdf",
-			"expires_in": 0,
-			"status":     "ready",
-			"source":     "api",
-		})
-		return
-	}
-	if v.Status == "ready" && v.PDFKey == nil {
-		httpx.Error(w, http.StatusUnprocessableEntity, "PDF is not available for this article")
-		return
-	}
-	if v.Status == "failed" {
-		httpx.Error(w, 409, orString(v.ErrorMessage, "PDF processing failed"))
-		return
-	}
-	httpx.Error(w, 409, "PDF is still processing")
+	httpx.JSON(w, 200, map[string]any{
+		"url":        "/papers/" + id.String() + "/pdf",
+		"expires_in": 0,
+		"status":     "ready",
+		"source":     "api",
+	})
 }
 
 func (a API) pdfStream(w http.ResponseWriter, r *http.Request) {
-	id, ok := a.requirePaper(w, r)
+	_, v, ok := a.readyPDFVersion(w, r)
 	if !ok {
 		return
 	}
-	v, e := a.store().LatestVersion(r.Context(), id)
-	if e == pgx.ErrNoRows {
-		httpx.Error(w, 404, "PDF not available yet")
-		return
-	}
-	if e != nil {
-		httpx.Error(w, 500, e.Error())
-		return
-	}
-	if v.Status == "failed" {
-		httpx.Error(w, 409, orString(v.ErrorMessage, "PDF processing failed"))
-		return
-	}
-	if v.Status == "ready" && v.PDFKey == nil {
-		httpx.Error(w, http.StatusUnprocessableEntity, "PDF is not available for this article")
-		return
-	}
-	if v.Status != "ready" || v.PDFKey == nil {
-		httpx.Error(w, 409, "PDF is still processing")
+	if a.Storage == nil {
+		httpx.Error(w, 502, "failed to read PDF from storage")
 		return
 	}
 	data, err := a.Storage.Download(r.Context(), *v.PDFKey)
@@ -324,30 +389,66 @@ func (a API) retryPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, e := a.store().LatestVersion(r.Context(), id)
-	if e != nil {
+	if errors.Is(e, pgx.ErrNoRows) {
 		httpx.Error(w, 400, "No PDF version found")
 		return
 	}
-	if v.Status != "ready" || v.PDFKey == nil {
-		v.Status = "processing"
-		v.ErrorMessage = nil
-		e = a.store().UpdateVersion(r.Context(), v)
-		if e == nil && a.Queue != nil {
-			typ := queue.ProcessArxivPDF
-			if v.Source == "upload" {
-				typ = queue.FinalizeUploadedPDF
-			} else if v.Source != "arxiv" && v.Source != "web_pdf" {
-				httpx.Error(w, 400, "Cannot retry this PDF source")
-				return
-			}
-			e = queue.Enqueue(a.Queue, typ, v.ID.String())
-		}
-		if e != nil {
-			httpx.Error(w, 500, e.Error())
-			return
-		}
+	if e != nil {
+		httpx.Error(w, 500, e.Error())
+		return
+	}
+	task, refusal := retryTaskFor(v)
+	if refusal != nil {
+		httpx.ErrorCode(w, refusal.HTTPStatus, refusal.Code, refusal.Detail)
+		return
+	}
+	if task == "" {
+		a.paperResponse(w, r, id, 200)
+		return
+	}
+	if a.Queue == nil {
+		httpx.Error(w, 503, "Background queue is unavailable")
+		return
+	}
+	previous := v
+	v.Status = "processing"
+	v.ErrorMessage = nil
+	if e = a.store().UpdateVersion(r.Context(), v); e != nil {
+		httpx.Error(w, 500, e.Error())
+		return
+	}
+	if e = queue.Enqueue(a.Queue, task, v.ID.String()); e != nil {
+		// No job behind it: restore the old state instead of a "processing" the reader polls forever.
+		_ = a.store().UpdateVersion(r.Context(), previous)
+		httpx.Error(w, 503, "Failed to queue PDF retry: "+e.Error())
+		return
 	}
 	a.paperResponse(w, r, id, 200)
+}
+
+// retryTaskFor picks the worker task that rebuilds the latest version's PDF.
+// task=="" with refusal==nil means the PDF is already there. A refusal means
+// there is nothing to re-download, so the client should use find-fulltext.
+func retryTaskFor(v Version) (task string, refusal *pdfState) {
+	if v.Status == "ready" && v.PDFKey != nil {
+		return "", nil
+	}
+	switch v.Source {
+	case "upload":
+		if v.PDFKey != nil {
+			return queue.FinalizeUploadedPDF, nil
+		}
+	case "arxiv", "web_pdf":
+		if v.SourceURL != nil && strings.TrimSpace(*v.SourceURL) != "" {
+			// Same task name as requeueRemotePDF in url.go.
+			return queue.ProcessArxivPDF, nil
+		}
+	}
+	return "", &pdfState{
+		HTTPStatus: http.StatusUnprocessableEntity,
+		Code:       pdfCodeUnavailable,
+		Detail:     "This paper has no PDF source to retry. Use Find full text (POST /papers/" + v.PaperID.String() + "/find-fulltext) to search open-access sources.",
+	}
 }
 
 func orString(p *string, f string) string {

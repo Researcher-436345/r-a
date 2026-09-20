@@ -100,6 +100,12 @@ class Handler(BaseHTTPRequestHandler):
    return self.send(dict(**chat,messages=messages.get(cid,[])))
   if path=='/assistant/models':return self.send(dict(default='fixture',items=[dict(id='fixture',label='Fixture')]))
   if path.endswith('/chat/context'):return self.send(dict(used_tokens=41200,limit_tokens=128000,percent=32,paper_tokens=40000,history_tokens=1200,has_full_paper=True,model='fixture'))
+  if path.endswith('/summary'):
+   if self.command=='GET':return self.send(dict(detail='Summary has not been generated yet'),404)
+   content = '# Тестовый обзор статьи\n\n## TL;DR\nКритик направляет генерацию действий.\n\n## Problem\n- Обучение flow-политики нестабильно.\n\n## Method\n- Градиент критика улучшает действия.\n\n## Results\n- Метод проверен на задачах управления.\n\n## Takeaways\n- Направление по ценности помогает политике.\n\n## Limitations\n- Это демонстрационные данные.\n\n## Deep dive\nПодробный тестовый разбор [p.1].'
+   summary=dict(paper_id=path.split('/')[2],lang=query.get('lang',['ru'])[0],model='fixture',content=content,status='ready',error_message=None,updated_at=now.isoformat(),stale=False)
+   events=[dict(type='delta',text=content),dict(type='done',summary=summary)]
+   return self.send(''.join('data: '+json.dumps(event)+'\n\n' for event in events).encode(),mime='text/event-stream')
   if path.endswith('/chat/messages'):return self.send(dict(items=[]))
   if path.endswith('/chat'):
    reply='Коротко: actor-critic требует градиента log-вероятности действия, а у flow/diffusion-политик она задана неявно — через многошаговый процесс сэмплирования.\n\nАвторы используют критик на инференсе как направляющий градиент [p.1].'

@@ -1,3 +1,4 @@
+import { features } from '../../shared/config/features';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
@@ -104,6 +105,11 @@ export function RegisterPage() {
         <p className="auth-switch">
           Уже есть аккаунт? <Link to="/login">Войти</Link>
         </p>
+        {features.landing ? (
+          <p className="auth-switch">
+            <Link to="/welcome">← О сервисе</Link>
+          </p>
+        ) : null}
       </form>
     </div>
   );

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -80,16 +82,24 @@ func processRemotePDF(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *s
 	if err != nil {
 		return err
 	}
-	if v.SourceURL == nil {
+	// Duplicate enqueues (retry-pdf, requeue on dedupe) must not re-download.
+	if v.Status == "ready" && v.PDFKey != nil {
+		return nil
+	}
+	if v.SourceURL == nil || strings.TrimSpace(*v.SourceURL) == "" {
 		return fail(ctx, p, v, "Missing source URL")
 	}
 	data, err := catalog.DownloadPDF(ctx, *v.SourceURL)
 	if err != nil {
-		return fail(ctx, p, v, err.Error())
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			// Worker shutdown: asynq requeues the task, so this is not a failure.
+			return err
+		}
+		return fail(ctx, p, v, downloadFailureMessage(*v.SourceURL, err))
 	}
 	key := storage.PDFKey(v.PaperID.String(), uuid.NewString())
 	if err = s3.Upload(ctx, key, data); err != nil {
-		return fail(ctx, p, v, err.Error())
+		return fail(ctx, p, v, "Could not store the downloaded PDF: "+err.Error())
 	}
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
@@ -166,14 +176,15 @@ func processParse(
 		return err
 	}
 	if v.PDFKey == nil {
-		return docs.MarkFailed(ctx, v.PaperID, v.ID, "Missing PDF key")
+		markCtx, cancel := detached(ctx)
+		defer cancel()
+		return docs.MarkFailed(markCtx, v.PaperID, v.ID, "Missing PDF key")
 	}
 	_ = docs.UpsertPending(ctx, v.PaperID, v.ID)
 
 	paper, err := p.GetPaperOut(ctx, v.PaperID)
 	if err != nil {
-		_ = docs.MarkFailed(ctx, v.PaperID, v.ID, err.Error())
-		return err
+		return parseFailed(ctx, docs, v, err)
 	}
 
 	// Prefer arXiv TeX source when available; fall back to PDF parser.
@@ -199,19 +210,20 @@ func processParse(
 					TokenEstimate: c.TokenEstimate,
 				})
 			}
-			return docs.SaveReady(ctx, v.PaperID, v.ID, tex.Engine, false, tex.PageCount, tex.Markdown, tex.PlainText, storeChunks)
+			if err := docs.SaveReady(ctx, v.PaperID, v.ID, tex.Engine, false, tex.PageCount, tex.Markdown, tex.PlainText, storeChunks); err != nil {
+				return parseFailed(ctx, docs, v, err)
+			}
+			return nil
 		}
 	}
 
 	data, err := s3.Download(ctx, *v.PDFKey)
 	if err != nil {
-		_ = docs.MarkFailed(ctx, v.PaperID, v.ID, err.Error())
-		return err
+		return parseFailed(ctx, docs, v, err)
 	}
 	parsed, err := parser.ParsePDF(ctx, data, v.PaperID.String())
 	if err != nil {
-		_ = docs.MarkFailed(ctx, v.PaperID, v.ID, err.Error())
-		return err
+		return parseFailed(ctx, docs, v, err)
 	}
 	chunks := make([]content.Chunk, 0, len(parsed.Chunks))
 	for i, c := range parsed.Chunks {
@@ -237,11 +249,47 @@ func processParse(
 	if plain == "" {
 		plain = md
 	}
-	return docs.SaveReady(ctx, v.PaperID, v.ID, parsed.Engine, parsed.OCRUsed, parsed.PageCount, md, plain, chunks)
+	if err := docs.SaveReady(ctx, v.PaperID, v.ID, parsed.Engine, parsed.OCRUsed, parsed.PageCount, md, plain, chunks); err != nil {
+		return parseFailed(ctx, docs, v, err)
+	}
+	return nil
+}
+
+// parseFailed records the failure before returning the error, so
+// paper_documents never stays 'pending' (the overview waits on it) while
+// asynq retries or archives the task.
+func parseFailed(ctx context.Context, docs content.Store, v catalog.Version, err error) error {
+	markCtx, cancel := detached(ctx)
+	defer cancel()
+	if markErr := docs.MarkFailed(markCtx, v.PaperID, v.ID, err.Error()); markErr != nil {
+		log.Printf("parse %s: mark failed: %v (original error: %v)", v.ID, markErr, err)
+	}
+	return err
 }
 
 func fail(ctx context.Context, p catalog.Store, v catalog.Version, message string) error {
 	v.Status = "failed"
 	v.ErrorMessage = &message
-	return p.UpdateVersion(ctx, v)
+	updateCtx, cancel := detached(ctx)
+	defer cancel()
+	return p.UpdateVersion(updateCtx, v)
+}
+
+// detached keeps status writes working after the task context timed out or
+// was cancelled; otherwise the failure itself could not be recorded.
+func detached(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+}
+
+// downloadFailureMessage names the host so the reader/library can show where
+// the download was refused (typically 403 from publisher bot protection).
+func downloadFailureMessage(sourceURL string, err error) string {
+	host := sourceURL
+	if u, parseErr := url.Parse(sourceURL); parseErr == nil && u.Host != "" {
+		host = u.Host
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "PDF download from " + host + " timed out"
+	}
+	return "Could not download the PDF from " + host + ": " + err.Error()
 }

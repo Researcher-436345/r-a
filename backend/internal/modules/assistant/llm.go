@@ -20,6 +20,10 @@ type LLM struct {
 	Config config.Config
 	HTTP   *http.Client
 	Model  string // optional per-request override
+	// MaxTokens caps the reply when > 0. Long structured outputs (the paper
+	// overview) set it explicitly because provider defaults are often too low
+	// and a reply cut by the provider is reported as ErrLLMTruncated.
+	MaxTokens int
 }
 
 type ChatTurn struct {
@@ -46,6 +50,9 @@ type ChatResult struct {
 var (
 	ErrLLMNotConfigured = errors.New("LLM is not configured")
 	ErrLLMEmpty         = errors.New("LLM returned an empty response")
+	// ErrLLMTruncated is returned together with the partial text when the
+	// provider stopped the reply at its token limit (finish_reason=length).
+	ErrLLMTruncated = errors.New("LLM reply was cut by the output token limit")
 )
 
 func (l LLM) resolvedModel() string {
@@ -133,11 +140,15 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 	if l.Config.LLMAPIKey == "" {
 		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
 	}
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model":       l.resolvedModel(),
 		"messages":    l.openAIMessages(system, turns),
 		"temperature": 0.2,
-	})
+	}
+	if l.MaxTokens > 0 {
+		payload["max_tokens"] = l.MaxTokens
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
@@ -155,12 +166,16 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
 		return "", ErrLLMEmpty
 	}
 	if s := strings.TrimSpace(out.Choices[0].Message.Content); s != "" {
+		if l.MaxTokens > 0 && out.Choices[0].FinishReason == "length" {
+			return s, ErrLLMTruncated
+		}
 		return s, nil
 	}
 	return "", ErrLLMEmpty
@@ -170,12 +185,16 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 	if l.Config.LLMAPIKey == "" {
 		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
 	}
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model":       l.resolvedModel(),
 		"messages":    l.openAIMessages(system, turns),
 		"temperature": 0.2,
 		"stream":      true,
-	})
+	}
+	if l.MaxTokens > 0 {
+		payload["max_tokens"] = l.MaxTokens
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
@@ -216,6 +235,8 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var full strings.Builder
+	truncated := false
+	finished := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" || strings.HasPrefix(line, ":") {
@@ -227,6 +248,7 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if payload == "" || payload == "[DONE]" {
 			if payload == "[DONE]" {
+				finished = true
 				break
 			}
 			continue
@@ -236,6 +258,7 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
@@ -243,6 +266,14 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 		}
 		if len(chunk.Choices) == 0 {
 			continue
+		}
+		switch chunk.Choices[0].FinishReason {
+		case "":
+		case "length":
+			truncated = true
+			finished = true
+		default:
+			finished = true
 		}
 		delta := chunk.Choices[0].Delta.Content
 		if delta == "" {
@@ -264,6 +295,12 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 	if full.Len() == 0 {
 		return "", ErrLLMEmpty
 	}
+	// Callers that set MaxTokens need a complete reply: report both a provider
+	// cut (finish_reason=length) and a stream that ended without any finish
+	// signal (proxy/idle timeout) instead of passing off a fragment as done.
+	if l.MaxTokens > 0 && (truncated || !finished) {
+		return full.String(), ErrLLMTruncated
+	}
 	return full.String(), nil
 }
 
@@ -282,10 +319,14 @@ func (l LLM) gemini(ctx context.Context, system string, turns []ChatTurn) (strin
 			"parts": []map[string]string{{"text": turn.Content}},
 		})
 	}
+	generationConfig := map[string]any{"temperature": 0.2}
+	if l.MaxTokens > 0 {
+		generationConfig["maxOutputTokens"] = l.MaxTokens
+	}
 	body, err := json.Marshal(map[string]any{
 		"system_instruction": map[string]any{"parts": []map[string]string{{"text": system}}},
 		"contents":           contents,
-		"generationConfig":   map[string]float64{"temperature": 0.2},
+		"generationConfig":   generationConfig,
 	})
 	if err != nil {
 		return "", err

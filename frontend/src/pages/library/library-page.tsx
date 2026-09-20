@@ -305,7 +305,12 @@ export function LibraryPage() {
       await retryPdf(paperId);
       await loadLibrary(selectedFolderId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Не удалось перезапустить обработку PDF');
+      if (err instanceof ApiError && err.code === 'pdf_unavailable') {
+        // The backend detail is English and names an API route; say what to do instead.
+        setError('У этой статьи нет PDF для повторной загрузки. Откройте её и нажмите «Найти полный текст».');
+      } else {
+        setError(err instanceof ApiError ? err.detail : 'Не удалось перезапустить обработку PDF');
+      }
     } finally {
       setRetryingId(null);
     }
@@ -523,7 +528,7 @@ export function LibraryPage() {
                     <p className="library-card__error">{version.error_message}</p>
                   ) : null}
                   {item.paper.abstract ? (
-                    <RichText className="library-card__abstract" compact>
+                    <RichText className="library-card__abstract" compact allowImages={false}>
                       {item.paper.abstract}
                     </RichText>
                   ) : null}

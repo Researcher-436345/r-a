@@ -9,7 +9,7 @@ import {
   Minus,
   Plus,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { LibraryFolder } from '../../library/api';
 import { flattenLibraryFolders, LibraryFolderIcon } from '../../library/folder-icons';
@@ -30,6 +30,8 @@ interface ReaderPdfViewerProps {
   pdfUrl?: string | null;
   pdfLoading?: boolean;
   pdfError?: string | null;
+  /** Viewer body when there is no PDF (abstract view, processing, errors); replaces pdfError. */
+  emptyState?: ReactNode;
   libraryFolders?: LibraryFolder[];
   currentFolderId?: string | null;
   foldersLoading?: boolean;
@@ -66,6 +68,7 @@ export function ReaderPdfViewer({
   pdfUrl,
   pdfLoading = false,
   pdfError = null,
+  emptyState = null,
   libraryFolders = [],
   currentFolderId = null,
   foldersLoading = false,
@@ -117,6 +120,9 @@ export function ReaderPdfViewer({
     setBasePageWidth(null);
     setFitToWidth(true);
     setScale(1);
+    if (!pdfUrl) {
+      setPageCount(0);
+    }
   }, [pdfUrl]);
 
   useEffect(() => {
@@ -321,7 +327,9 @@ export function ReaderPdfViewer({
         </div>
       ) : null}
 
-      {pdfError && !pdfLoading ? (
+      {!pdfUrl && !pdfLoading && emptyState ? emptyState : null}
+
+      {pdfError && !pdfLoading && !emptyState ? (
         <div className="library-page__error" style={{ margin: '12px 16px' }}>
           {pdfError}
         </div>

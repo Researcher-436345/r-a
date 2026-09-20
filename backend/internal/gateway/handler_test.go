@@ -50,6 +50,9 @@ func TestGuestAccessBoundary(t *testing.T) {
 		{"GET", paper + "/chat/context", 401},
 		{"POST", paper + "/chat?stream=1", 401},
 		{"POST", paper + "/explain", 401},
+		{"GET", paper + "/summary?lang=ru", 401},
+		{"POST", paper + "/summary?stream=1", 401},
+		{"POST", paper + "/find-fulltext", 401},
 		{"POST", paper + "/retry-pdf", 401},
 		{"DELETE", paper + "/pdf", 401},
 		{"POST", paper + "/translate/extra", 401},
@@ -78,7 +81,7 @@ func TestGuestAccessBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/library", paper, "/search/chats"} {
+	for _, path := range []string{"/library", paper, "/search/chats", paper + "/summary?lang=ru"} {
 		r := httptest.NewRequest("GET", path, nil)
 		r.Header.Set("Authorization", "Bearer "+token)
 		r.Header.Set(identity.UserIDHeader, uuid.NewString())

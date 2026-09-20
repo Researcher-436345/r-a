@@ -199,3 +199,8 @@ export function useI18n() {
 
   return context;
 }
+
+/** Locale for shared widgets that may render outside the provider; defaults to ru. */
+export function useLocale(): Locale {
+  return useContext(I18nContext)?.locale ?? 'ru';
+}

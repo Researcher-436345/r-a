@@ -13,7 +13,9 @@ import (
 var (
 	pdfInfoTitleRE  = regexp.MustCompile(`(?s)/Title\s*(\((?:\\.|[^\\()])*\)|<[^>]{4,}>)`)
 	pdfInfoAuthorRE = regexp.MustCompile(`(?s)/Author\s*(\((?:\\.|[^\\()])*\)|<[^>]{4,}>)`)
-	arxivInTextRE   = regexp.MustCompile(`(?i)(?:arxiv:|arxiv\.org/(?:abs|pdf)/)?(\d{4}\.\d{4,5})(?:v\d+)?`)
+	// The prefix is required: any NNNN.NNNNN in the raw bytes (a cited paper, a
+	// number in a stream) would otherwise become the upload's arXiv id.
+	arxivInTextRE = regexp.MustCompile(`(?i)(?:arxiv:\s?|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})(?:v\d+)?`)
 )
 
 var junkTitles = map[string]bool{

@@ -169,7 +169,7 @@ export function PaperCard({
             items={[formatDate(paper.publishedAt, locale), paper.authors || '']}
           />
           {paper.description ? (
-            <RichText className="paper-card__abstract" compact>
+            <RichText className="paper-card__abstract" compact allowImages={false}>
               {paper.description}
             </RichText>
           ) : null}

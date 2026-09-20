@@ -1,0 +1,62 @@
+# Server overlay: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# - frontend: static build behind nginx on :80 (API URL is baked in via VITE_API_URL)
+# - gateway stays on :8081 (frontend talks to it directly; CORS via FRONTEND_URL in .env)
+# - everything with default credentials (postgres, redis, minio, mailpit) and the
+#   unauthenticated internal services (parser, websearch) are NOT published to the host.
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8081}
+        VITE_ENABLE_LANDING: ${VITE_ENABLE_LANDING:-false}
+        VITE_ENABLE_ACTIVE_SESSIONS: ${VITE_ENABLE_ACTIVE_SESSIONS:-false}
+        VITE_REQUIRE_LOGIN_ON_ENTRY: ${VITE_REQUIRE_LOGIN_ON_ENTRY:-false}
+    ports:
+      - "80:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  gateway:
+    restart: unless-stopped
+  identity:
+    restart: unless-stopped
+  catalog:
+    restart: unless-stopped
+  library:
+    restart: unless-stopped
+  annotations:
+    restart: unless-stopped
+  assistant:
+    restart: unless-stopped
+  feed:
+    restart: unless-stopped
+  searchapi:
+    restart: unless-stopped
+  worker:
+    restart: unless-stopped
+  translator:
+    restart: unless-stopped
+  pgbouncer:
+    restart: unless-stopped
+
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+  minio:
+    ports: !reset []
+    restart: unless-stopped
+  mailpit:
+    ports: !reset []
+    restart: unless-stopped
+  parser:
+    ports: !reset []
+    restart: unless-stopped
+  websearch:
+    ports: !reset []
+    restart: unless-stopped

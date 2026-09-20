@@ -48,6 +48,11 @@ type Config struct {
 	LLMHTTPReferer string
 	LLMAppTitle    string
 
+	// SummaryLLMModel is the default model for paper overviews. They are long
+	// structured replies; the chat default (a cheap reasoning model on a
+	// 32k-context route) tends to cut them, so a separate default is worth it.
+	SummaryLLMModel string
+
 	TranslationHTTPAddr      string
 	TranslationServiceURL    string
 	TranslationLLMModel      string
@@ -127,6 +132,7 @@ func Load() Config {
 
 		TranslationHTTPAddr:      getenv("TRANSLATION_HTTP_ADDR", ":8090"),
 		TranslationServiceURL:    getenv("TRANSLATION_SERVICE_URL", "http://localhost:8090"),
+		SummaryLLMModel:          getenv("SUMMARY_LLM_MODEL", getenv("LLM_MODEL", "auto")),
 		TranslationLLMModel:      getenv("TRANSLATION_LLM_MODEL", getenv("LLM_MODEL", "auto")),
 		TranslationMaxChars:      positiveInt(getenv("TRANSLATION_MAX_CHARS", "5000"), 5000),
 		TranslationMaxConcurrent: positiveInt(getenv("TRANSLATION_MAX_CONCURRENT", "8"), 8),

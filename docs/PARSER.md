@@ -11,7 +11,13 @@ Last refreshed: 2026-08-10
 3. **Chat stuffing:** full paper text in LLM prompt (token budget).
 4. **Rolling history summary** on chat overflow (`chat_thread_summaries`).
 
-Not in this epic: AlphaXiv-style UI summary; embeddings/RAG; GROBID.
+5. **Paper overview** (вкладка «Обзор» в ридере): alphaXiv-style разбор по полному тексту —
+   заголовок, карточка (TL;DR / Problem / Method / Results / Takeaways / Limitations) и длинный
+   «Deep dive» с цитатами `[p.N «…»]`; кэш в `paper_summaries` (`008`) по `(paper_id, lang)`,
+   инвалидация по `version_id` при перепарсинге. Генерация ленивая — по первому открытию вкладки;
+   пока документ `pending`, API отвечает `425`.
+
+Not in this epic: embeddings/RAG; GROBID.
 
 ## API
 

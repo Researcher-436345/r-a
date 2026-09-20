@@ -73,6 +73,7 @@ func Handler(cfg config.Config) http.Handler {
 		case strings.HasPrefix(path, "/assistant") ||
 			paperSubresource(path, "chat") ||
 			paperSubresource(path, "explain") ||
+			paperSubresource(path, "summary") ||
 			paperSubresource(path, "translate"):
 			assistantProxy.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/library"):

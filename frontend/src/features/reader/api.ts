@@ -233,6 +233,116 @@ export async function chatPaperStream(
   };
 }
 
+export interface PaperSummary {
+  paper_id: string;
+  lang: string;
+  version_id: string | null;
+  model: string;
+  content: string;
+  status: 'pending' | 'ready' | 'failed';
+  error_message: string | null;
+  updated_at: string;
+  /** Статья была перепарсена после генерации обзора */
+  stale: boolean;
+}
+
+/** Возвращает закэшированный обзор или null, если он ещё не сгенерирован. */
+export async function fetchPaperSummary(
+  paperId: string,
+  lang: string,
+): Promise<PaperSummary | null> {
+  try {
+    return await apiRequest<PaperSummary>(
+      `/papers/${paperId}/summary?lang=${encodeURIComponent(lang)}`,
+      { token: authToken() },
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+type SummaryStreamEvent =
+  | { type: 'delta'; text?: string }
+  | { type: 'done'; summary: PaperSummary }
+  | { type: 'error'; detail?: string };
+
+export async function generatePaperSummaryStream(
+  paperId: string,
+  lang: string,
+  options: {
+    force?: boolean;
+    model?: string;
+    onDelta?: (text: string) => void;
+    signal?: AbortSignal;
+  } = {},
+): Promise<PaperSummary> {
+  const params = new URLSearchParams({ lang, stream: '1' });
+  if (options.force) params.set('force', '1');
+  if (options.model) params.set('model', options.model);
+  const response = await apiFetch(`/papers/${paperId}/summary?${params.toString()}`, {
+    method: 'POST',
+    headers: { Accept: 'text/event-stream' },
+    signal: options.signal,
+  });
+  if (!response.body) {
+    throw new ApiError(502, 'Empty summary stream');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: PaperSummary | null = null;
+
+  const handleLine = (line: string) => {
+    if (!line.startsWith('data:')) {
+      return;
+    }
+    const payload = line.slice(5).trim();
+    if (!payload) {
+      return;
+    }
+    let event: SummaryStreamEvent;
+    try {
+      event = JSON.parse(payload) as SummaryStreamEvent;
+    } catch {
+      return;
+    }
+    if (event.type === 'delta' && event.text) {
+      options.onDelta?.(event.text);
+    } else if (event.type === 'error') {
+      throw new ApiError(502, event.detail || 'Summary stream error');
+    } else if (event.type === 'done') {
+      result = event.summary;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      handleLine(line);
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer) {
+    handleLine(buffer);
+  }
+
+  const completed = result as PaperSummary | null;
+  if (!completed) {
+    throw new ApiError(502, 'Summary stream ended without completion');
+  }
+  return completed;
+}
+
 export interface ExplainReply {
   reply: string;
 }

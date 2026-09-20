@@ -1,7 +1,7 @@
 import { useAuthenticated } from '../../features/auth/token-storage';
 import { requireAuthentication } from '../../features/auth/require-auth';
 import { useParams } from '@tanstack/react-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import {
   fetchAnnotations,
@@ -20,12 +20,17 @@ import {
   fetchLibraryItem,
   fetchPaper,
   saveToLibraryFolder,
-  waitForPdfUrl,
   type LibraryFolder,
   type LibraryItem,
   type LibraryPaper,
 } from '../../features/library/api';
+import { loadReaderPdf } from '../../features/reader/pdf-status';
+import {
+  ReaderAbstractView,
+  ReaderPdfPendingView,
+} from '../../features/reader/components/reader-abstract-view';
 import { ReaderChatPanel } from '../../features/reader/components/reader-chat-panel';
+import { invalidatePaperSummary } from '../../features/reader/components/reader-summary-panel';
 import { ReaderPdfViewer } from '../../features/reader/components/reader-pdf-viewer';
 import {
   ReaderSelectionPopup,
@@ -37,6 +42,15 @@ import type {
 } from '../../features/reader/components/reader-pdf-canvas-viewer';
 import { ApiError } from '../../shared/api/client';
 
+type PdfViewState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'processing' }
+  | { kind: 'ready'; url: string }
+  | { kind: 'unavailable'; detail: string }
+  | { kind: 'timeout' }
+  | { kind: 'error'; detail: string };
+
 export function ReaderPage() {
   const authenticated = useAuthenticated();
   const { paperId } = useParams({ strict: false }) as { paperId?: string };
@@ -46,8 +60,11 @@ export function ReaderPage() {
   const [foldersLoading, setFoldersLoading] = useState(Boolean(paperId));
   const [savingFolderId, setSavingFolderId] = useState<string | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'failed' | 'idle'>('idle');
+  const [pdfState, setPdfState] = useState<PdfViewState>({ kind: 'idle' });
+  /** Bumped to re-run PDF loading (retry, or after find-fulltext queued a download). */
+  const [pdfAttempt, setPdfAttempt] = useState(0);
+  /** Bumped when the paper's text changed, so the overview is rebuilt instead of served from cache. */
+  const [contentVersion, setContentVersion] = useState(0);
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
   const [highlightColor, setHighlightColor] = useState<string>(DEFAULT_HIGHLIGHT_COLOR);
@@ -144,7 +161,8 @@ export function ReaderPage() {
     rect: { x: number; y: number; w: number; h: number } | null | undefined,
     options?: { rectUnit?: 'px' | 'ratio'; color?: string | null },
   ) => {
-    if (!page || page < 1) {
+    // Without a rendered PDF there is no page to jump to; a stale focus would fire on a later load.
+    if (!page || page < 1 || pdfState.kind !== 'ready') {
       return;
     }
     setFlashFocus({
@@ -167,75 +185,111 @@ export function ReaderPage() {
   useEffect(() => {
     if (!paperId) {
       setIsLoading(false);
-      setPdfStatus('idle');
       return;
     }
 
     let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    setPaper(null);
+    setAnnotations([]);
 
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      setPdfUrl(null);
-      setPdfStatus('loading');
-      if (pdfObjectUrlRef.current?.startsWith('blob:')) {
-        URL.revokeObjectURL(pdfObjectUrlRef.current);
-        pdfObjectUrlRef.current = null;
-      }
-      try {
-        const nextPaper = await fetchPaper(paperId);
-        if (cancelled) {
-          return;
-        }
-        setPaper(nextPaper);
-        setIsLoading(false);
-
-        const nextAnnotations = authenticated ? await fetchAnnotations(paperId) : [];
+    fetchPaper(paperId)
+      .then((nextPaper) => {
         if (!cancelled) {
-          setAnnotations(nextAnnotations);
+          setPaper(nextPaper);
         }
-
-        try {
-          const pdf = await waitForPdfUrl(paperId);
-          if (cancelled) {
-            if (pdf.url.startsWith('blob:')) {
-              URL.revokeObjectURL(pdf.url);
-            }
-            return;
-          }
-          pdfObjectUrlRef.current = pdf.url;
-          setPdfUrl(pdf.url);
-          setPdfStatus('ready');
-        } catch (pdfErr) {
-          if (!cancelled) {
-            setPdfStatus('failed');
-            setError(
-              pdfErr instanceof ApiError
-                ? pdfErr.detail
-                : pdfErr instanceof Error
-                  ? pdfErr.message
-                  : 'PDF недоступен',
-            );
-          }
-        }
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : 'Ошибка загрузки');
-          setIsLoading(false);
-          setPdfStatus('failed');
         }
-      }
-    };
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
 
-    void load();
+    // Notes are secondary: a failure here must not take the reader down.
+    (authenticated ? fetchAnnotations(paperId) : Promise.resolve([]))
+      .then((items) => {
+        if (!cancelled) {
+          setAnnotations(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setToast('Не удалось загрузить заметки');
+        }
+      });
+
     return () => {
       cancelled = true;
-      if (pdfObjectUrlRef.current?.startsWith('blob:')) {
+    };
+  }, [paperId, authenticated]);
+
+  useEffect(() => {
+    if (!paperId) {
+      setPdfState({ kind: 'idle' });
+      return;
+    }
+
+    const controller = new AbortController();
+    setPdfState({ kind: 'loading' });
+    let sawProcessing = false;
+
+    void loadReaderPdf(paperId, {
+      signal: controller.signal,
+      onState: (phase) => {
+        sawProcessing = sawProcessing || phase === 'processing';
+        if (!controller.signal.aborted) {
+          setPdfState({ kind: phase });
+        }
+      },
+    }).then((result) => {
+      if (result.kind === 'aborted' || controller.signal.aborted) {
+        if (result.kind === 'ready') {
+          URL.revokeObjectURL(result.url);
+        }
+        return;
+      }
+      if (result.kind === 'ready') {
+        pdfObjectUrlRef.current = result.url;
+        if (sawProcessing) {
+          // A PDF arrived while the reader was open: an overview built from the abstract is stale.
+          invalidatePaperSummary(paperId);
+          setContentVersion((version) => version + 1);
+        }
+      }
+      setPdfState(result);
+    });
+
+    return () => {
+      controller.abort();
+      if (pdfObjectUrlRef.current) {
         URL.revokeObjectURL(pdfObjectUrlRef.current);
         pdfObjectUrlRef.current = null;
       }
     };
-  }, [paperId, authenticated]);
+  }, [paperId, pdfAttempt]);
+
+  const reloadPdf = useCallback(() => {
+    setPdfAttempt((attempt) => attempt + 1);
+  }, []);
+
+  const handlePaperChange = useCallback(
+    (nextPaper: LibraryPaper, { pdfComing }: { pdfComing: boolean }) => {
+      setPaper(nextPaper);
+      // find-fulltext may have stored full text or queued a PDF: rebuild the overview.
+      invalidatePaperSummary(nextPaper.id);
+      setContentVersion((version) => version + 1);
+      if (pdfComing) {
+        reloadPdf();
+      }
+    },
+    [reloadPdf],
+  );
 
   useEffect(() => {
     if (!paperId || !authenticated) {
@@ -364,7 +418,7 @@ export function ReaderPage() {
       setFocusAssistantToken((token) => token + 1);
       return;
     }
-    if (!note.rect) {
+    if (!note.rect || pdfState.kind !== 'ready') {
       return;
     }
     setFlashFocus({
@@ -442,6 +496,26 @@ export function ReaderPage() {
     paper?.doi ? `DOI:${paper.doi}` : null,
   ].filter(Boolean);
 
+  const pdfUrl = pdfState.kind === 'ready' ? pdfState.url : null;
+  const contentMode =
+    pdfState.kind === 'unavailable' || pdfState.kind === 'error' || pdfState.kind === 'timeout'
+      ? paper?.has_full_text
+        ? 'text'
+        : 'abstract'
+      : 'pdf';
+  let viewerBody: ReactNode = null;
+  if (pdfState.kind === 'unavailable' && paper) {
+    viewerBody = (
+      <ReaderAbstractView paper={paper} detail={pdfState.detail} onPaperChange={handlePaperChange} />
+    );
+  } else if (pdfState.kind === 'processing' || pdfState.kind === 'timeout') {
+    viewerBody = <ReaderPdfPendingView kind={pdfState.kind} paper={paper} onRetry={reloadPdf} />;
+  } else if (pdfState.kind === 'error') {
+    viewerBody = (
+      <ReaderPdfPendingView kind="error" paper={paper} detail={pdfState.detail} onRetry={reloadPdf} />
+    );
+  }
+
   return (
     <div
       ref={readerPageRef}
@@ -451,8 +525,8 @@ export function ReaderPage() {
         title={paper?.title}
         meta={metaParts.join(' · ')}
         pdfUrl={pdfUrl}
-        pdfLoading={pdfStatus === 'loading'}
-        pdfError={pdfStatus === 'failed' ? error : null}
+        pdfLoading={pdfState.kind === 'loading' || pdfState.kind === 'idle'}
+        emptyState={viewerBody}
         libraryFolders={libraryFolders}
         currentFolderId={libraryItem?.folder_id ?? null}
         foldersLoading={foldersLoading}
@@ -501,6 +575,8 @@ export function ReaderPage() {
           focusNotesToken={focusNotesToken}
           focusChatMessageId={focusChatMessageId}
           focusChatMessageToken={focusChatMessageToken}
+          contentMode={contentMode}
+          contentKey={`${paperId}:${contentVersion}`}
           onClearContextAttachment={() => setChatAttachment(null)}
           onNoteSelect={handleNoteSelect}
           onPassageSelect={handlePassageSelect}

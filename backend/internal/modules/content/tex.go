@@ -23,7 +23,18 @@ var (
 	texWhitespaceRE = regexp.MustCompile(`[ \t]+\n`)
 	texBlankRE      = regexp.MustCompile(`\n{3,}`)
 	sectionRE       = regexp.MustCompile(`\\((?:sub)*section|chapter|title)\*?\{([^{}]*)\}`)
+	// \input{file}, \include{file}, \subfile{file} — arXiv sources are routinely
+	// split into sections/*.tex, so the main file alone is just a table of contents.
+	texInputRE = regexp.MustCompile(`\\(?:input|include|subfile)\s*\{\s*([^{}]+?)\s*\}`)
 )
+
+// texMinYieldRunes is the smallest plausible paper body. Anything shorter means
+// the source was not really extracted (unresolved inputs, a wrapper file, a
+// PDF-only submission) and the PDF parser must take over.
+const texMinYieldRunes = 1500
+
+// texMaxInputDepth caps \input recursion (cycles are also tracked explicitly).
+const texMaxInputDepth = 12
 
 type TexResult struct {
 	PlainText string
@@ -47,28 +58,35 @@ func TryArxivTeX(ctx context.Context, arxivID string) (TexResult, bool, error) {
 	if len(raw) >= 4 && string(raw[:4]) == "%PDF" {
 		return TexResult{Warnings: []string{"e-print is PDF-only"}}, false, nil
 	}
+	res, ok := ExtractTeXFromEPrint(raw)
+	return res, ok, nil
+}
+
+// ExtractTeXFromEPrint turns a downloaded e-print (tar.gz, gz or a bare .tex)
+// into readable text. ok=false when there is nothing usable in it.
+func ExtractTeXFromEPrint(raw []byte) (TexResult, bool) {
 	files, err := extractTexFiles(raw)
 	if err != nil || len(files) == 0 {
 		msg := "no .tex files in e-print"
 		if err != nil {
 			msg = err.Error()
 		}
-		return TexResult{Warnings: []string{msg}}, false, nil
+		return TexResult{Warnings: []string{msg}}, false
 	}
 	combined := pickAndJoinTeX(files)
 	if strings.TrimSpace(combined) == "" {
-		return TexResult{}, false, nil
+		return TexResult{}, false
 	}
 	plain := CleanTeX(combined)
-	if utf8.RuneCountInString(plain) < 400 {
-		return TexResult{Warnings: []string{"tex yield too short"}}, false, nil
+	if utf8.RuneCountInString(plain) < texMinYieldRunes {
+		return TexResult{Warnings: []string{fmt.Sprintf("tex yield too short: %d runes", utf8.RuneCountInString(plain))}}, false
 	}
 	return TexResult{
 		PlainText: plain,
 		Markdown:  plain,
 		Engine:    "arxiv_tex",
 		PageCount: 0,
-	}, true, nil
+	}, true
 }
 
 func downloadEPrint(ctx context.Context, arxivID string) ([]byte, error) {
@@ -196,18 +214,79 @@ func pickAndJoinTeX(files map[string]string) string {
 		}
 		return list[i].score > list[j].score
 	})
+	if len(list) == 0 {
+		return ""
+	}
+
+	// A real document root pulls the rest in through \input, so expanding it
+	// alone yields the whole paper in reading order. Joining several files on
+	// top of that would duplicate every section.
+	if strings.Contains(list[0].body, `\begin{document}`) {
+		visited := map[string]bool{list[0].name: true}
+		return expandTeXInputs(files, list[0].name, list[0].body, visited, 0)
+	}
+
+	// No root: take the best few files, each with its own inputs resolved.
 	limit := 3
 	if len(list) < limit {
 		limit = len(list)
 	}
+	visited := map[string]bool{}
 	var b strings.Builder
 	for i := 0; i < limit; i++ {
-		if i > 0 {
+		if visited[list[i].name] {
+			continue
+		}
+		visited[list[i].name] = true
+		if b.Len() > 0 {
 			b.WriteString("\n\n")
 		}
-		b.WriteString(list[i].body)
+		b.WriteString(expandTeXInputs(files, list[i].name, list[i].body, visited, 0))
 	}
 	return b.String()
+}
+
+// expandTeXInputs replaces \input{x} / \include{x} / \subfile{x} with the body
+// of x (resolved relative to the including file, then to the archive root),
+// recursively. Unresolved or already-visited inputs are dropped so their file
+// names do not leak into the text as if they were prose.
+func expandTeXInputs(files map[string]string, name, body string, visited map[string]bool, depth int) string {
+	if depth >= texMaxInputDepth {
+		return texInputRE.ReplaceAllString(body, "")
+	}
+	dir := path.Dir(name)
+	return texInputRE.ReplaceAllStringFunc(body, func(m string) string {
+		parts := texInputRE.FindStringSubmatch(m)
+		if len(parts) < 2 {
+			return ""
+		}
+		target, ok := resolveTeXInput(files, dir, parts[1])
+		if !ok || visited[target] {
+			return ""
+		}
+		visited[target] = true
+		return "\n" + expandTeXInputs(files, target, files[target], visited, depth+1) + "\n"
+	})
+}
+
+// resolveTeXInput finds the archive entry an \input argument refers to.
+func resolveTeXInput(files map[string]string, dir, arg string) (string, bool) {
+	arg = strings.Trim(strings.TrimSpace(arg), `"`)
+	if arg == "" {
+		return "", false
+	}
+	bases := []string{arg}
+	if !strings.HasSuffix(strings.ToLower(arg), ".tex") {
+		bases = append(bases, arg+".tex")
+	}
+	for _, base := range bases {
+		for _, candidate := range []string{path.Join(dir, base), path.Clean(base)} {
+			if _, ok := files[candidate]; ok {
+				return candidate, true
+			}
+		}
+	}
+	return "", false
 }
 
 // CleanTeX turns LaTeX source into LLM-friendly text while keeping math delimiters.
@@ -221,6 +300,7 @@ func CleanTeX(src string) string {
 	}
 	s = stripTeXComments(s)
 	s = texIncludeRE.ReplaceAllString(s, "")
+	s = texInputRE.ReplaceAllString(s, "")
 	s = texCiteRE.ReplaceAllString(s, "")
 
 	s = sectionRE.ReplaceAllStringFunc(s, func(m string) string {
