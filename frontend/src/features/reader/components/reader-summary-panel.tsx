@@ -6,7 +6,6 @@ import {
   Lightbulb,
   LoaderCircle,
   RefreshCw,
-  Sparkles,
   Target,
   TriangleAlert,
 } from 'lucide-react';
@@ -94,19 +93,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 function isAbort(err: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (err instanceof DOMException && err.name === 'AbortError');
-}
-
-function formatUpdatedAt(value: string, locale: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return '';
-  }
-  return parsed.toLocaleString(locale === 'en' ? 'en-GB' : 'ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelProps) {
@@ -318,29 +304,6 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
 
   return (
     <div className="reader-summary">
-      <div className="reader-summary__head">
-        <span className="reader-summary__badge">
-          <Sparkles aria-hidden="true" size={14} strokeWidth={2} />
-          {text.summaryBadge}
-        </span>
-        {summary && state === 'ready' ? (
-          <span className="reader-summary__meta" title={summary.model}>
-            {summary.model}
-            {summary.updated_at ? ` · ${formatUpdatedAt(summary.updated_at, locale)}` : ''}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className="reader-summary__refresh"
-          onClick={regenerate}
-          disabled={!paperId || isBusy}
-          title={text.summaryRefresh}
-          aria-label={text.summaryRefresh}
-        >
-          <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-        </button>
-      </div>
-
       {isBusy ? (
         <div className="reader-summary__status" role="status" aria-live="polite">
           <LoaderCircle className="reader-summary__loader" aria-hidden="true" size={15} />
@@ -419,12 +382,23 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
       ) : null}
 
       {state === 'ready' && body ? (
-        <MessageActions
-          className="reader-summary__actions"
-          copied={copied}
-          copyLabel={copied ? text.summaryCopied : text.summaryCopy}
-          onCopy={handleCopy}
-        />
+        <div className="reader-summary__actions">
+          <MessageActions
+            copied={copied}
+            copyLabel={copied ? text.summaryCopied : text.summaryCopy}
+            onCopy={handleCopy}
+          />
+          <button
+            type="button"
+            className="reader-summary__refresh"
+            onClick={regenerate}
+            disabled={!paperId || isBusy}
+            title={text.summaryRefresh}
+            aria-label={text.summaryRefresh}
+          >
+            <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+          </button>
+        </div>
       ) : null}
     </div>
   );

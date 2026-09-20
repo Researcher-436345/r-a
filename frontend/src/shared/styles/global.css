@@ -1919,50 +1919,11 @@ textarea:focus-visible {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 16px 28px;
+  padding: 16px 16px 28px;
 }
 
 .reader-summary > * {
   flex-shrink: 0;
-}
-
-.reader-summary__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0 -16px;
-  padding: 10px 16px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-}
-
-.reader-summary__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.reader-summary__meta {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted, var(--faint));
-  font-size: 12px;
-}
-
-.reader-summary__head > .reader-summary__refresh {
-  margin-left: auto;
 }
 
 .reader-summary__refresh {
@@ -2035,8 +1996,7 @@ textarea:focus-visible {
 .reader-summary__title {
   margin: 4px 0 0;
   color: var(--text);
-  font-family: var(--font-display, inherit);
-  font-variation-settings: 'opsz' 144;
+  font-family: inherit;
   font-size: 21px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -2195,6 +2155,9 @@ textarea:focus-visible {
 }
 
 .reader-summary__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: -4px;
 }
 
