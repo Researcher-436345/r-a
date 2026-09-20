@@ -22,7 +22,7 @@ export function AppLayout() {
         theme={theme}
         onThemeChange={setTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        defaultCollapsed={false}
+        defaultCollapsed={isReader}
       />
       <main
         className={isWorkspace ? 'main-content main-content--workspace' : 'main-content'}
