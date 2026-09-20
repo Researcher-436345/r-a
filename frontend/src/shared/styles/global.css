@@ -2112,8 +2112,6 @@ textarea:focus-visible {
   color: var(--muted, var(--faint));
   font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .reader-summary__body {
