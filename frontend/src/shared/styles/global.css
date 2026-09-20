@@ -74,6 +74,10 @@ body {
   min-height: 100vh;
 }
 
+html:has(.app-shell) {
+  overscroll-behavior: none;
+}
+
 button,
 textarea {
   font: inherit;
@@ -111,7 +115,9 @@ textarea:focus-visible {
 
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
   background: var(--bg);
   color: var(--text);
@@ -274,10 +280,12 @@ textarea:focus-visible {
 }
 
 .main-content {
+  position: relative;
   flex: 1;
   min-width: 0;
   height: 100vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .app-shell--workspace {
