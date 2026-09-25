@@ -58,9 +58,7 @@
   color: var(--muted);
   font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
   line-height: 1.5;
-  text-transform: uppercase;
 }
 
 .open-card__eyebrow > svg {

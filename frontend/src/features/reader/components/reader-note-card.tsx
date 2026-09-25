@@ -192,7 +192,7 @@ export function ReaderNoteCard({
                 .join(' ')}
               style={collapsed ? { maxHeight: NOTE_COLLAPSE_HEIGHT } : undefined}
             >
-              <RichText className="reader-note-card__rich" onPageCite={onPageCite}>
+              <RichText openInReader className="reader-note-card__rich" onPageCite={onPageCite}>
                 {note.note}
               </RichText>
             </div>

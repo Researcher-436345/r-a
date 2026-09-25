@@ -1,3 +1,4 @@
+import { useInstantTranslation } from '../../shared/lib/instant-translation';
 import { useEffect, useRef } from 'react';
 import { FileText, LayoutTemplate, Moon, Sun, X } from 'lucide-react';
 
@@ -14,6 +15,8 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { locale, setLocale, t } = useI18n();
   const { theme, setTheme, readerThemeScope, setReaderThemeScope } = useTheme();
+
+  const { enabled: instantTranslation, setEnabled: setInstantTranslation } = useInstantTranslation();
 
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -50,6 +53,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="settings-modal__header">
           <h3 id="settings-modal-title">{t('settings.title')}</h3>
           <IconButton icon={X} label={t('settings.close')} variant="modal" onClick={onClose} />
+        </div>
+
+        <div className="settings-modal__row">
+          <div className="settings-modal__copy">
+            <div id="instant-translation-label">{locale === 'ru' ? 'Мгновенный перевод' : 'Instant translation'}</div>
+            <span id="instant-translation-hint">{locale === 'ru'
+              ? 'Переводить фрагмент сразу при выделении в статье'
+              : 'Automatically translate text selected in an article or PDF.'}</span>
+          </div>
+          <input
+            type="checkbox"
+            role="switch"
+            className="settings-modal__switch"
+            aria-labelledby="instant-translation-label"
+            aria-describedby="instant-translation-hint"
+            checked={instantTranslation}
+            onChange={event => setInstantTranslation(event.target.checked)}
+          />
         </div>
 
         <div className="settings-modal__row">

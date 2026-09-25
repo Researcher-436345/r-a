@@ -717,6 +717,7 @@ textarea:focus-visible {
 }
 
 .reader-pdf-page__link-layer {
+  z-index: 3;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -4023,3 +4024,28 @@ textarea:focus-visible {
   vertical-align: -0.1em;
   opacity: 0.75;
 }
+
+.settings-modal__switch {
+  appearance: none;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 22px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--faint);
+  cursor: pointer;
+}
+.settings-modal__switch::before {
+  content: '';
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 150ms ease;
+}
+.settings-modal__switch:checked { background: var(--accent); }
+.settings-modal__switch:checked::before { transform: translateX(14px); }
+.settings-modal__switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

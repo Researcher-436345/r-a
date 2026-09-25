@@ -353,7 +353,7 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
             </div>
             <div className="reader-summary__card-body" role="tabpanel">
               {cardText ? (
-                <RichText onPageCite={onPageCite}>{cardText}</RichText>
+                <RichText openInReader onPageCite={onPageCite}>{cardText}</RichText>
               ) : (
                 <p className="reader-summary__card-pending">
                   {isBusy ? text.summaryPending : '—'}
@@ -368,7 +368,7 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
                 <BookOpenText aria-hidden="true" size={15} strokeWidth={2} />
                 <span>{text.summaryDeepDive}</span>
               </div>
-              <RichText className="reader-summary__body" onPageCite={onPageCite}>
+              <RichText openInReader className="reader-summary__body" onPageCite={onPageCite}>
                 {doc.deepDive}
               </RichText>
             </section>
@@ -376,7 +376,7 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
         </>
       ) : body ? (
         // Модель проигнорировала скелет — показываем как есть, без карточки.
-        <RichText className="reader-summary__body" onPageCite={onPageCite}>
+        <RichText openInReader className="reader-summary__body" onPageCite={onPageCite}>
           {body}
         </RichText>
       ) : null}

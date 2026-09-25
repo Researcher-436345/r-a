@@ -187,7 +187,7 @@ function AbstractSection({ paper, locale }: { paper: LibraryPaper; locale: Local
     <section className="reader-abstract__section" aria-label={text.abstract}>
       <h2 className="reader-abstract__section-label">{text.abstract}</h2>
       {abstract ? (
-        <RichText className="reader-abstract__body" allowImages={false}>
+        <RichText openInReader className="reader-abstract__body" allowImages={false}>
           {abstract}
         </RichText>
       ) : (

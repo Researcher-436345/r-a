@@ -1,3 +1,4 @@
+import { ReaderMaterialLink } from '../../papers/components/reader-material-link';
 import {
   getDocument,
   GlobalWorkerOptions,
@@ -823,10 +824,18 @@ function ReaderPdfPage({
       ) : null}
       {links.length > 0 ? (
         <div className="reader-pdf-page__link-layer" aria-hidden={false}>
-          {links.map((link, index) => (
+          {links.map((link, index) => /^https?:\/\//i.test(link.href ?? '') ? (
+            <ReaderMaterialLink
+              key={`${pageNumber}-${index}-${link.left}-${link.top}`}
+              href={link.href!}
+              title={link.title}
+              className="reader-pdf-page__link"
+              style={{ left: link.left, top: link.top, width: link.width, height: link.height }}
+            />
+          ) : (
             <a
               className="reader-pdf-page__link"
-              href={link.href ?? '#'}
+              href={link.href && /^(mailto:|tel:)/i.test(link.href) ? link.href : '#'}
               key={`${pageNumber}-${index}-${link.left}-${link.top}`}
               target={link.href ? '_blank' : undefined}
               rel={link.href ? 'noreferrer' : undefined}

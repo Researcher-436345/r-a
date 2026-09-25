@@ -1,4 +1,5 @@
 import 'katex/dist/katex.min.css';
+import { ReaderMaterialLink } from '../../features/papers/components/reader-material-link';
 
 import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -15,6 +16,7 @@ interface RichTextProps {
   className?: string;
   /** Prefer compact inline look (feed/library abstracts) */
   compact?: boolean;
+  openInReader?: boolean;
   /** Click handler for [p.N] / [стр. N] citations in assistant replies */
   onPageCite?: (page: number, quote?: string) => void;
   /** Abstracts come from scraped pages and indexes: their images are not loaded. */
@@ -86,6 +88,7 @@ export function RichText({
   children,
   className,
   compact = false,
+  openInReader = false,
   onPageCite,
   allowImages = true,
 }: RichTextProps) {
@@ -116,7 +119,7 @@ export function RichText({
         );
       }
       if (href && /^https?:\/\//i.test(href)) {
-        return <ExternalLink href={href}>{linkChildren}</ExternalLink>;
+        return openInReader ? <ReaderMaterialLink href={href}>{linkChildren}</ReaderMaterialLink> : <ExternalLink href={href}>{linkChildren}</ExternalLink>;
       }
       return <a href={href}>{linkChildren}</a>;
     },

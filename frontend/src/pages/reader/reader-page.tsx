@@ -1,3 +1,4 @@
+import { useInstantTranslation } from '../../shared/lib/instant-translation';
 import { useAuthenticated } from '../../features/auth/token-storage';
 import { requireAuthentication } from '../../features/auth/require-auth';
 import { useParams } from '@tanstack/react-router';
@@ -77,6 +78,7 @@ export function ReaderPage() {
   const [focusChatMessageToken, setFocusChatMessageToken] = useState(0);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const { enabled: instantTranslation } = useInstantTranslation();
   const [translation, setTranslation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -357,13 +359,15 @@ export function ReaderPage() {
   const handleTextSelect = (nextSelection: ReaderTextSelection) => {
     const text = nextSelection.text.replace(/\s+/g, ' ').trim();
     setTranslation(null);
-    setIsTranslating(Boolean(text) && Array.from(text).length <= TRANSLATION_MAX_CHARS);
+    setIsTranslating(instantTranslation && Boolean(text) && Array.from(text).length <= TRANSLATION_MAX_CHARS);
     setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
     setSelection(nextSelection);
   };
 
   useEffect(() => {
-    if (!paperId || !selection) {
+    if (!instantTranslation || !paperId || !selection) {
+      setTranslation(null);
+      setIsTranslating(false);
       return;
     }
 
@@ -384,6 +388,7 @@ export function ReaderPage() {
       'ru',
       {
         onDelta: (delta) => {
+          if (controller.signal.aborted) return;
           streamed += delta;
           setTranslation(streamed);
         },
@@ -391,10 +396,10 @@ export function ReaderPage() {
       controller.signal,
     )
       .then((result) => {
-        setTranslation(result.translation);
+        if (!controller.signal.aborted) setTranslation(result.translation);
       })
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
           return;
         }
         setTranslation(
@@ -408,7 +413,7 @@ export function ReaderPage() {
       });
 
     return () => controller.abort();
-  }, [paperId, selection]);
+  }, [paperId, selection, instantTranslation]);
 
   const handleNoteSelect = (note: PaperAnnotation) => {
     setActiveNoteId(note.id);
@@ -601,6 +606,7 @@ export function ReaderPage() {
       <ReaderSelectionPopup
         selection={selection}
         isSaving={isSavingNote}
+        translationEnabled={instantTranslation}
         isTranslating={isTranslating}
         translation={translation}
         highlightColor={highlightColor}

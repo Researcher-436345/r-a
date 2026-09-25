@@ -768,7 +768,7 @@ export function ReaderChatPanel({
                             ),
                           )
                         : message.role === 'assistant' ? (
-                            <RichText className="reader-chat-bubble__rich" onPageCite={onPageCite}>
+                            <RichText openInReader className="reader-chat-bubble__rich" onPageCite={onPageCite}>
                               {message.content}
                             </RichText>
                           ) : (

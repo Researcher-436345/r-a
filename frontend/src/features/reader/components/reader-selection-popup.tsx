@@ -23,6 +23,7 @@ type PopupMode = 'choose' | 'note';
 interface ReaderSelectionPopupProps {
   selection: ReaderSelection | null;
   isSaving: boolean;
+  translationEnabled?: boolean;
   isTranslating?: boolean;
   translation?: string | null;
   highlightColor: string;
@@ -94,6 +95,7 @@ function shouldIgnoreOutsidePointer(target: EventTarget | null) {
 export function ReaderSelectionPopup({
   selection,
   isSaving,
+  translationEnabled = true,
   isTranslating = false,
   translation = null,
   highlightColor,
@@ -160,7 +162,7 @@ export function ReaderSelectionPopup({
 
   useLayoutEffect(() => {
     updatePosition();
-  }, [selection, mode, translation, isTranslating, highlightColor, updatePosition]);
+  }, [selection, mode, translation, translationEnabled, isTranslating, highlightColor, updatePosition]);
 
   useEffect(() => {
     if (!selection) {
@@ -302,7 +304,7 @@ export function ReaderSelectionPopup({
               <X aria-hidden="true" size={15} strokeWidth={2} />
             </button>
           </div>
-          <div className="reader-selection-popup__translation" aria-live="polite">
+          {translationEnabled && <div className="reader-selection-popup__translation" aria-live="polite">
             {selectionTooLong
               ? `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
               : translation ||
@@ -319,7 +321,7 @@ export function ReaderSelectionPopup({
                 ) : (
                   'Не удалось перевести'
                 ))}
-          </div>
+          </div>}
         </div>
       ) : (
         <form className="reader-selection-popup__note" onSubmit={onSubmitNote}>
