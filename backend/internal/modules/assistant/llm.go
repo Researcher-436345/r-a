@@ -24,6 +24,8 @@ type LLM struct {
 	// overview) set it explicitly because provider defaults are often too low
 	// and a reply cut by the provider is reported as ErrLLMTruncated.
 	MaxTokens int
+	// Optional OpenRouter reasoning setting; paper chat sets this on its request copy.
+	ReasoningEffort string
 }
 
 type ChatTurn struct {
@@ -145,6 +147,9 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 		"messages":    l.openAIMessages(system, turns),
 		"temperature": 0.2,
 	}
+	if l.ReasoningEffort != "" {
+		payload["reasoning"] = map[string]string{"effort": l.ReasoningEffort}
+	}
 	if l.MaxTokens > 0 {
 		payload["max_tokens"] = l.MaxTokens
 	}
@@ -190,6 +195,9 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 		"messages":    l.openAIMessages(system, turns),
 		"temperature": 0.2,
 		"stream":      true,
+	}
+	if l.ReasoningEffort != "" {
+		payload["reasoning"] = map[string]string{"effort": l.ReasoningEffort}
 	}
 	if l.MaxTokens > 0 {
 		payload["max_tokens"] = l.MaxTokens
