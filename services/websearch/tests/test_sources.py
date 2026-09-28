@@ -43,12 +43,12 @@ def test_sources_are_normalized_and_deduplicated() -> None:
 
 def test_provider_body_uses_openrouter_web_tools(monkeypatch) -> None:
     monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4-flash")
+    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4.1-flash")
     body = provider_body(
         SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
     )
 
-    assert body["model"] == "deepseek/deepseek-v4-flash"
+    assert body["model"] == "deepseek/deepseek-v4.1-flash"
     assert body["stream"] is True
     assert body["tools"] == [
         {
@@ -195,7 +195,7 @@ def test_provider_body_limits_perplexity_search_to_scholarly_domains(monkeypatch
 
 def test_provider_body_skips_domain_filter_for_non_perplexity_models(monkeypatch) -> None:
     monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4-flash")
+    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4.1-flash")
     body = provider_body(
         SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
     )
