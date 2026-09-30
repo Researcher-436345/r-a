@@ -1,0 +1,208 @@
+# Test stand overlay. Usage (see Makefile):
+#   docker compose -p r-a-test -f docker-compose.yml -f docker-compose.test.yml up -d --build
+#
+# What it changes against the dev stack:
+#   * external services are doubles: fake-scholar answers as arxiv.org /
+#     export.arxiv.org / api.openalex.org / api.crossref.org (network aliases +
+#     a self-issued CA trusted via SSL_CERT_FILE), fake-llm answers as the
+#     OpenAI-compatible provider (LLM_BASE_URL);
+#   * the network uses a documentation subnet (203.0.113.0/24) so the
+#     backend's private-address guard treats the fakes as public hosts;
+#   * mail really goes to Mailpit and email verification is on;
+#   * host ports are moved to 1xxxx so the dev stack can stay up.
+#
+# `env_file: .env` of the base file is dropped so a developer's real keys never
+# leak into the stand; every needed variable is set here explicitly.
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
+
+volumes:
+  test_certs:
+
+x-fake-scholar-env: &fake-scholar-env
+  SSL_CERT_FILE: /certs/ca.crt
+  CITATIONS_ENABLED: "false"
+
+x-fake-llm-env: &fake-llm-env
+  LLM_PROVIDER: openai_compatible
+  LLM_BASE_URL: http://fake-llm:8094/v1
+  LLM_API_KEY: test-key
+  LLM_MODEL: test-model
+  LLM_MODELS: "test-model|Test model,test-model-alt|Alt model"
+  SUMMARY_LLM_MODEL: test-model
+  TRANSLATION_LLM_MODEL: test-model
+  LLM_TIMEOUT_SECONDS: "30"
+
+services:
+  fake-scholar:
+    build:
+      context: ./tests
+      dockerfile: fakes/Dockerfile
+    command: ["fake-scholar"]
+    environment:
+      CERTS_DIR: /certs
+    volumes:
+      - test_certs:/certs
+    networks:
+      default:
+        aliases:
+          - arxiv.org
+          - www.arxiv.org
+          - export.arxiv.org
+          - api.openalex.org
+          - api.crossref.org
+          - www.ebi.ac.uk
+          - api.semanticscholar.org
+    ports:
+      - "18093:8093"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8093/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  fake-llm:
+    build:
+      context: ./tests
+      dockerfile: fakes/Dockerfile
+    command: ["fake-llm"]
+    ports:
+      - "18094:8094"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8094/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  postgres:
+    ports: !override
+      - "15433:5432"
+
+  redis:
+    ports: !override
+      - "16379:6379"
+
+  mailpit:
+    ports: !override
+      - "18025:8025"
+
+  minio:
+    ports: !override []
+
+  migrate:
+    env_file: !override []
+
+  translator:
+    env_file: !override []
+    environment:
+      <<: *fake-llm-env
+      TRANSLATION_MAX_CHARS: "5000"
+      TRANSLATION_MAX_CONCURRENT: "8"
+    depends_on:
+      fake-llm:
+        condition: service_healthy
+
+  parser:
+    env_file: !override []
+    ports: !override []
+
+  websearch:
+    env_file: !override []
+    ports: !override []
+    environment:
+      WEBSEARCH_LLM_BASE_URL: http://fake-llm:8094/v1
+      WEBSEARCH_LLM_API_KEY: test-key
+      WEBSEARCH_LLM_MODEL: test-model
+      WEBSEARCH_DEEP_LLM_MODEL: test-model-deep
+      INTERNAL_TOKEN: test-internal-token
+    depends_on:
+      fake-llm:
+        condition: service_healthy
+
+  identity:
+    env_file: !override []
+    environment:
+      JWT_SECRET: test-stand-secret
+      EMAIL_VERIFICATION_ENABLED: "true"
+      MAIL_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: researcher@test.local
+      FRONTEND_URL: http://localhost:5173
+      COOKIE_SECURE: "false"
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+  catalog:
+    env_file: !override []
+    environment:
+      <<: *fake-scholar-env
+    volumes:
+      - test_certs:/certs:ro
+    depends_on:
+      fake-scholar:
+        condition: service_healthy
+
+  library:
+    env_file: !override []
+
+  annotations:
+    env_file: !override []
+    environment:
+      INTERNAL_TOKEN: test-internal-token
+
+  assistant:
+    env_file: !override []
+    environment:
+      <<: *fake-llm-env
+      INTERNAL_TOKEN: test-internal-token
+      TRANSLATION_MAX_CHARS: "5000"
+      LLM_CONTEXT_TOKENS: "120000"
+      LLM_REPLY_RESERVE: "4000"
+      CHAT_RECENT_KEEP: "8"
+
+  feed:
+    env_file: !override []
+    environment:
+      <<: *fake-scholar-env
+    volumes:
+      - test_certs:/certs:ro
+    depends_on:
+      fake-scholar:
+        condition: service_healthy
+
+  searchapi:
+    env_file: !override []
+    environment:
+      INTERNAL_TOKEN: test-internal-token
+
+  gateway:
+    env_file: !override []
+    ports: !override
+      - "18081:8000"
+    environment:
+      JWT_SECRET: test-stand-secret
+      FRONTEND_URL: http://localhost:5173
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8000/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  worker:
+    env_file: !override []
+    environment:
+      <<: *fake-scholar-env
+      PARSER_ENGINE: pymupdf
+      PARSER_OCR: auto
+      PARSER_TIMEOUT_SECONDS: "180"
+    volumes:
+      - test_certs:/certs:ro
+    depends_on:
+      fake-scholar:
+        condition: service_healthy
