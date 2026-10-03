@@ -4,6 +4,7 @@ import type { LucideProps } from 'lucide-react';
 interface SegmentedOption<TValue extends string> {
   value: TValue;
   label: string;
+  mobileLabel?: string;
   icon?: ComponentType<LucideProps>;
 }
 
@@ -37,11 +38,14 @@ export function SegmentedControl<TValue extends string>({
                 : 'segmented-control__item'
             }
             type="button"
+            aria-label={option.label}
+            title={option.mobileLabel ? option.label : undefined}
             aria-pressed={isActive}
             onClick={() => onChange(option.value)}
           >
             {Icon ? <Icon aria-hidden="true" size={15} strokeWidth={2} /> : null}
-            <span>{option.label}</span>
+            <span className={option.mobileLabel ? 'segmented-control__label--full' : undefined}>{option.label}</span>
+            {option.mobileLabel ? <span className="segmented-control__label--mobile" aria-hidden="true">{option.mobileLabel}</span> : null}
           </button>
         );
       })}

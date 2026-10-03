@@ -97,14 +97,7 @@ func Router(d Deps) http.Handler {
 		library.API{Store: libStore}.Mount(r)
 		annotations.API{Store: annotations.Store{DB: d.DB}, Papers: catalogAPI}.Mount(r)
 		assistant.API{Config: d.Config, DB: d.DB, Papers: catalogAPI}.Mount(r)
-		feed.API{Service: feed.Service{
-			Redis: d.Redis,
-			Citations: feed.CitationConfig{
-				Enabled:               d.Config.CitationsEnabled,
-				OpenAlexMailto:        d.Config.OpenAlexMailto,
-				SemanticScholarAPIKey: d.Config.SemanticScholarAPIKey,
-			},
-		}}.Mount(r)
+		feed.API{Service: feed.NewService(d.Config, d.DB, d.Redis)}.Mount(r)
 		searchapi.API{DB: d.DB, Provider: searchapi.Client{
 			BaseURL: d.Config.WebSearchServiceURL,
 			Token:   d.Config.InternalToken,

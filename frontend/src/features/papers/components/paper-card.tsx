@@ -1,7 +1,8 @@
 import { MetadataLine } from '../../../shared/ui/metadata-line';
 import { useNavigate } from '@tanstack/react-router';
-import { Bookmark, BookmarkCheck, ExternalLink, LoaderCircle, Quote } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Building2, ExternalLink, LoaderCircle, Quote } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   addByArxiv,
@@ -11,8 +12,10 @@ import {
 } from '../../library/api';
 import { ApiError } from '../../../shared/api/client';
 import { useI18n, type Locale } from '../../../shared/i18n/i18n-context';
-import { RichText } from '../../../shared/ui/rich-text';
 import type { Paper } from '../types';
+import { fetchPaperPreview } from '../api';
+import { PaperPreview } from './paper-preview';
+import { PaperDescription } from './paper-description';
 
 interface PaperCardProps {
   paper: Paper;
@@ -41,6 +44,8 @@ function formatCitationCount(value: number) {
   return String(value);
 }
 
+const previewPrefetchMargin = 300;
+
 export function PaperCard({
   paper,
   libraryPaperId = null,
@@ -54,6 +59,48 @@ export function PaperCard({
   const [isOpening, setIsOpening] = useState(false);
   const [isBookmarking, setIsBookmarking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const { data: preview } = useQuery({
+    queryKey: ['papers', 'preview', 'v4', paper.arxivId],
+    queryFn: ({ signal }) => fetchPaperPreview(paper.arxivId, signal),
+    enabled: previewVisible,
+    staleTime: 24 * 60 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: (count, err) => count < 6 && err instanceof ApiError && err.status === 503,
+    retryDelay: (count) => Math.min(3000 * 2 ** count, 10000),
+  });
+  const affiliations = [...new Set(preview?.affiliations ?? [])].slice(0, 5);
+
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setPreviewVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) showPreview();
+    }, { rootMargin: `${previewPrefetchMargin}px 0px` });
+    const stopObserving = () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', measureVisibility, true);
+      window.removeEventListener('resize', measureVisibility);
+    };
+    const showPreview = () => {
+      setPreviewVisible(true);
+      stopObserving();
+    };
+    const measureVisibility = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.bottom > -previewPrefetchMargin && rect.top < window.innerHeight + previewPrefetchMargin) showPreview();
+    };
+    observer.observe(node);
+    window.addEventListener('scroll', measureVisibility, { passive: true, capture: true });
+    window.addEventListener('resize', measureVisibility);
+    measureVisibility();
+    return stopObserving;
+  }, [paper.arxivId]);
 
   useEffect(() => {
     setSavedPaperId(libraryPaperId);
@@ -145,7 +192,7 @@ export function PaperCard({
   };
 
   return (
-    <article ref={cardRef} className="paper-card">
+    <article ref={cardRef} className={`paper-card${affiliations.length ? ' paper-card--affiliated' : ''}`}>
       <div className="paper-card__content">
         <div className="paper-card__main">
           <button
@@ -164,14 +211,28 @@ export function PaperCard({
               paper.title
             )}
           </button>
-          <MetadataLine
-            className="paper-card__meta"
-            items={[formatDate(paper.publishedAt, locale), paper.authors || '']}
-          />
+          {affiliations.length > 0 ? (
+            <div
+              className="paper-card__affiliations"
+              role="list"
+              aria-label={locale === 'ru' ? 'Организации авторов' : 'Author affiliations'}
+            >
+              {affiliations.map((name) => (
+                <span className="paper-card__affiliation" role="listitem" title={name} key={name}>
+                  <Building2 size={12} strokeWidth={1.7} aria-hidden="true" />
+                  <span>{name}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="paper-card__metadata-row">
+            <MetadataLine
+              className="paper-card__meta"
+              items={[formatDate(paper.publishedAt, locale), paper.authors || '']}
+            />
+          </div>
           {paper.description ? (
-            <RichText className="paper-card__abstract" compact allowImages={false}>
-              {paper.description}
-            </RichText>
+            <PaperDescription key={paper.description} text={paper.description} />
           ) : null}
           {error ? <p className="paper-card__error">{error}</p> : null}
         </div>
@@ -228,20 +289,17 @@ export function PaperCard({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="paper-card__preview"
-        aria-label={t('papers.pdfPreview')}
+      <PaperPreview
+        title={paper.title}
+        snippet={previewSnippet}
+        year={previewYear}
+        arxivId={paper.arxivId}
+        label={t('papers.pdfPreview')}
         disabled={isOpening}
-        onClick={() => void openInReader()}
-      >
-        <div className="paper-card__preview-top">
-          {previewYear ? <span className="paper-card__preview-year">{previewYear}</span> : null}
-        </div>
-        <div className="paper-card__preview-title">{paper.title}</div>
-        <div className="paper-card__preview-body">{previewSnippet}</div>
-        <div className="paper-card__preview-foot">arXiv:{paper.arxivId}</div>
-      </button>
+        image={preview?.image && failedImage !== preview.image ? preview.image : undefined}
+        onOpen={() => void openInReader()}
+        onImageError={() => setFailedImage(preview?.image ?? null)}
+      />
     </article>
   );
 }

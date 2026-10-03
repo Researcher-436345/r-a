@@ -11,7 +11,7 @@ import (
 // Public paper handlers still enforce access to public documents only.
 func IsPublicRequest(r *http.Request) bool {
 	path := r.URL.Path
-	if r.Method == http.MethodGet && path == "/feed/trending" {
+	if r.Method == http.MethodGet && (path == "/feed/trending" || path == "/feed/preview") {
 		return true
 	}
 	if r.Method == http.MethodPost && path == "/papers/arxiv/open" {

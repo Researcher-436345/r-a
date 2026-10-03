@@ -4,6 +4,7 @@ import { requireAuthentication } from '../../auth/require-auth';
 import { MessageActions } from '../../../shared/ui/message-actions';
 import { copyText } from '../../../shared/lib/clipboard';
 import { SleepingCat } from '../../../shared/ui/sleeping-cat';
+import { useMobileLayout } from '../../../shared/lib/use-mobile-layout';
 import {
   ArrowUp,
   Check,
@@ -144,6 +145,7 @@ export function ReaderChatPanel({
   contentKey,
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
+  const isMobile = useMobileLayout();
   const authenticated = useAuthenticated();
   const text = readerStrings[locale];
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -852,11 +854,11 @@ export function ReaderChatPanel({
                 </div>
               ) : null}
               <div className="reader-chat-input__spacer" />
-              <span className="sr-only">{text.sendHint}</span>
+              {!isMobile ? <span className="sr-only">{text.sendHint}</span> : null}
               <button
                 className="reader-send-button"
                 type="button"
-                aria-label="Send"
+                aria-label={locale === 'ru' ? 'Отправить' : 'Send'}
                 onClick={handleSend}
                 disabled={composerEmpty || isSending}
               >

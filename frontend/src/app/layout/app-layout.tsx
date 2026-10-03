@@ -1,7 +1,9 @@
 import { Outlet, useLocation } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { useMobileViewport } from '../../shared/lib/use-mobile-layout';
 import { useTheme } from '../../shared/theme/theme-context';
+import { MobileNavigation } from './mobile-navigation';
 import { SettingsModal } from './settings-modal';
 import { Sidebar } from './sidebar';
 
@@ -15,9 +17,11 @@ export function AppLayout() {
   const isWorkspace = isReader || isChat || isLibrary;
   const { theme, setTheme } = useTheme();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  useMobileViewport(shellRef);
 
   return (
-    <div className={isWorkspace ? 'app-shell app-shell--workspace' : 'app-shell'}>
+    <div ref={shellRef} className={isWorkspace ? 'app-shell app-shell--workspace' : 'app-shell'}>
       <Sidebar
         theme={theme}
         onThemeChange={setTheme}
@@ -30,6 +34,7 @@ export function AppLayout() {
       >
         <Outlet />
       </main>
+      <MobileNavigation onOpenSettings={() => setIsSettingsOpen(true)} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );

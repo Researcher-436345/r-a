@@ -26,10 +26,10 @@ function readStoredSort(): TrendingSort {
 }
 
 export function TrendingPapers() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const authenticated = useAuthenticated();
   const [sort, setSort] = useState<TrendingSort>(readStoredSort);
-  const { data: papers = [], isLoading, isError, isFetching } = useQuery(trendingPapersQuery(sort));
+  const { data: papers = [], isLoading, isError, isFetching } = useQuery(trendingPapersQuery(sort, locale));
   const [libraryByArxiv, setLibraryByArxiv] = useState<Record<string, string>>({});
   const [visibleArxivIds, setVisibleArxivIds] = useState<ReadonlySet<string>>(() => new Set());
 

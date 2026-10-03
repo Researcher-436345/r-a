@@ -21,10 +21,8 @@ import { ReaderPdfCanvasViewer, type ReaderAnnotationFocus, type ReaderTextSelec
 const MIN_READER_SCALE = 0.4;
 const MAX_READER_SCALE = 2.5;
 const READER_SCALE_STEP = 0.1;
-/** Горизонтальный padding `.reader-pdf-frame-wrap` (28px с каждой стороны) */
-const FRAME_HORIZONTAL_PADDING = 56;
-
 interface ReaderPdfViewerProps {
+  hidden?: boolean;
   title?: string;
   meta?: string;
   pdfUrl?: string | null;
@@ -63,6 +61,7 @@ function fitScaleForWidth(availableWidth: number, basePageWidth: number) {
 }
 
 export function ReaderPdfViewer({
+  hidden = false,
   title,
   meta,
   pdfUrl,
@@ -109,7 +108,9 @@ export function ReaderPdfViewer({
       return;
     }
 
-    const availableWidth = wrap.clientWidth - FRAME_HORIZONTAL_PADDING;
+    if (!wrap.clientWidth) return;
+    const style = window.getComputedStyle(wrap);
+    const availableWidth = wrap.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     setScale(fitScaleForWidth(availableWidth, basePageWidth));
   }, [basePageWidth]);
 
@@ -185,6 +186,7 @@ export function ReaderPdfViewer({
   return (
     <section
       className={readerDark ? 'reader-viewer reader-viewer--dark' : 'reader-viewer'}
+      hidden={hidden}
       aria-label="PDF viewer"
     >
       <div className="reader-toolbar">
@@ -264,7 +266,7 @@ export function ReaderPdfViewer({
         <div className="reader-toolbar__divider" />
 
         <div className="reader-toolbar__paper">
-          <div className="reader-toolbar__title">{resolvedTitle}</div>
+          <div className="reader-toolbar__title" title={resolvedTitle}>{resolvedTitle}</div>
           <MetadataLine className="reader-toolbar__meta" items={resolvedMeta.split(' · ')} />
         </div>
 

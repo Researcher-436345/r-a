@@ -62,15 +62,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               ? 'Переводить фрагмент сразу при выделении в статье'
               : 'Automatically translate text selected in an article or PDF.'}</span>
           </div>
-          <input
-            type="checkbox"
-            role="switch"
-            className="settings-modal__switch"
-            aria-labelledby="instant-translation-label"
-            aria-describedby="instant-translation-hint"
-            checked={instantTranslation}
-            onChange={event => setInstantTranslation(event.target.checked)}
-          />
+          <label className="settings-modal__toggle">
+            <input
+              type="checkbox"
+              role="switch"
+              className="settings-modal__switch"
+              aria-labelledby="instant-translation-label"
+              aria-describedby="instant-translation-hint"
+              checked={instantTranslation}
+              onChange={event => setInstantTranslation(event.target.checked)}
+            />
+          </label>
         </div>
 
         <div className="settings-modal__row">

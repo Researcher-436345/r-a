@@ -7,6 +7,7 @@ import {
 } from 'react';
 
 import type { ChatContextAttachment } from '../chat-context';
+import { useMobileLayout } from '../../../shared/lib/use-mobile-layout';
 
 export type ComposerSegment =
   | { type: 'text'; value: string }
@@ -200,6 +201,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   { placeholder, onChange, onSubmit, onChipClick },
   ref,
 ) {
+  const isMobile = useMobileLayout();
   const editorRef = useRef<HTMLDivElement | null>(null);
   /** Курсор до ухода в PDF — вставка фрагмента сюда, а не в конец */
   const savedRangeRef = useRef<Range | null>(null);
@@ -343,7 +345,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   }, []);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !isMobile) {
       event.preventDefault();
       onSubmit?.();
       return;

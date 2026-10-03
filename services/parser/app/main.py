@@ -8,6 +8,9 @@ from typing import Any, Literal
 import fitz
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+from .preview import preview_pdf
 
 OCRMode = Literal["auto", "force", "off"]
 EngineMode = Literal["auto", "docling", "pymupdf"]
@@ -251,4 +254,18 @@ async def parse(
             result["chunks"] = chunk_pages(result["pages"])
             result["warnings"] = list(result.get("warnings") or []) + [f"truncated to {max_pages} pages"]
 
+    return JSONResponse(result)
+
+
+@app.post("/v1/preview")
+async def preview(file: UploadFile = File(...)) -> JSONResponse:
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="PDF too large")
+    if not raw.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="expected a PDF file")
+    try:
+        result = await run_in_threadpool(preview_pdf, raw)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Could not preview PDF") from exc
     return JSONResponse(result)
