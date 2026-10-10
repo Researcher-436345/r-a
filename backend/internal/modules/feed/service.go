@@ -17,8 +17,10 @@ import (
 )
 
 type Service struct {
-	Redis     *redis.Client
-	Citations CitationConfig
+	Descriptions *Descriptions
+	ParserURL    string
+	Redis        *redis.Client
+	Citations    CitationConfig
 }
 
 type SortMode string
@@ -205,8 +207,9 @@ func fetchTrending(ctx context.Context, category string, limit int, mode SortMod
 	for _, e := range feed.Entries {
 		id := ""
 		for _, l := range e.Links {
-			if strings.Contains(l.Href, "/abs/") {
-				id = canonicalArxivID(strings.TrimSuffix(strings.TrimPrefix(l.Href, "https://arxiv.org/abs/"), "/"))
+			link, err := url.Parse(l.Href)
+			if err == nil && strings.HasPrefix(link.Path, "/abs/") {
+				id = canonicalArxivID(strings.TrimSuffix(strings.TrimPrefix(link.Path, "/abs/"), "/"))
 				break
 			}
 		}

@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -14,6 +15,7 @@ type API struct {
 
 func (a API) Mount(r chi.Router) {
 	r.Get("/feed/trending", a.trending)
+	r.Get("/feed/preview", a.preview)
 }
 
 func (a API) trending(w http.ResponseWriter, r *http.Request) {
@@ -42,8 +44,25 @@ func (a API) trending(w http.ResponseWriter, r *http.Request) {
 	if mode == "" {
 		mode = SortNew
 	}
+	lang := r.URL.Query().Get("lang")
+	if lang == "" {
+		lang = "ru"
+	}
+	if lang != "ru" && lang != "en" {
+		httpx.Error(w, 400, "Unsupported language")
+		return
+	}
+	if lang == "ru" && category != "cs.AI" {
+		httpx.Error(w, 400, "Prepared feed is available for cs.AI")
+		return
+	}
 
-	items, cached, e := a.Service.Trending(r.Context(), category, limit, mode)
+	items, cached, e := a.Service.LocalizedTrending(r.Context(), category, limit, mode, lang)
+	if errors.Is(e, ErrFeedPreparing) {
+		w.Header().Set("Retry-After", "5")
+		httpx.JSON(w, 503, map[string]string{"detail": "Feed is preparing", "code": "feed_preparing"})
+		return
+	}
 	if e != nil {
 		httpx.Error(w, 502, e.Error())
 		return
@@ -53,5 +72,6 @@ func (a API) trending(w http.ResponseWriter, r *http.Request) {
 		"category": category,
 		"sort":     mode,
 		"cached":   cached,
+		"lang":     lang,
 	})
 }

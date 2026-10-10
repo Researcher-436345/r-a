@@ -30,6 +30,8 @@ import {
 import { LibraryFolderIcon } from '../../features/library/folder-icons';
 import { ApiError } from '../../shared/api/client';
 import { RichText } from '../../shared/ui/rich-text';
+import { useMobileLayout } from '../../shared/lib/use-mobile-layout';
+import { ResponsivePanel } from '../../shared/ui/responsive-panel';
 
 interface FolderNode extends LibraryFolder {
   children: FolderNode[];
@@ -180,7 +182,8 @@ function FolderRow({
 
 export function LibraryPage() {
   const navigate = useNavigate();
-  const [foldersCollapsed, setFoldersCollapsed] = useState(false);
+  const isMobile = useMobileLayout();
+  const [foldersCollapsed, setFoldersCollapsed] = useState(isMobile);
   const routeSearch = useSearch({ strict: false }) as { folder?: string };
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState(routeSearch.folder ?? '');
@@ -203,6 +206,7 @@ export function LibraryPage() {
 
   const selectFolder = (folderId: string) => {
     setSelectedFolderId(folderId);
+    if (isMobile) setFoldersCollapsed(true);
     void navigate({
       to: '/library',
       search: { folder: folderId },
@@ -398,7 +402,7 @@ export function LibraryPage() {
 
   return (
     <div className="library-workspace">
-      {!foldersCollapsed && <aside className="library-folders" aria-label="Папки библиотеки">
+      {!foldersCollapsed && <ResponsivePanel className="library-folders" label="Папки библиотеки" onClose={() => setFoldersCollapsed(true)}>
         <div className="library-folders__header">
           <button
             className="library-folders__new"
@@ -433,11 +437,11 @@ export function LibraryPage() {
           ))}
         </nav>
         {folderError ? <p className="library-folders__error">{folderError}</p> : null}
-      </aside>}
+      </ResponsivePanel>}
 
       <section className="library-page">
         <div className="library-page__header">
-          {foldersCollapsed && <button className="panel-collapse" type="button" title="Развернуть папки" aria-label="Развернуть папки" onClick={() => setFoldersCollapsed(false)}><PanelLeftOpen size={16} /></button>}
+          {foldersCollapsed && <button className="panel-collapse library-page__folders-toggle" type="button" title="Развернуть папки" aria-label="Развернуть папки" aria-haspopup={isMobile ? 'dialog' : undefined} aria-expanded={false} onClick={() => setFoldersCollapsed(false)}><PanelLeftOpen size={18} /><span className="mobile-only">Папки</span></button>}
           <div>
             <h1>{selectedFolder?.name ?? 'Библиотека'}</h1>
             <p>{total > 0 ? `${total} статей` : 'В этой папке пока нет статей'}</p>

@@ -30,6 +30,8 @@ func TestGuestAccessBoundary(t *testing.T) {
 		status       int
 	}{
 		{"GET", "/feed/trending?sort=hot", 204},
+		{"GET", "/feed/preview?arxiv_id=2609.12345", 204},
+		{"POST", "/feed/preview?arxiv_id=2609.12345", 401},
 		{"POST", "/papers/arxiv/open", 204},
 		{"GET", paper, 204},
 		{"GET", paper + "/pdf", 204},

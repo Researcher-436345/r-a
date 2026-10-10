@@ -3,6 +3,8 @@ import { isAuthenticated } from '../../features/auth/token-storage';
 import { getConversationStore } from '../../shared/lib/conversation-store';
 import { useConversationStore } from '../../shared/lib/use-conversation-store';
 import { MessageActions } from '../../shared/ui/message-actions';
+import { MOBILE_LAYOUT_QUERY } from '../../shared/lib/use-mobile-layout';
+import { ResponsivePanel } from '../../shared/ui/responsive-panel';
 import { copyText } from '../../shared/lib/clipboard';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
@@ -677,7 +679,7 @@ export function ChatPage() {
     () =>
       typeof window === 'undefined' ||
       typeof window.matchMedia !== 'function' ||
-      !window.matchMedia('(max-width: 640px)').matches,
+      !window.matchMedia(MOBILE_LAYOUT_QUERY).matches,
   );
   const [activeQuestion, setActiveQuestion] = useState(initialQuestion);
   const [composerMode, setComposerMode] = useState<ResearchMode>(routeMode);
@@ -914,7 +916,7 @@ export function ChatPage() {
   const openNewChat = () => {
     setDraft('');
     setScreen('new');
-    if (window.matchMedia('(max-width: 640px)').matches) {
+    if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) {
       setIsHistoryOpen(false);
     }
     window.requestAnimationFrame(() => composerRef.current?.focus());
@@ -991,7 +993,7 @@ export function ChatPage() {
 
   const openStoredChat = (chat: ResearchChatSummary) => {
     setScreen('conversation');
-    if (window.matchMedia('(max-width: 640px)').matches) {
+    if (window.matchMedia(MOBILE_LAYOUT_QUERY).matches) {
       setIsHistoryOpen(false);
     }
     void navigate({
@@ -1035,7 +1037,7 @@ export function ChatPage() {
   return (
     <div className="chat-page">
       {isHistoryOpen ? (
-        <aside className="chat-history" aria-label={copy.historyLabel}>
+        <ResponsivePanel className="chat-history" label={copy.historyLabel} onClose={() => setIsHistoryOpen(false)}>
           <div className="chat-history__header">
             <button
               className="chat-history__new"
@@ -1147,7 +1149,7 @@ export function ChatPage() {
               </section>
             ) : null}
           </nav>
-        </aside>
+        </ResponsivePanel>
       ) : null}
 
       <section
@@ -1161,6 +1163,8 @@ export function ChatPage() {
               type="button"
               onClick={() => setIsHistoryOpen(true)}
               aria-label={copy.expandHistory}
+              aria-haspopup="dialog"
+              aria-expanded={false}
               title={copy.expandHistory}
             >
               <PanelLeftOpen aria-hidden="true" size={16} strokeWidth={2} />

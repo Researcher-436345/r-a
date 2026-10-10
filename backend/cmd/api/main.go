@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/centraluniversity/researcher/internal/app"
+	"github.com/centraluniversity/researcher/internal/modules/feed"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
@@ -39,12 +40,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	redisClient := redis.NewClient(redisOpts)
+	defer redisClient.Close()
+	go feed.NewService(cfg, pool, redisClient).WarmDescriptions(context.Background())
 	handler := app.Router(app.Deps{
 		Config:  cfg,
 		DB:      pool,
 		Storage: s3,
 		Queue:   q,
-		Redis:   redis.NewClient(redisOpts),
+		Redis:   redisClient,
 	})
 	log.Printf("%s listening on %s", cfg.AppName, cfg.HTTPAddr)
 	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, handler))

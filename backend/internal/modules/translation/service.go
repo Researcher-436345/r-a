@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	ErrNotConfigured = errors.New("translation provider is not configured")
-	ErrProvider      = errors.New("translation provider failed")
-	ErrEmptyResponse = errors.New("translation provider returned an empty response")
+	ErrNotConfigured      = errors.New("translation provider is not configured")
+	ErrProvider           = errors.New("translation provider failed")
+	ErrEmptyResponse      = errors.New("translation provider returned an empty response")
+	ErrIncompleteResponse = errors.New("translation provider returned an incomplete response")
 )
 
 type Request struct {
@@ -98,7 +99,8 @@ func (s Service) Translate(ctx context.Context, input Request) (Response, error)
 
 	var out struct {
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
@@ -109,6 +111,9 @@ func (s Service) Translate(ctx context.Context, input Request) (Response, error)
 	}
 	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
 		return Response{}, ErrEmptyResponse
+	}
+	if reason := out.Choices[0].FinishReason; reason != "" && reason != "stop" {
+		return Response{}, ErrIncompleteResponse
 	}
 	return Response{Translation: strings.TrimSpace(out.Choices[0].Message.Content), TargetLang: req.TargetLang}, nil
 }
