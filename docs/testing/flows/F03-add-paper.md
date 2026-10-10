@@ -22,7 +22,7 @@ DOI на стенде отвечает поддельный Crossref/OpenAlex (`
 | F03-06 | DOI, известный как arXiv | OpenAlex ведёт на `arxiv.org/abs/2301.00003` | `POST /papers/doi` | 201; `arxiv_id: 2301.00003`, `source: arxiv` — тот же paper, что и по arXiv | ✅ |
 | F03-07 | DOI не дублируется, формы записи | статья по DOI добавлена | `https://doi.org/…`, `doi:…`, ВЕРХНИЙ регистр | тот же `id` | ✅ |
 | F03-08 | Ошибки DOI | — | `not-a-doi`; `10.5555/nope`; `10.5555/fixture.journal` | 400; 422 `not_found`; 422 `not_a_paper` | ✅ |
-| F03-09 | Загрузка PDF | файл `private-1p.pdf` под именем `my_reading-notes.pdf` | `POST /papers/upload` | 201; `source: upload`, `processing` → `ready`; заголовок из имени файла `my reading notes`; в библиотеке | ✅ |
+| F03-09 | Загрузка PDF | файл `private-1p.pdf` под именем `my_reading-notes.pdf` | `POST /papers/upload` | 201; `source: upload`, `processing` → `ready`; заголовок из имени файла `my reading notes`; в библиотеке | 🔴 **D-17**: красный в полном прогоне (дедуп с F01-10) |
 | F03-10 | Дедуп загрузки по SHA-256 | тот же файл у второго пользователя | `POST /papers/upload` | 201 с тем же `id`; у обоих в библиотеке | ✅ |
 | F03-11 | Не PDF | `.txt`; пустой файл | `POST /papers/upload` | 400 «Only PDF files…»; 400 | ✅ |
 | F03-12 | HTML под именем `.pdf` `[assumption]` | `not-a-pdf.pdf` | `POST /papers/upload` | 400 — файл без сигнатуры `%PDF-` не принимается | 🔴 **D-13**: принимается, 201 |
