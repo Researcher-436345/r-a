@@ -84,6 +84,7 @@ def build() -> list[dict]:
     panel(product, "Действия без завершения >30 минут", 'max(ra_product_stalled_actions)', 6, 56, 6, 4, "stat", legend="")
     panel(product, "Давность пересчёта", 'time()-max(ra_product_aggregation_last_success_timestamp_seconds)', 12, 56, 6, 4, "stat", "s", "")
     panel(product, "Сбор событий начат", '1000*max(ra_product_tracking_started_timestamp_seconds)', 18, 56, 6, 4, "stat", "dateTimeAsIso", "")
+    panel(product, "Действий с итогом на MAU за 30 дней", 'sum by(feature)(max by(feature,outcome)(ra_product_action_results{outcome=~"success|failed|cancelled"})) / scalar(max(ra_product_active_users{window="30d"}))', 0, 60, 24, 8, kind="bargauge", legend="{{feature}}", description="Логические действия с известным итогом; повторы HTTP дедуплицированы. Ожидание подготовки обзора и действия без завершения исключены. Просмотры готовых результатов и обращения к LLM показаны отдельно.")
 
     reliable = dashboard("ra-reliability", "Odyssey · Надёжность приложения",
         "Итог SSE определяется по done/error, а не по HTTP 200. Время до первого содержимого исключает сообщения прогресса. "
@@ -137,6 +138,12 @@ def build() -> list[dict]:
     panel(infra, "Redis: вытеснения и промахи", [('rate(redis_evicted_keys_total[$__rate_interval])', 'Вытеснения'), ('rate(redis_keyspace_misses_total[$__rate_interval])', 'Промахи')], 0, 44)
     panel(infra, "Перезапуски / начало жизни контейнеров", 'container_start_time_seconds{name!=""}*1000', 12, 44, unit="dateTimeAsIso", legend="{{name}}")
     panel(infra, "Все источники метрик", 'up', 0, 52, 24, 8, legend="{{job}} · {{instance}}")
+    panel(infra, "PostgreSQL: подключения по БД", 'pg_stat_database_numbackends{datname!=""}', 0, 60, legend="{{datname}}")
+    panel(infra, "PostgreSQL: транзакции и откаты", [('rate(pg_stat_database_xact_commit{datname!=""}[$__rate_interval])', '{{datname}} · commit'), ('rate(pg_stat_database_xact_rollback{datname!=""}[$__rate_interval])', '{{datname}} · rollback')], 12, 60)
+    panel(infra, "PgBouncer: активные и ожидающие клиенты", [('sum(pgbouncer_pools_client_active_connections)', 'Активные'), ('sum(pgbouncer_pools_client_waiting_connections)', 'Ожидающие')], 0, 68)
+    panel(infra, "PgBouncer: максимальное ожидание", 'max(pgbouncer_pools_client_maxwait_seconds)', 12, 68, unit="s", legend="")
+    panel(infra, "MinIO: размер объектов", 'minio_cluster_usage_total_bytes', 0, 76, unit="bytes", legend="")
+    panel(infra, "MinIO: доступная ёмкость", 'minio_cluster_capacity_usable_free_bytes', 12, 76, unit="bytes", legend="")
     return [overview, product, reliable, llm, infra]
 
 

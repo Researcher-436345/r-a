@@ -56,14 +56,16 @@ def main() -> None:
 
     pooler = container_env(args.project_name + "-pgbouncer-1")
     pool_user, pool_password = pooler["DB_USER"], pooler["DB_PASSWORD"]
+    worker = container_env(args.project_name + "-worker-1")
     values = {
         "MONITORING_DATABASE_URL": "postgresql://ra_monitor:" + quote(password, safe="") + "@postgres:5432/" + quote(database, safe="") + "?sslmode=disable",
         "MONITORING_PGBOUNCER_URL": "postgresql://" + quote(pool_user, safe="") + ":" + quote(pool_password, safe="") + "@pgbouncer:5432/pgbouncer?sslmode=disable",
         "PGBOUNCER_STATS_USERS": pool_user,
+        "MONITORING_REDIS_URL": worker.get("REDIS_URL", "redis://redis:6379/0"),
         "MONITORING_SECRETS_DIR": str(private),
         "GRAFANA_ADMIN_USER": "admin",
         "GRAFANA_BIND_IP": "127.0.0.1",
-        "GRAFANA_PORT": "3000",
+        "GRAFANA_PORT": "3001",
     }
     environment = root / ".env.monitoring"
     # Существующие операторские настройки сохраняются; секреты берём из приватных файлов.
@@ -71,7 +73,7 @@ def main() -> None:
         for line in environment.read_text().splitlines():
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
-                if key not in {"MONITORING_DATABASE_URL", "MONITORING_PGBOUNCER_URL", "MONITORING_SECRETS_DIR"}:
+                if key not in {"MONITORING_DATABASE_URL", "MONITORING_PGBOUNCER_URL", "MONITORING_REDIS_URL", "MONITORING_SECRETS_DIR"}:
                     values[key] = value
     environment.write_text("\n".join(key + "=" + value for key, value in values.items()) + "\n")
     os.chmod(environment, 0o600)

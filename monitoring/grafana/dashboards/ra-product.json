@@ -1030,6 +1030,56 @@
         "textMode": "auto",
         "colorMode": "value"
       }
+    },
+    {
+      "id": 22,
+      "title": "Действий с итогом на MAU за 30 дней",
+      "description": "Логические действия с известным итогом; повторы HTTP дедуплицированы. Ожидание подготовки обзора и действия без завершения исключены. Просмотры готовых результатов и обращения к LLM показаны отдельно.",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(feature)(max by(feature,outcome)(ra_product_action_results{outcome=~\"success|failed|cancelled\"})) / scalar(max(ra_product_active_users{window=\"30d\"}))",
+          "legendFormat": "{{feature}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value"
+      }
     }
   ],
   "links": [

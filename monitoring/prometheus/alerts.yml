@@ -14,6 +14,12 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Prometheus не получает метрики {{ $labels.job }} / {{ $labels.instance }}"
+      - alert: DataDependencyUnavailable
+        expr: pg_up == 0 or redis_up == 0 or pgbouncer_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Недоступна зависимость данных: {{ $labels.job }}"
       - alert: UserVisibleErrors
         expr: |
           sum(increase(ra_action_results_total{outcome="failed"}[15m])) > 3
@@ -55,6 +61,12 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Более двух часов не обновлялась лента {{ $labels.sort }}"
+      - alert: FeedRefreshMissing
+        expr: absent(ra_feed_refresh_last_success_timestamp_seconds)
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Нет успешного обновления подготовленной ленты"
       - alert: ProductAggregationStale
         expr: time() - ra_product_aggregation_last_success_timestamp_seconds > 2100
         for: 5m
