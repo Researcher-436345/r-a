@@ -14,7 +14,7 @@ def dashboard(uid: str, title: str, note: str) -> dict:
             "time": {"from": "now-24h", "to": "now"}, "panels": [
                 {"id": 1, "type": "text", "title": "Как читать показатели", "gridPos": {"x": 0, "y": 0, "w": 24, "h": 4},
                  "options": {"mode": "markdown", "content": note}}],
-            "links": [{"title": title, "type": "link", "url": "/d/" + key, "keepTime": True}
+            "links": [{"title": title, "type": "link", "url": "/grafana/d/" + key, "keepTime": True}
                       for key, title in [("ra-overview", "Общее состояние"), ("ra-product", "Продукт"),
                                          ("ra-reliability", "Надёжность"), ("ra-llm", "LLM и расходы"), ("ra-infrastructure", "Инфраструктура")]]}
 

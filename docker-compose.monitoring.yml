@@ -20,6 +20,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: https://${GRAFANA_PUBLIC_HOST:-77.91.114.154}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_BRUTE_FORCE_LOGIN_PROTECTION: "true"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     ports:
@@ -32,6 +36,27 @@ services:
       - grafana_admin_password
     restart: unless-stopped
     mem_limit: 768m
+
+  grafana-proxy:
+    image: caddy:2.11.7-alpine
+    environment:
+      GRAFANA_PUBLIC_HOST: ${GRAFANA_PUBLIC_HOST:-77.91.114.154}
+    ports:
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./monitoring/Caddyfile:/etc/caddy/Caddyfile:ro
+      - grafana_proxy_data:/data
+      - grafana_proxy_config:/config
+    depends_on:
+      - grafana
+    restart: unless-stopped
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   alertmanager:
     image: prom/alertmanager:v0.34.1
@@ -110,6 +135,8 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  grafana_proxy_data:
+  grafana_proxy_config:
 
 secrets:
   grafana_admin_password:

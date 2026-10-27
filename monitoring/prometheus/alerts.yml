@@ -1,6 +1,13 @@
 groups:
   - name: availability
     rules:
+      - alert: GrafanaCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{instance="https://77.91.114.154/grafana/login"} - time() < 86400
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Сертификат Grafana истекает менее чем через сутки"
+          description: "Проверить автоматическое продление сертификата в grafana-proxy и доступность TCP 443."
       - alert: EndpointUnavailable
         expr: probe_success{job="probes"} == 0
         for: 2m

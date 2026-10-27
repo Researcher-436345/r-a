@@ -66,6 +66,7 @@ def main() -> None:
         "GRAFANA_ADMIN_USER": "admin",
         "GRAFANA_BIND_IP": "127.0.0.1",
         "GRAFANA_PORT": "3001",
+        "GRAFANA_PUBLIC_HOST": "77.91.114.154",
     }
     environment = root / ".env.monitoring"
     # Существующие операторские настройки сохраняются; секреты берём из приватных файлов.

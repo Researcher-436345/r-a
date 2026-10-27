@@ -532,31 +532,31 @@
     {
       "title": "Общее состояние",
       "type": "link",
-      "url": "/d/ra-overview",
+      "url": "/grafana/d/ra-overview",
       "keepTime": true
     },
     {
       "title": "Продукт",
       "type": "link",
-      "url": "/d/ra-product",
+      "url": "/grafana/d/ra-product",
       "keepTime": true
     },
     {
       "title": "Надёжность",
       "type": "link",
-      "url": "/d/ra-reliability",
+      "url": "/grafana/d/ra-reliability",
       "keepTime": true
     },
     {
       "title": "LLM и расходы",
       "type": "link",
-      "url": "/d/ra-llm",
+      "url": "/grafana/d/ra-llm",
       "keepTime": true
     },
     {
       "title": "Инфраструктура",
       "type": "link",
-      "url": "/d/ra-infrastructure",
+      "url": "/grafana/d/ra-infrastructure",
       "keepTime": true
     }
   ]

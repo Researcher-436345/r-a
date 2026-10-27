@@ -83,6 +83,7 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets: [http://frontend/, http://gateway:8000/health, 'http://gateway:8000/feed/trending?lang=ru&limit=1']
+      - targets: ['https://77.91.114.154/grafana/login']
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

@@ -4,13 +4,13 @@
 
 ## Доступ
 
-Grafana слушает только 127.0.0.1:3001 сервера (GRAFANA_PORT). Порт 3000 занят другим сервисом. Пример SSH-туннеля:
+Основной адрес: https://77.91.114.154/grafana/. SSH-туннель для входа не нужен: открыть ссылку и авторизоваться в Grafana. Анонимный доступ и самостоятельная регистрация отключены. Пользователь по умолчанию admin; пароль хранится на сервере в /home/e.drobyazko/r-a/.monitoring-secrets/grafana_admin_password. Пароль не добавлять в репозиторий или общий лог.
 
-```bash
-ssh -N -L 3001:127.0.0.1:3001 i.filippov@77.91.114.154
-```
+HTTPS обслуживает grafana-proxy (Caddy) на TCP/UDP 443. Сертификат Let's Encrypt выпущен на IP-адрес; Caddy автоматически получает и продлевает его, сохраняя ключи и сертификаты в grafana_proxy_data. Проверка владения IP использует TLS-ALPN-01 через TCP 443. Порт 80 продолжает обслуживать существующий фронтенд.
 
-После подключения открыть http://localhost:3001. Пользователь по умолчанию admin. Пароль находится на сервере в /home/e.drobyazko/r-a/.monitoring-secrets/grafana_admin_password; читать через sudo. Не добавлять его в репозиторий или общий лог. При подключении сверять известный ключ SSH из AGENTS.md. Если VPN мешает маршруту, разрешён привязанный к физическому интерфейсу SSH через -b с текущим IPv4.
+Публичный адрес задаётся GRAFANA_PUBLIC_HOST. При изменении адреса обновить также URL проверки в prometheus.yml и alerts.yml, пересоздать grafana/grafana-proxy и проверить выпуск сертификата. Для сертификата IP используется профиль shortlived; остаток менее суток вызывает алерт. Документация: [сертификаты IP Let's Encrypt](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability/), [автоматический HTTPS Caddy](https://caddyserver.com/docs/automatic-https).
+
+Технический HTTP-порт Grafana остаётся привязан к 127.0.0.1:3001 сервера (GRAFANA_PORT), наружу он не публикуется. После включения Secure cookies браузерный вход следует выполнять через основной HTTPS-адрес.
 
 Получить пароль в своей SSH-сессии на сервере:
 
@@ -26,7 +26,7 @@ sudo cat /home/e.drobyazko/r-a/.monitoring-secrets/grafana_admin_password
 - «Odyssey · LLM и расходы»: попытки, токены, сообщённая стоимость и полнота отчётов.
 - «Odyssey · Инфраструктура»: VPS, контейнеры, PostgreSQL, PgBouncer, Redis и MinIO.
 
-Prometheus, Alertmanager и экспортеры не публикуются наружу. Для просмотра алертов Prometheus подключён datasource Alertmanager; состояние firing также видно на обзорном дашборде.
+Prometheus, Alertmanager и экспортеры не публикуются наружу. Их данные доступны через авторизованную Grafana. Для просмотра алертов подключён datasource Alertmanager; состояние firing также видно на обзорном дашборде.
 
 ## Определения продуктовых метрик
 
