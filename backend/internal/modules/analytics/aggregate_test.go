@@ -46,12 +46,14 @@ func testDB(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	_, file, _, _ := runtime.Caller(0)
-	migration, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../../migrations/011_observability.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatal("migration:", err)
+	for _, name := range []string{"011_observability.sql", "012_test_accounts.sql"} {
+		migration, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../../migrations/", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatal("migration:", err)
+		}
 	}
 	return pool
 }
@@ -168,5 +170,73 @@ func TestClientCannotForgeServerOutcomes(t *testing.T) {
 	}
 	if ValidateClient(Event{ActionID: uuid.New(), Type: "result_viewed", Feature: "arbitrary"}) {
 		t.Fatal("accepted unbounded feature")
+	}
+}
+
+func TestTestAccountsDoNotAffectProductMetrics(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 12, 1, 20, 0, 0, 0, time.UTC)
+	created := now.AddDate(0, 0, -31)
+	if _, err := pool.Exec(ctx, `UPDATE analytics_settings SET started_at=$1`, now.AddDate(0, 0, -100)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO users(id,created_at) VALUES($1,$2)`, uuid.New(), created); err != nil {
+		t.Fatal(err)
+	}
+	before, err := Aggregate(ctx, pool, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, project := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO users(id,created_at,is_test) VALUES($1,$2,true)`, user, created); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO library_folders(id,user_id,created_at) VALUES($1,$2,$3)`, project, user, created); err != nil {
+		t.Fatal(err)
+	}
+	RegisterProject(ctx, pool, user, project, nil, created)
+	positive := int16(1)
+	for _, kind := range []string{"action_started", "action_finished", "result_viewed", "project_opened", "paper_opened", "paper_saved", "note_created", "result_copied", "feedback"} {
+		e := Event{ActionID: uuid.New(), Type: kind, Feature: "summary", ProjectID: &project, At: now.Add(-time.Hour)}
+		if kind == "action_finished" {
+			e.Outcome = "success"
+		}
+		if kind == "feedback" {
+			e.Feedback = &positive
+		}
+		if err := insert(ctx, pool, user, e, "server"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, feature := range []string{"search", "deep_research"} {
+		action := uuid.New()
+		if err := insert(ctx, pool, user, Event{ActionID: action, Type: "action_finished", Feature: feature, Outcome: "success", At: now.AddDate(0, 0, -8)}, "server"); err != nil {
+			t.Fatal(err)
+		}
+		for _, kind := range []string{"paper_opened", "paper_saved"} {
+			if err := insert(ctx, pool, user, Event{ActionID: uuid.New(), Type: kind, SourceActionID: &action, ProjectID: &project, At: now.AddDate(0, 0, -7)}, "client"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	after, err := Aggregate(ctx, pool, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("test users added product metric series: before=%d after=%d", len(before), len(after))
+	}
+	for _, s := range before {
+		if got := sampleValue(t, after, s.Name, s.Labels...); got != s.Value {
+			t.Errorf("test user changed %s %v: got %v want %v", s.Name, s.Labels, got, s.Value)
+		}
+	}
+	if got := sampleValue(t, after, "registered_users"); got != 1 {
+		t.Fatalf("registered users includes test account: %v", got)
+	}
+	var raw int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM analytics_events WHERE user_id=$1`, user).Scan(&raw); err != nil || raw == 0 {
+		t.Fatalf("test events must remain available for diagnostics: rows=%d err=%v", raw, err)
 	}
 }

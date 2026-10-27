@@ -97,7 +97,7 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	}
 	var started time.Time
 	var registered float64
-	if err = tx.QueryRow(ctx, `SELECT started_at,(SELECT count(*)::float8 FROM users) FROM analytics_settings WHERE singleton`).Scan(&started, &registered); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT started_at,(SELECT count(*)::float8 FROM analytics_product_users) FROM analytics_settings WHERE singleton`).Scan(&started, &registered); err != nil {
 		return nil, err
 	}
 	add("tracking_started_timestamp_seconds", float64(started.Unix()))
@@ -110,7 +110,7 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 		err = tx.QueryRow(ctx, `SELECT
 		 count(DISTINCT user_id) FILTER(WHERE event_type IN ('action_started','result_viewed','project_opened','paper_opened','paper_saved','note_created'))::float8,
 		 count(DISTINCT user_id) FILTER(WHERE event_type='result_viewed')::float8
-		 FROM analytics_events WHERE occurred_at >= $1::timestamptz-make_interval(days=>$2) AND occurred_at<=$1`, now, window.days).Scan(&active, &value)
+		 FROM analytics_product_events WHERE occurred_at >= $1::timestamptz-make_interval(days=>$2) AND occurred_at<=$1`, now, window.days).Scan(&active, &value)
 		if err != nil {
 			return nil, fmt.Errorf("active users: %w", err)
 		}
@@ -120,9 +120,9 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	var eligible, activated float64
 	var p50, p90 *float64
 	err = tx.QueryRow(ctx, `WITH cohort AS (
-	 SELECT id,created_at FROM users WHERE created_at >= $2 AND created_at >= $1::timestamptz-interval '37 days' AND created_at <= $1::timestamptz-interval '7 days'
+	 SELECT id,created_at FROM analytics_product_users WHERE created_at >= $2 AND created_at >= $1::timestamptz-interval '37 days' AND created_at <= $1::timestamptz-interval '7 days'
 	), first_value AS (
-	 SELECT c.id,c.created_at,min(e.occurred_at) AS first_at FROM cohort c LEFT JOIN analytics_events e
+	 SELECT c.id,c.created_at,min(e.occurred_at) AS first_at FROM cohort c LEFT JOIN analytics_product_events e
 	 ON e.user_id=c.id AND e.event_type='result_viewed' AND e.occurred_at>=c.created_at AND e.occurred_at<=c.created_at+interval '7 days' GROUP BY c.id,c.created_at
 	) SELECT count(*)::float8,count(first_at)::float8,
 	 percentile_cont(0.5) WITHIN GROUP(ORDER BY extract(epoch FROM first_at-created_at))::float8,
@@ -139,10 +139,10 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 		add("time_to_first_value_seconds", *p90, "0.9")
 	}
 	rows, err := tx.Query(ctx, `WITH periods(name,first_day,last_day) AS(VALUES('d7',7,7),('d30',30,30),('w1',1,7),('w2',8,14),('w4',22,28)), cohorts AS(
-	 SELECT p.*,u.id,u.created_at::date AS cohort_date FROM periods p JOIN users u ON u.created_at >= $2
+	 SELECT p.*,u.id,u.created_at::date AS cohort_date FROM periods p JOIN analytics_product_users u ON u.created_at >= $2
 	 AND u.created_at::date BETWEEN ($1::timestamptz::date-p.last_day-30) AND ($1::timestamptz::date-p.last_day-1)
 	) SELECT p.name,count(c.id)::float8,count(c.id) FILTER(WHERE EXISTS(
-	 SELECT 1 FROM analytics_events e WHERE e.user_id=c.id AND e.event_type IN ('action_started','result_viewed','project_opened','paper_opened','paper_saved','note_created')
+	 SELECT 1 FROM analytics_product_events e WHERE e.user_id=c.id AND e.event_type IN ('action_started','result_viewed','project_opened','paper_opened','paper_saved','note_created')
 	 AND e.occurred_at::date BETWEEN c.cohort_date+c.first_day AND c.cohort_date+c.last_day
 	))::float8 FROM periods p LEFT JOIN cohorts c ON c.name=p.name GROUP BY p.name`, now, started)
 	if err != nil {
@@ -164,10 +164,10 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 		return nil, err
 	}
 	rows, err = tx.Query(ctx, `WITH active AS(
-	 SELECT DISTINCT user_id FROM analytics_events WHERE occurred_at >= $1::timestamptz-interval '30 days' AND occurred_at <= $1
+	 SELECT DISTINCT user_id FROM analytics_product_events WHERE occurred_at >= $1::timestamptz-interval '30 days' AND occurred_at <= $1
 	 AND event_type IN ('action_started','result_viewed','project_opened','paper_opened','paper_saved','note_created')
 	), features(feature) AS(VALUES('summary'),('translation'),('chat'),('explanation'),('search'),('deep_research')), uses AS(
-	 SELECT user_id,feature,count(*)::float8 AS n FROM analytics_events WHERE event_type='result_viewed'
+	 SELECT user_id,feature,count(*)::float8 AS n FROM analytics_product_events WHERE event_type='result_viewed'
 	 AND occurred_at >= $1::timestamptz-interval '30 days' AND occurred_at <= $1 GROUP BY user_id,feature
 	), distribution AS(SELECT f.feature,a.user_id,coalesce(u.n,0) AS n FROM features f CROSS JOIN active a LEFT JOIN uses u ON u.feature=f.feature AND u.user_id=a.user_id)
 	SELECT f.feature,count(d.user_id) FILTER(WHERE d.n>0)::float8,coalesce(sum(d.n),0)::float8,
@@ -198,7 +198,7 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.Query(ctx, `SELECT feature,outcome,count(*)::float8 FROM analytics_events WHERE event_type='action_finished' AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY feature,outcome`, now)
+	rows, err = tx.Query(ctx, `SELECT feature,outcome,count(*)::float8 FROM analytics_product_events WHERE event_type='action_finished' AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY feature,outcome`, now)
 	if err != nil {
 		return nil, err
 	}
@@ -217,10 +217,10 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 		return nil, err
 	}
 	rows, err = tx.Query(ctx, `WITH periods(days) AS(VALUES(7),(30)) SELECT p.days::text||'d',count(a.project_id)::float8,count(a.project_id) FILTER(WHERE EXISTS(
-	 SELECT 1 FROM analytics_events e WHERE e.project_id=a.project_id AND e.user_id=a.user_id
+	 SELECT 1 FROM analytics_product_events e WHERE e.project_id=a.project_id AND e.user_id=a.user_id
 	 AND e.event_type IN ('project_opened','paper_opened','paper_saved','note_created','action_started','result_viewed')
 	 AND e.occurred_at::date>a.created_at::date AND e.occurred_at<=a.created_at+make_interval(days=>p.days)
-	))::float8 FROM periods p LEFT JOIN analytics_projects a ON a.created_at>=$2 AND a.created_at BETWEEN $1::timestamptz-make_interval(days=>p.days+30) AND $1::timestamptz-make_interval(days=>p.days) GROUP BY p.days`, now, started)
+	))::float8 FROM periods p LEFT JOIN analytics_product_projects a ON a.created_at>=$2 AND a.created_at BETWEEN $1::timestamptz-make_interval(days=>p.days+30) AND $1::timestamptz-make_interval(days=>p.days) GROUP BY p.days`, now, started)
 	if err != nil {
 		return nil, fmt.Errorf("project return: %w", err)
 	}
@@ -239,19 +239,19 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	if err != nil {
 		return nil, err
 	}
-	err = tx.QueryRow(ctx, `SELECT count(*)::float8,count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_events e WHERE e.project_id=p.project_id AND e.user_id=p.user_id
+	err = tx.QueryRow(ctx, `SELECT count(*)::float8,count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_product_events e WHERE e.project_id=p.project_id AND e.user_id=p.user_id
 	 AND e.event_type IN ('paper_saved','note_created','action_started') AND e.occurred_at BETWEEN p.created_at AND p.created_at+interval '7 days'))::float8
-	 FROM analytics_projects p WHERE p.created_at>=$2 AND p.created_at BETWEEN $1::timestamptz-interval '37 days' AND $1::timestamptz-interval '7 days'`, now, started).Scan(&eligible, &activated)
+	 FROM analytics_product_projects p WHERE p.created_at>=$2 AND p.created_at BETWEEN $1::timestamptz-interval '37 days' AND $1::timestamptz-interval '7 days'`, now, started).Scan(&eligible, &activated)
 	if err != nil {
 		return nil, err
 	}
 	add("project_activation_projects", eligible, "eligible")
 	add("project_activation_projects", activated, "activated")
-	rows, err = tx.Query(ctx, `WITH searches AS(SELECT user_id,action_id,feature,occurred_at FROM analytics_events WHERE event_type='action_finished' AND outcome='success' AND feature IN ('search','deep_research')
+	rows, err = tx.Query(ctx, `WITH searches AS(SELECT user_id,action_id,feature,occurred_at FROM analytics_product_events WHERE event_type='action_finished' AND outcome='success' AND feature IN ('search','deep_research')
 	 AND occurred_at BETWEEN $1::timestamptz-interval '37 days' AND $1::timestamptz-interval '7 days')
 	SELECT feature,count(*)::float8,
-	count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_events e WHERE e.user_id=s.user_id AND e.source_action_id=s.action_id AND e.event_type='paper_opened' AND e.occurred_at BETWEEN s.occurred_at AND s.occurred_at+interval '7 days'))::float8,
-	count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_events e WHERE e.user_id=s.user_id AND e.source_action_id=s.action_id AND e.event_type='paper_saved' AND e.occurred_at BETWEEN s.occurred_at AND s.occurred_at+interval '7 days'))::float8
+	count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_product_events e WHERE e.user_id=s.user_id AND e.source_action_id=s.action_id AND e.event_type='paper_opened' AND e.occurred_at BETWEEN s.occurred_at AND s.occurred_at+interval '7 days'))::float8,
+	count(*) FILTER(WHERE EXISTS(SELECT 1 FROM analytics_product_events e WHERE e.user_id=s.user_id AND e.source_action_id=s.action_id AND e.event_type='paper_saved' AND e.occurred_at BETWEEN s.occurred_at AND s.occurred_at+interval '7 days'))::float8
 	FROM searches s GROUP BY feature`, now)
 	if err != nil {
 		return nil, err
@@ -272,7 +272,7 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.Query(ctx, `SELECT CASE WHEN feedback=1 THEN 'helpful' ELSE 'unhelpful' END,count(*)::float8 FROM analytics_events WHERE event_type='feedback' AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY feedback`, now)
+	rows, err = tx.Query(ctx, `SELECT CASE WHEN feedback=1 THEN 'helpful' ELSE 'unhelpful' END,count(*)::float8 FROM analytics_product_events WHERE event_type='feedback' AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY feedback`, now)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 	if err != nil {
 		return nil, err
 	}
-	rows, err = tx.Query(ctx, `SELECT event_type,count(*)::float8 FROM analytics_events WHERE event_type IN ('result_copied','paper_saved','note_created') AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY event_type`, now)
+	rows, err = tx.Query(ctx, `SELECT event_type,count(*)::float8 FROM analytics_product_events WHERE event_type IN ('result_copied','paper_saved','note_created') AND occurred_at>=$1::timestamptz-interval '30 days' AND occurred_at<=$1 GROUP BY event_type`, now)
 	if err != nil {
 		return nil, err
 	}
@@ -309,8 +309,8 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, now time.Time) ([]Sample
 		return nil, err
 	}
 	var stalled float64
-	err = tx.QueryRow(ctx, `SELECT count(*)::float8 FROM analytics_events s WHERE s.event_type='action_started' AND s.occurred_at BETWEEN $1::timestamptz-interval '30 days' AND $1::timestamptz-interval '30 minutes'
-	 AND NOT EXISTS(SELECT 1 FROM analytics_events e WHERE e.user_id=s.user_id AND e.action_id=s.action_id AND e.event_type='action_finished')`, now).Scan(&stalled)
+	err = tx.QueryRow(ctx, `SELECT count(*)::float8 FROM analytics_product_events s WHERE s.event_type='action_started' AND s.occurred_at BETWEEN $1::timestamptz-interval '30 days' AND $1::timestamptz-interval '30 minutes'
+	 AND NOT EXISTS(SELECT 1 FROM analytics_product_events e WHERE e.user_id=s.user_id AND e.action_id=s.action_id AND e.event_type='action_finished')`, now).Scan(&stalled)
 	if err != nil {
 		return nil, err
 	}
