@@ -495,8 +495,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "legendFormat": "{{alertname}}",
+          "expr": "sum(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"

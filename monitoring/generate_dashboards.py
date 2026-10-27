@@ -56,7 +56,7 @@ def build() -> list[dict]:
     panel(overview, "Активная аудитория", 'max by (window)(ra_product_active_users)', 0, 8, legend="{{window}}")
     panel(overview, "Retention по окнам", ratio("ra_product_retention_users", 'state="returned"', 'state="eligible"', "period"), 12, 8, unit="percentunit", legend="{{period}}")
     panel(overview, "Доступность проверяемых сценариев", 'probe_success{job="probes"}', 0, 16, legend="{{instance}}")
-    panel(overview, "Активные алерты", 'ALERTS{alertstate="firing"}', 12, 16, kind="stat", legend="{{alertname}}")
+    panel(overview, "Активные алерты", 'sum(ALERTS{alertstate="firing"}) or vector(0)', 12, 16, kind="stat", legend="")
 
     product = dashboard("ra-product", "Odyssey · Продукт и воронки",
         "Использование функции — просмотр готового результата; генерация и кэш считаются отдельно. Повторы HTTP дедуплицируются. "
