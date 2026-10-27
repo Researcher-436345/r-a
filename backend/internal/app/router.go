@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/centraluniversity/researcher/internal/modules/analytics"
 	"github.com/centraluniversity/researcher/internal/modules/annotations"
 	"github.com/centraluniversity/researcher/internal/modules/assistant"
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
@@ -93,6 +94,7 @@ func Router(d Deps) http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(identityAPI.GuestOrAuthenticated)
+		analytics.API{DB: d.DB, Limiter: &throttle.Limiter{Redis: d.Redis}}.Mount(r)
 		catalogAPI.Mount(r)
 		library.API{Store: libStore}.Mount(r)
 		annotations.API{Store: annotations.Store{DB: d.DB}, Papers: catalogAPI}.Mount(r)

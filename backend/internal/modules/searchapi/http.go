@@ -9,6 +9,7 @@ import (
 
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -98,6 +99,9 @@ func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Mode != "deep" {
 		body.Mode = "web"
+	}
+	if body.Mode == "deep" {
+		observability.SetFeature(r.Context(), "deep_research")
 	}
 	store := a.store()
 	title := truncateRunes(strings.Join(strings.Fields(body.Message), " "), 120)

@@ -3,6 +3,7 @@ import { tryRefreshSession } from '../../features/auth/refresh-session';
 
 import { loginHref, requireAuthentication } from '../../features/auth/require-auth';
 import { API_URL } from './base-url';
+import { trackingHeaders, bindTrackedResponse, rememberCompletedResponse, trackMutation } from '../lib/analytics';
 
 export class ApiError extends Error {
   status: number;
@@ -88,12 +89,15 @@ export async function apiFetch(path: string, options: RequestOptions = {}): Prom
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  const action = trackingHeaders(path, options.method ?? 'GET', options.body, headers);
+
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     credentials: path.startsWith('/auth/') ? 'include' : (options.credentials ?? 'same-origin'),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
+  bindTrackedResponse(response, action);
 
   if (!response.ok) {
     if (shouldAttemptRefresh(path, response.status, Boolean(options._authRetried))) {
@@ -101,6 +105,7 @@ export async function apiFetch(path: string, options: RequestOptions = {}): Prom
       if (refreshed) {
         return apiFetch(path, {
           ...options,
+          headers,
           token: getAccessToken(),
           _authRetried: true,
         });
@@ -130,5 +135,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const result = (await response.json()) as T;
+  const data = result as { id?: string; message_id?: string };
+  rememberCompletedResponse(response, data?.message_id ?? data?.id ?? path.split('?')[0]);
+  trackMutation(path.split('?')[0], options.method ?? 'GET', options.body, result);
+  return result;
 }

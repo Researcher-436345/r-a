@@ -10,6 +10,7 @@ import (
 
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -130,6 +131,7 @@ func (a API) createSummary(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	observability.SummarySource(r.Context(), source.FullText != "")
 
 	if !force {
 		stored, found, err := a.summaryOf(r.Context(), id, lang, source.VersionID)
@@ -138,11 +140,13 @@ func (a API) createSummary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if found && stored.Status == "ready" && !stored.Stale {
+			observability.CacheHit(r.Context(), "paper_summary")
 			a.writeSummary(w, r, stored)
 			return
 		}
 	}
 
+	observability.CacheMiss("paper_summary")
 	claimed, err := a.store().ClaimSummary(r.Context(), id, lang, source.VersionID, modelID)
 	if err != nil {
 		httpx.Error(w, 500, "Failed to start summary generation")

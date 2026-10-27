@@ -15,7 +15,10 @@ from .preview import preview_pdf
 OCRMode = Literal["auto", "force", "off"]
 EngineMode = Literal["auto", "docling", "pymupdf"]
 
+from .metrics import setup_metrics
+
 app = FastAPI(title="researcher-parser", version="0.1.0")
+setup_metrics(app, "parser")
 
 ENGINE = os.getenv("PARSER_ENGINE", "auto").strip().lower() or "auto"
 DEFAULT_OCR = os.getenv("PARSER_OCR", "auto").strip().lower() or "auto"

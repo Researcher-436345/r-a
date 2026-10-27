@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 )
 
 var (
@@ -82,22 +83,33 @@ func Validate(req Request, maxChars int) (Request, error) {
 	return req, nil
 }
 
-func (s Service) Translate(ctx context.Context, input Request) (Response, error) {
+func (s Service) Translate(ctx context.Context, input Request) (result Response, callErr error) {
 	req, httpReq, err := s.providerRequest(ctx, input, false)
 	if err != nil {
 		return Response{}, err
 	}
+	ctx = observability.WithFeature(ctx, "translation")
+	model := strings.TrimSpace(s.Config.TranslationLLMModel)
+	if model == "" {
+		model = s.Config.LLMModel
+	}
+	observe := observability.ObserveLLM(ctx, model)
+	defer func() { observe(callErr) }()
+	var reportedUsage json.RawMessage
+	defer func() { observability.UsageJSON(ctx, model, reportedUsage) }()
 	providerResp, err := s.client().Do(httpReq)
 	if err != nil {
 		return Response{}, fmt.Errorf("%w: %v", ErrProvider, err)
 	}
 	defer providerResp.Body.Close()
+	observability.ProviderResponse(ctx, model, providerResp.StatusCode)
 	if providerResp.StatusCode/100 != 2 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(providerResp.Body, 32<<10))
 		return Response{}, fmt.Errorf("%w: HTTP %d", ErrProvider, providerResp.StatusCode)
 	}
 
 	var out struct {
+		Usage   json.RawMessage `json:"usage"`
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
 			Message      struct {
@@ -109,6 +121,7 @@ func (s Service) Translate(ctx context.Context, input Request) (Response, error)
 	if err := dec.Decode(&out); err != nil {
 		return Response{}, fmt.Errorf("%w: invalid JSON", ErrProvider)
 	}
+	reportedUsage = out.Usage
 	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
 		return Response{}, ErrEmptyResponse
 	}
@@ -118,16 +131,26 @@ func (s Service) Translate(ctx context.Context, input Request) (Response, error)
 	return Response{Translation: strings.TrimSpace(out.Choices[0].Message.Content), TargetLang: req.TargetLang}, nil
 }
 
-func (s Service) TranslateStream(ctx context.Context, input Request, onDelta func(string) error) (Response, error) {
+func (s Service) TranslateStream(ctx context.Context, input Request, onDelta func(string) error) (result Response, callErr error) {
 	req, httpReq, err := s.providerRequest(ctx, input, true)
 	if err != nil {
 		return Response{}, err
 	}
+	ctx = observability.WithFeature(ctx, "translation")
+	model := strings.TrimSpace(s.Config.TranslationLLMModel)
+	if model == "" {
+		model = s.Config.LLMModel
+	}
+	observe := observability.ObserveLLM(ctx, model)
+	defer func() { observe(callErr) }()
+	var reportedUsage json.RawMessage
+	defer func() { observability.UsageJSON(ctx, model, reportedUsage) }()
 	providerResp, err := s.client().Do(httpReq)
 	if err != nil {
 		return Response{}, fmt.Errorf("%w: %v", ErrProvider, err)
 	}
 	defer providerResp.Body.Close()
+	observability.ProviderResponse(ctx, model, providerResp.StatusCode)
 	if providerResp.StatusCode/100 != 2 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(providerResp.Body, 32<<10))
 		return Response{}, fmt.Errorf("%w: HTTP %d", ErrProvider, providerResp.StatusCode)
@@ -149,13 +172,20 @@ func (s Service) TranslateStream(ctx context.Context, input Request, onDelta fun
 			continue
 		}
 		var chunk struct {
+			Usage   json.RawMessage `json:"usage"`
 			Choices []struct {
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
 			} `json:"choices"`
 		}
-		if err := json.Unmarshal([]byte(payload), &chunk); err != nil || len(chunk.Choices) == 0 {
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			continue
+		}
+		if len(chunk.Usage) > 0 && string(chunk.Usage) != "null" {
+			reportedUsage = chunk.Usage
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		delta := chunk.Choices[0].Delta.Content
@@ -199,14 +229,18 @@ func (s Service) providerRequest(ctx context.Context, input Request, stream bool
 	if model == "" {
 		model = s.Config.LLMModel
 	}
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model":       model,
 		"messages":    []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}},
 		"temperature": 0.1,
 		"max_tokens":  4096,
 		"reasoning":   map[string]string{"effort": "none"},
 		"stream":      stream,
-	})
+	}
+	if stream {
+		payload["stream_options"] = map[string]bool{"include_usage": true}
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return Request{}, nil, fmt.Errorf("encode provider request: %w", err)
 	}

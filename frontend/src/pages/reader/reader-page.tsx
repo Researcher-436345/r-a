@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { useI18n } from '../../shared/i18n/i18n-context';
 import { useMobileLayout } from '../../shared/lib/use-mobile-layout';
+import { trackNavigation } from '../../shared/lib/analytics';
 
 import {
   fetchAnnotations,
@@ -69,12 +70,16 @@ export function ReaderPage() {
   const [savingFolderId, setSavingFolderId] = useState<string | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [pdfState, setPdfState] = useState<PdfViewState>({ kind: 'idle' });
+  useEffect(() => {
+    if (authenticated && paperId && pdfState.kind === 'ready' && (!isMobile || mobilePanel === 'document')) trackNavigation('paper_opened', paperId);
+  }, [authenticated, paperId, pdfState.kind, isMobile, mobilePanel]);
   /** Bumped to re-run PDF loading (retry, or after find-fulltext queued a download). */
   const [pdfAttempt, setPdfAttempt] = useState(0);
   /** Bumped when the paper's text changed, so the overview is rebuilt instead of served from cache. */
   const [contentVersion, setContentVersion] = useState(0);
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
+  const [translationComplete, setTranslationComplete] = useState(false);
   const [highlightColor, setHighlightColor] = useState<string>(DEFAULT_HIGHLIGHT_COLOR);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [flashFocus, setFlashFocus] = useState<ReaderAnnotationFocus | null>(null);
@@ -388,6 +393,7 @@ export function ReaderPage() {
 
     const controller = new AbortController();
     setIsTranslating(true);
+    setTranslationComplete(false);
     setTranslation(null);
 
     let streamed = '';
@@ -405,7 +411,7 @@ export function ReaderPage() {
       controller.signal,
     )
       .then((result) => {
-        if (!controller.signal.aborted) setTranslation(result.translation);
+        if (!controller.signal.aborted) { setTranslation(result.translation); setTranslationComplete(true); }
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
@@ -626,6 +632,8 @@ export function ReaderPage() {
         />
       </div>
       <ReaderSelectionPopup
+        paperId={paperId}
+        translationComplete={translationComplete}
         selection={selection}
         isSaving={isSavingNote}
         translationEnabled={instantTranslation}

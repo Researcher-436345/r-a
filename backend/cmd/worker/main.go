@@ -15,6 +15,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/modules/content"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 )
 
 func main() {
+	observability.Start("worker")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -42,6 +44,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer qclient.Close()
+	queue.StartMetrics(cfg.RedisURL)
 	server, err := queue.NewServer(cfg.RedisURL)
 	if err != nil {
 		log.Fatal(err)
@@ -66,7 +69,7 @@ func main() {
 	mux.HandleFunc(queue.ProcessPaperParse, func(ctx context.Context, t *asynq.Task) error {
 		return processParse(ctx, t, papers, docs, s3, parser)
 	})
-	log.Fatal(server.Run(mux))
+	log.Fatal(server.Run(queue.Instrument(mux)))
 }
 
 func processRemotePDF(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *storage.Client, q *asynq.Client) error {
@@ -112,6 +115,7 @@ func processRemotePDF(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *s
 	if err = p.UpdateVersion(ctx, v); err != nil {
 		return err
 	}
+	observability.Pipeline.WithLabelValues("pdf", "ready").Inc()
 	return enqueueParse(q, v.ID)
 }
 
@@ -145,6 +149,7 @@ func finalizeUpload(ctx context.Context, t *asynq.Task, p catalog.Store, s3 *sto
 	if err = p.UpdateVersion(ctx, v); err != nil {
 		return err
 	}
+	observability.Pipeline.WithLabelValues("pdf", "ready").Inc()
 	return enqueueParse(q, v.ID)
 }
 
@@ -213,6 +218,7 @@ func processParse(
 			if err := docs.SaveReady(ctx, v.PaperID, v.ID, tex.Engine, false, tex.PageCount, tex.Markdown, tex.PlainText, storeChunks); err != nil {
 				return parseFailed(ctx, docs, v, err)
 			}
+			observability.Pipeline.WithLabelValues("parse", "ready_tex").Inc()
 			return nil
 		}
 	}
@@ -252,6 +258,7 @@ func processParse(
 	if err := docs.SaveReady(ctx, v.PaperID, v.ID, parsed.Engine, parsed.OCRUsed, parsed.PageCount, md, plain, chunks); err != nil {
 		return parseFailed(ctx, docs, v, err)
 	}
+	observability.Pipeline.WithLabelValues("parse", "ready_pdf").Inc()
 	return nil
 }
 
@@ -259,6 +266,7 @@ func processParse(
 // paper_documents never stays 'pending' (the overview waits on it) while
 // asynq retries or archives the task.
 func parseFailed(ctx context.Context, docs content.Store, v catalog.Version, err error) error {
+	observability.Pipeline.WithLabelValues("parse", "failed").Inc()
 	markCtx, cancel := detached(ctx)
 	defer cancel()
 	if markErr := docs.MarkFailed(markCtx, v.PaperID, v.ID, err.Error()); markErr != nil {
@@ -268,6 +276,7 @@ func parseFailed(ctx context.Context, docs content.Store, v catalog.Version, err
 }
 
 func fail(ctx context.Context, p catalog.Store, v catalog.Version, message string) error {
+	observability.Pipeline.WithLabelValues("pdf", "failed").Inc()
 	v.Status = "failed"
 	v.ErrorMessage = &message
 	updateCtx, cancel := detached(ctx)

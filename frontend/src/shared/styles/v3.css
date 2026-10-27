@@ -98,6 +98,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .paper-card__abstract p { display: block; font-size: inherit; line-height: inherit; }
 .paper-card__abstract--expanded { display: block; max-height: none; -webkit-line-clamp: unset; }
 .paper-card__description--interactive { cursor: pointer; }
+.message-actions__button[aria-pressed="true"] { color: var(--accent-text); }
 .paper-card__description--interactive:focus-visible { outline: 1px solid var(--border-strong); outline-offset: 3px; }
 .paper-preview-lens { position: fixed; z-index: 1000; overflow: hidden; pointer-events: none; border: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
 .paper-preview-lens img { position: absolute; top: 0; left: 0; display: block; max-width: none; pointer-events: none; user-select: none; }

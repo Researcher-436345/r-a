@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: env.DEV_API_TARGET,
           changeOrigin: true,
+		  localAddress: env.DEV_API_LOCAL_ADDRESS || undefined,
           rewrite: (path) => path.replace(/^\/api(?=\/|$)/, ''),
         },
       } : undefined,

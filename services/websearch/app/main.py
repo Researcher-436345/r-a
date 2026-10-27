@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import os
 import re
 from collections.abc import AsyncIterator
@@ -15,7 +16,10 @@ from pydantic import BaseModel, Field
 
 ResearchMode = Literal["web", "deep"]
 
+from .metrics import setup_metrics, record_usage, LLM_REQUESTS, LLM_DURATION, LLM_HTTP
+
 app = FastAPI(title="researcher-websearch", version="0.1.0")
+setup_metrics(app, "websearch")
 
 LLM_BASE_URL = os.getenv(
     "WEBSEARCH_LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1"
@@ -424,7 +428,7 @@ def reasoning_summary_fragments(chunk: dict[str, Any]) -> list[str]:
     return fragments
 
 
-async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
+async def _provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
     if not LLM_API_KEY:
         raise RuntimeError("веб-поиск не настроен: добавь WEBSEARCH_LLM_API_KEY или LLM_API_KEY")
     model = model_for_mode(payload.mode)
@@ -443,6 +447,7 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
         async with client.stream(
             "POST", f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
         ) as response:
+            LLM_HTTP.labels(model, "deep_research" if payload.mode == "deep" else "search", str(response.status_code)).inc()
             if response.status_code // 100 != 2:
                 detail = (await response.aread())[:8192].decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"web search provider returned {response.status_code}: {detail or response.reason_phrase}")
@@ -458,6 +463,8 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
                     chunk = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if isinstance(chunk.get("usage"), dict):
+                    yield "usage", chunk["usage"]
                 if payload.mode == "deep":
                     for summary in reasoning_summary_fragments(chunk):
                         progress_parts.append(summary)
@@ -476,6 +483,28 @@ async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, An
                     raw_sources.extend((choice.get("message") or {}).get("annotations") or [])
                 if raw_sources:
                     yield "sources", raw_sources
+
+
+async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
+    model = model_for_mode(payload.mode) or "unknown"
+    feature = "deep_research" if payload.mode == "deep" else "search"
+    started = time.monotonic()
+    outcome = "cancelled"
+    usage = None
+    try:
+        async for event, value in _provider_stream(payload):
+            if event == "usage":
+                usage = value
+            else:
+                yield event, value
+        outcome = "success"
+    except Exception:
+        outcome = "error"
+        raise
+    finally:
+        LLM_REQUESTS.labels(model, feature, outcome).inc()
+        LLM_DURATION.labels(model, feature).observe(time.monotonic() - started)
+        record_usage(model, feature, usage)
 
 
 @app.get("/health")

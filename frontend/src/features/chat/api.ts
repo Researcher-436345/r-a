@@ -1,4 +1,5 @@
 import { apiFetch, apiRequest } from '../../shared/api/client';
+import { rememberCompletedResponse } from '../../shared/lib/analytics';
 import type {
   ChatMessageRole,
   ResearchMode,
@@ -135,5 +136,6 @@ export async function streamResearchMessage({
   if (!completedMessage) {
     throw new Error('Research stream ended before completion');
   }
+  rememberCompletedResponse(response, (completedMessage as StoredChatMessage).id);
   return completedMessage;
 }

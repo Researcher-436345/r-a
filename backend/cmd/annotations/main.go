@@ -12,10 +12,12 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
+	observability.Start("annotations")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -36,5 +38,5 @@ func main() {
 	})
 
 	log.Printf("annotations listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("annotations", r)))
 }

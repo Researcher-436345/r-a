@@ -7,15 +7,18 @@ import (
 	"time"
 
 	"github.com/centraluniversity/researcher/internal/app"
+	"github.com/centraluniversity/researcher/internal/modules/analytics"
 	"github.com/centraluniversity/researcher/internal/modules/feed"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
+	observability.Start("api")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -24,6 +27,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+	analytics.Bind(pool)
+	analytics.StartAggregator(pool)
 	s3, err := storage.New(cfg.S3Endpoint, cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Region, cfg.S3PresignExpire)
 	if err != nil {
 		log.Fatal(err)
@@ -51,5 +56,5 @@ func main() {
 		Redis:   redisClient,
 	})
 	log.Printf("%s listening on %s", cfg.AppName, cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, handler))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("api", handler)))
 }

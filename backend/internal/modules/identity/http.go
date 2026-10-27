@@ -14,6 +14,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/centraluniversity/researcher/internal/platform/mailer"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/centraluniversity/researcher/internal/platform/throttle"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -70,6 +71,7 @@ func SessionID(r *http.Request) uuid.UUID {
 
 // WithUserID stores user id in context (tests / gateway adapters).
 func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
+	observability.BindUser(ctx, id.String())
 	return context.WithValue(ctx, userKey{}, id)
 }
 

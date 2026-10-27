@@ -20,6 +20,7 @@
   .main-content { overflow-y: auto; }
   .main-content--workspace { overflow: hidden; }
   .mobile-only { display: inline; }
+  .message-actions__button[aria-pressed] { min-width: 44px; }
   .mobile-nav {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

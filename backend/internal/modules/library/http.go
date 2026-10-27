@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/centraluniversity/researcher/internal/modules/analytics"
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/go-chi/chi/v5"
@@ -200,6 +201,7 @@ func (a API) createFolder(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, err.Error())
 		return
 	}
+	analytics.RegisterProject(r.Context(), a.Store.DB, identity.UserID(r), folder.ID, folder.ParentID, folder.CreatedAt)
 	httpx.JSON(w, 201, folder)
 }
 

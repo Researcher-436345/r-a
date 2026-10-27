@@ -6,16 +6,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/centraluniversity/researcher/internal/modules/analytics"
 	"github.com/centraluniversity/researcher/internal/modules/assistant"
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
+	observability.Start("assistant")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -24,6 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+	analytics.Bind(pool)
 
 	papers := catalog.PaperClient{BaseURL: cfg.CatalogURL, Token: cfg.InternalToken}
 	r := chi.NewRouter()
@@ -36,5 +40,5 @@ func main() {
 	})
 
 	log.Printf("assistant listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("assistant", r)))
 }

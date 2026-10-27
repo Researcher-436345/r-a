@@ -12,6 +12,7 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/centraluniversity/researcher/internal/platform/queue"
 	"github.com/centraluniversity/researcher/internal/platform/storage"
 	"github.com/centraluniversity/researcher/internal/platform/throttle"
@@ -20,6 +21,7 @@ import (
 )
 
 func main() {
+	observability.Start("catalog")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -67,5 +69,5 @@ func main() {
 	})
 
 	log.Printf("catalog listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("catalog", r)))
 }

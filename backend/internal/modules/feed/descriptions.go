@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -92,6 +93,7 @@ func (d *Descriptions) prepare(ctx context.Context, items []TrendingPaper) ([]Tr
 			return nil, err
 		}
 		if text == "" {
+			observability.CacheMiss("feed_brief")
 			result, err := d.Generator.Generate(ctx, p.Title, source)
 			if err != nil {
 				return nil, fmt.Errorf("summarize %s: %w", p.ArxivID, err)
@@ -103,6 +105,8 @@ func (d *Descriptions) prepare(ctx context.Context, items []TrendingPaper) ([]Tr
 			if err := d.Store.SaveBrief(ctx, p.ArxivID, hash, source, text, d.Model); err != nil {
 				return nil, err
 			}
+		} else {
+			observability.CacheHit(ctx, "feed_brief")
 		}
 		p.Abstract = strPtr(text)
 	}
@@ -126,6 +130,7 @@ func (f Service) WarmDescriptions(ctx context.Context) {
 		err := f.refreshDescriptions(workCtx)
 		cancel()
 		if err != nil && ctx.Err() == nil {
+			observability.FeedErrors.Inc()
 			log.Printf("prepare feed descriptions: %v", err)
 			delay = min(delay*2, 15*time.Minute)
 		} else {
@@ -149,6 +154,9 @@ func (f Service) refreshDescriptions(ctx context.Context) error {
 				return ctx.Err()
 			}
 			_, updated, err := d.Store.Snapshot(ctx, "cs.AI", mode, feedLanguage)
+			if !updated.IsZero() {
+				observability.FeedRefresh.WithLabelValues(string(mode)).Set(float64(updated.Unix()))
+			}
 			if err != nil {
 				return err
 			}
@@ -163,6 +171,9 @@ func (f Service) refreshDescriptions(ctx context.Context) error {
 				prepared, err = d.prepare(ctx, items)
 				if err == nil {
 					err = d.Store.Publish(ctx, "cs.AI", mode, feedLanguage, prepared)
+					if err == nil {
+						observability.FeedRefresh.WithLabelValues(string(mode)).Set(float64(time.Now().Unix()))
+					}
 				}
 			}
 			if err != nil {

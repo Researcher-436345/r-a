@@ -3,6 +3,8 @@ import { isAuthenticated } from '../../features/auth/token-storage';
 import { getConversationStore } from '../../shared/lib/conversation-store';
 import { useConversationStore } from '../../shared/lib/use-conversation-store';
 import { MessageActions } from '../../shared/ui/message-actions';
+import { useResultAnalytics } from '../../shared/lib/use-result-analytics';
+import { attributeToResult, trackResultAction } from '../../shared/lib/analytics';
 import { MOBILE_LAYOUT_QUERY } from '../../shared/lib/use-mobile-layout';
 import { ResponsivePanel } from '../../shared/ui/responsive-panel';
 import { copyText } from '../../shared/lib/clipboard';
@@ -522,12 +524,18 @@ function InlineSourceLink({
 }
 
 function AssistantMessage({
+  messageId,
+  researchMode,
+  analyticsReady,
   content,
   sources = [],
   folders,
   foldersLoading,
   locale,
 }: {
+  messageId: string;
+  researchMode?: ResearchMode;
+  analyticsReady?: boolean;
   content: string;
   sources?: NonNullable<ChatMessage['sources']>;
   folders: LibraryFolder[];
@@ -535,6 +543,8 @@ function AssistantMessage({
   locale: Locale;
 }) {
   const [copied, setCopied] = useState(false);
+  const feature = researchMode === 'deep' ? 'deep_research' : 'search';
+  const analyticsRef = useResultAnalytics<HTMLElement>(feature, analyticsReady ? messageId : undefined, undefined, messageId);
   const [sourceStates, setSourceStates] = useState<Record<string, SourceState>>({});
   const copy = chatCopy[locale];
 
@@ -549,6 +559,7 @@ function AssistantMessage({
   const handleCopy = async () => {
     try {
       await copyText(content);
+      if (analyticsReady) trackResultAction('result_copied', feature, messageId, undefined, messageId);
       setCopied(true);
     } catch {
       setCopied(false);
@@ -558,6 +569,7 @@ function AssistantMessage({
   const label = copied ? copy.copiedMarkdown : copy.copyMarkdown;
 
   const handleAddSource = async (url: string, title: string, folderId: string) => {
+    attributeToResult(feature, messageId);
     setSourceStates((current) => ({ ...current, [url]: { status: 'adding' } }));
     try {
       const paper = await addByUrl(url, title);
@@ -576,7 +588,7 @@ function AssistantMessage({
   };
 
   return (
-    <article className="chat-message chat-message--assistant" aria-live="polite">
+    <article ref={analyticsRef} data-research-result-id={messageId} className="chat-message chat-message--assistant" aria-live="polite">
       <MarkdownMessage
         content={content}
         renderLink={({ href, children, anchorProps }) => {
@@ -616,6 +628,7 @@ function AssistantMessage({
         copied={copied}
         copyLabel={label}
         onCopy={() => void handleCopy()}
+        analytics={analyticsReady ? { feature, key: messageId, resultId: messageId, locale } : undefined}
       />
     </article>
   );
@@ -653,6 +666,9 @@ function ChatMessageView({
 
   return (
     <AssistantMessage
+      messageId={message.id}
+      researchMode={message.researchMode}
+      analyticsReady={message.analyticsReady}
       content={message.content}
       sources={message.sources}
       folders={folders}
@@ -773,6 +789,7 @@ export function ChatPage() {
             ? {
                 ...message,
                 id: storedMessage.id,
+                analyticsReady: true,
                 content: storedMessage.content,
                 sources: storedMessage.sources,
                 pending: false,
@@ -852,6 +869,8 @@ export function ChatPage() {
         setComposerMode(storedChat.mode);
         conversation.hydrate(
           storedChat.messages.map((message) => ({
+            analyticsReady: true,
+            researchMode: storedChat.mode,
             id: message.id,
             role: message.role,
             content: message.content,

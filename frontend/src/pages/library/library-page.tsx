@@ -32,6 +32,7 @@ import { ApiError } from '../../shared/api/client';
 import { RichText } from '../../shared/ui/rich-text';
 import { useMobileLayout } from '../../shared/lib/use-mobile-layout';
 import { ResponsivePanel } from '../../shared/ui/responsive-panel';
+import { trackNavigation } from '../../shared/lib/analytics';
 
 interface FolderNode extends LibraryFolder {
   children: FolderNode[];
@@ -203,6 +204,9 @@ export function LibraryPage() {
 
   const tree = useMemo(() => folderTree(folders), [folders]);
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
+  useEffect(() => {
+    if (selectedFolder && !selectedFolder.system_key) trackNavigation('project_opened', selectedFolder.id);
+  }, [selectedFolder?.id, selectedFolder?.system_key]);
 
   const selectFolder = (folderId: string) => {
     setSelectedFolderId(folderId);
