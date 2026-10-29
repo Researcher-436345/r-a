@@ -14,6 +14,7 @@ import (
 
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
 	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 )
 
 type LLM struct {
@@ -83,14 +84,18 @@ func (l LLM) Explain(ctx context.Context, p catalog.PaperOut, text, question str
 	return l.request(ctx, system, []ChatTurn{{Role: "user", Content: user}})
 }
 
-func (l LLM) request(ctx context.Context, system string, turns []ChatTurn) (string, error) {
+func (l LLM) request(ctx context.Context, system string, turns []ChatTurn) (reply string, callErr error) {
+	observe := observability.ObserveLLM(ctx, l.resolvedModel())
+	defer func() { observe(callErr) }()
 	if l.Config.LLMProvider == "gemini" {
 		return l.gemini(ctx, system, turns)
 	}
 	return l.openAI(ctx, system, turns)
 }
 
-func (l LLM) requestStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (string, error) {
+func (l LLM) requestStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (reply string, callErr error) {
+	observe := observability.ObserveLLM(ctx, l.resolvedModel())
+	defer func() { observe(callErr) }()
 	if l.Config.LLMProvider == "gemini" {
 		// Gemini path stays non-streaming for now; emit once when complete.
 		out, err := l.gemini(ctx, system, turns)
@@ -139,6 +144,8 @@ func (l LLM) openAIRequest(ctx context.Context, body []byte) (*http.Response, er
 }
 
 func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (string, error) {
+	var reportedUsage json.RawMessage
+	defer func() { observability.UsageJSON(ctx, l.resolvedModel(), reportedUsage) }()
 	if l.Config.LLMAPIKey == "" {
 		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
 	}
@@ -162,7 +169,13 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 		return "", fmt.Errorf("LLM API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var usageEnvelope struct {
+		Usage json.RawMessage `json:"usage"`
+	}
+	_ = json.Unmarshal(raw, &usageEnvelope)
+	reportedUsage = usageEnvelope.Usage
 	if resp.StatusCode/100 != 2 {
 		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
 	}
@@ -187,14 +200,17 @@ func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (strin
 }
 
 func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (string, error) {
+	var reportedUsage json.RawMessage
+	defer func() { observability.UsageJSON(ctx, l.resolvedModel(), reportedUsage) }()
 	if l.Config.LLMAPIKey == "" {
 		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
 	}
 	payload := map[string]any{
-		"model":       l.resolvedModel(),
-		"messages":    l.openAIMessages(system, turns),
-		"temperature": 0.2,
-		"stream":      true,
+		"model":          l.resolvedModel(),
+		"messages":       l.openAIMessages(system, turns),
+		"temperature":    0.2,
+		"stream":         true,
+		"stream_options": map[string]bool{"include_usage": true},
 	}
 	if l.ReasoningEffort != "" {
 		payload["reasoning"] = map[string]string{"effort": l.ReasoningEffort}
@@ -233,6 +249,7 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 		return "", fmt.Errorf("LLM API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
 	if resp.StatusCode/100 != 2 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
@@ -262,6 +279,7 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 			continue
 		}
 		var chunk struct {
+			Usage   json.RawMessage `json:"usage"`
 			Choices []struct {
 				Delta struct {
 					Content string `json:"content"`
@@ -271,6 +289,9 @@ func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, 
 		}
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 			continue
+		}
+		if len(chunk.Usage) > 0 && string(chunk.Usage) != "null" {
+			reportedUsage = chunk.Usage
 		}
 		if len(chunk.Choices) == 0 {
 			continue
@@ -354,6 +375,7 @@ func (l LLM) gemini(ctx context.Context, system string, turns []ChatTurn) (strin
 		return "", fmt.Errorf("Gemini API request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
 		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())

@@ -2,7 +2,12 @@ import { useInstantTranslation } from '../../shared/lib/instant-translation';
 import { useAuthenticated } from '../../features/auth/token-storage';
 import { requireAuthentication } from '../../features/auth/require-auth';
 import { useParams } from '@tanstack/react-router';
+import { FileText, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+
+import { useI18n } from '../../shared/i18n/i18n-context';
+import { useMobileLayout } from '../../shared/lib/use-mobile-layout';
+import { trackNavigation } from '../../shared/lib/analytics';
 
 import {
   fetchAnnotations,
@@ -53,6 +58,9 @@ type PdfViewState =
   | { kind: 'error'; detail: string };
 
 export function ReaderPage() {
+  const { locale } = useI18n();
+  const isMobile = useMobileLayout();
+  const [mobilePanel, setMobilePanel] = useState<'document' | 'assistant'>('document');
   const authenticated = useAuthenticated();
   const { paperId } = useParams({ strict: false }) as { paperId?: string };
   const [paper, setPaper] = useState<LibraryPaper | null>(null);
@@ -62,12 +70,16 @@ export function ReaderPage() {
   const [savingFolderId, setSavingFolderId] = useState<string | null>(null);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [pdfState, setPdfState] = useState<PdfViewState>({ kind: 'idle' });
+  useEffect(() => {
+    if (authenticated && paperId && pdfState.kind === 'ready' && (!isMobile || mobilePanel === 'document')) trackNavigation('paper_opened', paperId);
+  }, [authenticated, paperId, pdfState.kind, isMobile, mobilePanel]);
   /** Bumped to re-run PDF loading (retry, or after find-fulltext queued a download). */
   const [pdfAttempt, setPdfAttempt] = useState(0);
   /** Bumped when the paper's text changed, so the overview is rebuilt instead of served from cache. */
   const [contentVersion, setContentVersion] = useState(0);
   const [annotations, setAnnotations] = useState<PaperAnnotation[]>([]);
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
+  const [translationComplete, setTranslationComplete] = useState(false);
   const [highlightColor, setHighlightColor] = useState<string>(DEFAULT_HIGHLIGHT_COLOR);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [flashFocus, setFlashFocus] = useState<ReaderAnnotationFocus | null>(null);
@@ -167,6 +179,7 @@ export function ReaderPage() {
     if (!page || page < 1 || pdfState.kind !== 'ready') {
       return;
     }
+    setMobilePanel('document');
     setFlashFocus({
       id: `passage:${page}:${Date.now()}`,
       page,
@@ -191,6 +204,7 @@ export function ReaderPage() {
     }
 
     let cancelled = false;
+    setMobilePanel('document');
     setIsLoading(true);
     setError(null);
     setPaper(null);
@@ -379,6 +393,7 @@ export function ReaderPage() {
 
     const controller = new AbortController();
     setIsTranslating(true);
+    setTranslationComplete(false);
     setTranslation(null);
 
     let streamed = '';
@@ -396,7 +411,7 @@ export function ReaderPage() {
       controller.signal,
     )
       .then((result) => {
-        if (!controller.signal.aborted) setTranslation(result.translation);
+        if (!controller.signal.aborted) { setTranslation(result.translation); setTranslationComplete(true); }
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
@@ -418,6 +433,7 @@ export function ReaderPage() {
   const handleNoteSelect = (note: PaperAnnotation) => {
     setActiveNoteId(note.id);
     if (note.source_chat_message_id) {
+      setMobilePanel('assistant');
       setFocusChatMessageId(note.source_chat_message_id);
       setFocusChatMessageToken((token) => token + 1);
       setFocusAssistantToken((token) => token + 1);
@@ -426,6 +442,7 @@ export function ReaderPage() {
     if (!note.rect || pdfState.kind !== 'ready') {
       return;
     }
+    setMobilePanel('document');
     setFlashFocus({
       id: `${note.id}:${Date.now()}`,
       page: note.page,
@@ -458,6 +475,7 @@ export function ReaderPage() {
       setAnnotations((current) => [...current, created]);
       setActiveNoteId(created.id);
       setFocusNotesToken((token) => token + 1);
+      setMobilePanel('assistant');
       closeSelection();
     } catch (err) {
       showToast(
@@ -471,6 +489,7 @@ export function ReaderPage() {
   const handleAskAssistant = (attachment: ChatContextAttachment) => {
     if (!requireAuthentication()) return;
     setChatAttachment(attachment);
+    setMobilePanel('assistant');
     setFocusAssistantToken((token) => token + 1);
     closeSelection();
   };
@@ -526,7 +545,16 @@ export function ReaderPage() {
       ref={readerPageRef}
       className={`reader-page${isResizingChat ? ' reader-page--resizing' : ''}`}
     >
+      <div className="reader-mobile-switch" role="group" aria-label={locale === 'ru' ? 'Режим чтения' : 'Reading view'}>
+        <button type="button" aria-pressed={mobilePanel === 'document'} onClick={() => setMobilePanel('document')}>
+          <FileText size={18} aria-hidden="true" /><span>{locale === 'ru' ? 'Статья' : 'Paper'}</span>
+        </button>
+        <button type="button" aria-pressed={mobilePanel === 'assistant'} title={locale === 'ru' ? 'Обзор, чат и заметки' : 'Overview, chat and notes'} onClick={() => { closeSelection(); setMobilePanel('assistant'); }}>
+          <Sparkles size={18} aria-hidden="true" /><span>{locale === 'ru' ? 'Помощник' : 'Assistant'}</span>
+        </button>
+      </div>
       <ReaderPdfViewer
+        hidden={isMobile && mobilePanel !== 'document'}
         title={paper?.title}
         meta={metaParts.join(' · ')}
         pdfUrl={pdfUrl}
@@ -570,7 +598,7 @@ export function ReaderPage() {
           }
         }}
       />
-      <div className="reader-chat-shell" style={{ width: chatWidth }}>
+      <div className="reader-chat-shell" style={{ width: chatWidth }} hidden={isMobile && mobilePanel !== 'assistant'}>
         <ReaderChatPanel
           paperId={paperId}
           annotations={annotations}
@@ -604,6 +632,8 @@ export function ReaderPage() {
         />
       </div>
       <ReaderSelectionPopup
+        paperId={paperId}
+        translationComplete={translationComplete}
         selection={selection}
         isSaving={isSavingNote}
         translationEnabled={instantTranslation}

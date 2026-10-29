@@ -2,6 +2,19 @@ import { apiRequest } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
 import type { Paper, TrendingSort } from './types';
 
+export interface PaperPreview {
+  image: string;
+  affiliations: string[];
+}
+
+export function fetchPaperPreview(arxivId: string, signal: AbortSignal) {
+  return apiRequest<PaperPreview>(`/feed/preview?v=4&arxiv_id=${encodeURIComponent(arxivId)}`, {
+    public: true,
+    token: null,
+    signal,
+  });
+}
+
 interface TrendingApiItem {
   arxiv_id: string;
   title: string;
@@ -37,11 +50,13 @@ export async function fetchTrendingPapers(
   category = 'cs.AI',
   limit = 20,
   sort: TrendingSort = 'new',
+  lang: 'ru' | 'en' = 'ru',
 ): Promise<Paper[]> {
   const params = new URLSearchParams({
     category,
     limit: String(limit),
     sort,
+    lang,
   });
   const data = await apiRequest<TrendingApiResponse>(`/feed/trending?${params}`, {
     token: getAccessToken(),

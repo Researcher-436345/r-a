@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +26,7 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		pool.Close()
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
+	observability.RegisterDB(pool)
 	return pool, nil
 }
 

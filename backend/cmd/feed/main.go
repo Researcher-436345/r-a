@@ -1,39 +1,48 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/centraluniversity/researcher/internal/modules/feed"
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/config"
+	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
+	observability.Start("feed")
 	cfg := config.Load()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer pool.Close()
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		log.Fatal(err)
 	}
+	redisClient := redis.NewClient(redisOpts)
+	defer redisClient.Close()
+	service := feed.NewService(cfg, pool, redisClient)
+	go service.WarmDescriptions(context.Background())
 	r := chi.NewRouter()
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, 200, map[string]string{"status": "ok", "service": "feed"})
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(identity.GuestOrAuthenticatedFromGateway)
-		feed.API{Service: feed.Service{
-			Redis: redis.NewClient(redisOpts),
-			Citations: feed.CitationConfig{
-				Enabled:               cfg.CitationsEnabled,
-				OpenAlexMailto:        cfg.OpenAlexMailto,
-				SemanticScholarAPIKey: cfg.SemanticScholarAPIKey,
-			},
-		}}.Mount(r)
+		feed.API{Service: service}.Mount(r)
 	})
 
 	log.Printf("feed listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("feed", r)))
 }

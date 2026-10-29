@@ -1,0 +1,123 @@
+groups:
+  - name: availability
+    rules:
+      - alert: GrafanaCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{instance="https://77.91.114.154/grafana/login"} - time() < 86400
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Сертификат Grafana истекает менее чем через сутки"
+          description: "Проверить автоматическое продление сертификата в grafana-proxy и доступность TCP 443."
+      - alert: EndpointUnavailable
+        expr: probe_success{job="probes"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Недоступен пользовательский endpoint: {{ $labels.instance }}"
+          description: "Проверить frontend/gateway/feed и связанные зависимости."
+      - alert: MonitoringTargetUnavailable
+        expr: up == 0
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: "Prometheus не получает метрики {{ $labels.job }} / {{ $labels.instance }}"
+      - alert: DataDependencyUnavailable
+        expr: pg_up == 0 or redis_up == 0 or pgbouncer_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Недоступна зависимость данных: {{ $labels.job }}"
+      - alert: UserVisibleErrors
+        expr: |
+          sum(increase(ra_action_results_total{outcome="failed"}[15m])) > 3
+          and
+          sum(increase(ra_action_results_total{outcome="failed"}[15m]))
+          / sum(increase(ra_action_results_total{outcome=~"success|failed"}[15m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Растёт доля неудачных исследовательских действий"
+          description: "Проверить итог SSE, провайдера LLM и сохранение результата; HTTP 200 не гарантирует успех."
+      - alert: GatewayServerErrors
+        expr: |
+          sum(increase(ra_http_requests_total{service="gateway",status=~"5.."}[15m])) > 3
+          and
+          sum(increase(ra_http_requests_total{service="gateway",status=~"5.."}[15m]))
+          / sum(increase(ra_http_requests_total{service="gateway"}[15m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Ошибки gateway превышают 5% запросов"
+  - name: pipeline
+    rules:
+      - alert: QueueWaitingTooLong
+        expr: ra_queue_oldest_pending_age_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "PDF-задачи ждут обработки больше пяти минут"
+      - alert: QueueMetricsStale
+        expr: time() - ra_queue_last_success_timestamp_seconds > 120
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: "Не обновляются данные очереди"
+      - alert: FeedRefreshStale
+        expr: time() - ra_feed_refresh_last_success_timestamp_seconds > 7200
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Более двух часов не обновлялась лента {{ $labels.sort }}"
+      - alert: FeedRefreshMissing
+        expr: absent(ra_feed_refresh_last_success_timestamp_seconds)
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Нет успешного обновления подготовленной ленты"
+      - alert: ProductAggregationStale
+        expr: time() - ra_product_aggregation_last_success_timestamp_seconds > 2100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Продуктовые показатели не пересчитывались более 35 минут"
+      - alert: ProductAggregationMissing
+        expr: absent(ra_product_aggregation_last_success_timestamp_seconds)
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Нет успешного расчёта продуктовой аналитики"
+      - alert: AnalyticsPersistenceErrors
+        expr: sum(increase(ra_analytics_event_writes_total{outcome="failed"}[15m])) > 3
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Теряются продуктовые события при записи в БД"
+  - name: capacity
+    rules:
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs",mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "На диске осталось менее 15% свободного места"
+      - alert: MemoryAvailableLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Доступно менее 10% оперативной памяти"
+  - name: providers
+    rules:
+      - alert: ProviderCredentialsOrBalanceError
+        expr: sum by (model,status)(increase(ra_llm_http_responses_total{status=~"401|402|403"}[15m])) > 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "LLM-провайдер отклонил авторизацию или оплату: {{ $labels.model }} / {{ $labels.status }}"
+      - alert: ReportedLLMBudgetExceeded
+        expr: sum(increase(ra_llm_reported_cost_dollars_total[24h])) > scalar(max(ra_llm_daily_budget_dollars))
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Сообщённые провайдерами расходы превысили бюджет за 24 часа"
+          description: "Порог задаётся LLM_DAILY_BUDGET_USD. Сумма может быть неполной: проверить покрытие отчётами стоимости."

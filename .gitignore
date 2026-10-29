@@ -18,3 +18,7 @@ node_modules/
 
 # presentations
 *.key
+
+.env.monitoring
+
+.monitoring-secrets/

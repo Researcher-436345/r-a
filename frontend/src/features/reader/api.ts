@@ -1,5 +1,6 @@
 import { apiRequest, apiFetch, ApiError } from '../../shared/api/client';
 import { getAccessToken } from '../auth/token-storage';
+import { rememberCompletedResponse } from '../../shared/lib/analytics';
 
 export interface AnnotationRect {
   x: number;
@@ -223,6 +224,8 @@ export async function chatPaperStream(
     throw new ApiError(502, 'Stream ended without completion');
   }
 
+  rememberCompletedResponse(response, completed.assistant_message?.id ?? completed.message_id ?? paperId);
+
   return {
     reply: completed.reply,
     message_id: completed.message_id,
@@ -273,6 +276,7 @@ export async function generatePaperSummaryStream(
   paperId: string,
   lang: string,
   options: {
+    actionId?: string;
     force?: boolean;
     model?: string;
     onDelta?: (text: string) => void;
@@ -284,7 +288,7 @@ export async function generatePaperSummaryStream(
   if (options.model) params.set('model', options.model);
   const response = await apiFetch(`/papers/${paperId}/summary?${params.toString()}`, {
     method: 'POST',
-    headers: { Accept: 'text/event-stream' },
+    headers: { Accept: 'text/event-stream', ...(options.actionId ? { 'X-Research-Action-ID': options.actionId } : {}) },
     signal: options.signal,
   });
   if (!response.body) {
@@ -340,6 +344,7 @@ export async function generatePaperSummaryStream(
   if (!completed) {
     throw new ApiError(502, 'Summary stream ended without completion');
   }
+  rememberCompletedResponse(response, `${completed.paper_id}:${completed.lang}:${completed.updated_at}`);
   return completed;
 }
 
@@ -461,5 +466,6 @@ export async function translateTextStream(
   if (!completed) {
     throw new ApiError(502, 'Translation stream ended without completion');
   }
+  rememberCompletedResponse(response, `translation:${paperId}`);
   return completed;
 }

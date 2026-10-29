@@ -6,15 +6,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/centraluniversity/researcher/internal/modules/analytics"
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/modules/searchapi"
 	"github.com/centraluniversity/researcher/internal/platform/config"
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
+	observability.Start("searchapi")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -23,6 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+	analytics.Bind(pool)
 	r := chi.NewRouter()
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, 200, map[string]string{"status": "ok", "service": "searchapi"})
@@ -35,5 +39,5 @@ func main() {
 		}}.Mount(r)
 	})
 	log.Printf("searchapi listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("searchapi", r)))
 }

@@ -1,3 +1,4 @@
+import { useResultAnalytics } from '../../../shared/lib/use-result-analytics';
 import { LoaderCircle, MessageSquareText, NotebookPen, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 
@@ -21,6 +22,8 @@ export interface ReaderSelection {
 type PopupMode = 'choose' | 'note';
 
 interface ReaderSelectionPopupProps {
+  paperId?: string;
+  translationComplete?: boolean;
   selection: ReaderSelection | null;
   isSaving: boolean;
   translationEnabled?: boolean;
@@ -93,6 +96,8 @@ function shouldIgnoreOutsidePointer(target: EventTarget | null) {
 }
 
 export function ReaderSelectionPopup({
+  paperId,
+  translationComplete = false,
   selection,
   isSaving,
   translationEnabled = true,
@@ -105,6 +110,7 @@ export function ReaderSelectionPopup({
   onAskAssistant,
 }: ReaderSelectionPopupProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const translationAnalytics = useResultAnalytics('translation', translationComplete && translation ? `translation:${paperId}` : undefined, paperId);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const [mode, setMode] = useState<PopupMode>('choose');
   const [note, setNote] = useState('');
@@ -304,7 +310,7 @@ export function ReaderSelectionPopup({
               <X aria-hidden="true" size={15} strokeWidth={2} />
             </button>
           </div>
-          {translationEnabled && <div className="reader-selection-popup__translation" aria-live="polite">
+          {translationEnabled && <div ref={translationAnalytics} className="reader-selection-popup__translation" aria-live="polite">
             {selectionTooLong
               ? `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
               : translation ||

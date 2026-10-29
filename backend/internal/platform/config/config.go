@@ -58,6 +58,10 @@ type Config struct {
 	TranslationLLMModel      string
 	TranslationMaxChars      int
 	TranslationMaxConcurrent int
+	FeedTranslationModel     string
+	FeedTranslationBaseURL   string
+	FeedTranslationAPIKey    string
+	FeedRefreshInterval      time.Duration
 
 	ParserServiceURL string
 	ParserOCR        string
@@ -136,6 +140,10 @@ func Load() Config {
 		TranslationLLMModel:      getenv("TRANSLATION_LLM_MODEL", getenv("LLM_MODEL", "auto")),
 		TranslationMaxChars:      positiveInt(getenv("TRANSLATION_MAX_CHARS", "5000"), 5000),
 		TranslationMaxConcurrent: positiveInt(getenv("TRANSLATION_MAX_CONCURRENT", "8"), 8),
+		FeedTranslationModel:     getenv("FEED_TRANSLATION_MODEL", "google/gemma-4-26b-a4b-it"),
+		FeedTranslationBaseURL:   getenv("FEED_TRANSLATION_BASE_URL", getenv("LLM_BASE_URL", "https://api.aitunnel.ru/v1")),
+		FeedTranslationAPIKey:    getenv("FEED_TRANSLATION_API_KEY", getenv("LLM_API_KEY", "")),
+		FeedRefreshInterval:      minutes(getenv("FEED_REFRESH_MINUTES", "15"), 15),
 
 		ParserServiceURL: getenv("PARSER_SERVICE_URL", "http://localhost:8091"),
 		ParserOCR:        getenv("PARSER_OCR", "auto"),

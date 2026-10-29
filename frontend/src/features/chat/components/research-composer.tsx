@@ -1,10 +1,12 @@
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { SleepingCat } from '../../../shared/ui/sleeping-cat';
 import { ArrowUp, Globe, Paperclip, Telescope } from 'lucide-react';
 
 import { IconButton } from '../../../shared/ui/icon-button';
 import { SegmentedControl } from '../../../shared/ui/segmented-control';
+import { useMobileLayout } from '../../../shared/lib/use-mobile-layout';
+import { useI18n } from '../../../shared/i18n/i18n-context';
 import type { ResearchMode } from '../types';
 
 interface ResearchComposerProps {
@@ -49,6 +51,16 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
     ref,
   ) {
     const navigate = useNavigate();
+    const isMobile = useMobileLayout();
+    const { locale } = useI18n();
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    useImperativeHandle(ref, () => inputRef.current!, []);
+    useEffect(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.style.height = 'auto';
+      input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    }, [value]);
     const canSubmit = Boolean(value.trim()) && !disabled;
 
     const submit = () => {
@@ -67,13 +79,14 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
       >
         <SleepingCat variant={className.includes('chat-composer') ? 'chat' : 'home'} />
         <textarea
-          ref={ref}
+          ref={inputRef}
           className="ask-box__input research-composer__input"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (
               event.key === 'Enter' &&
+              !isMobile &&
               !event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
@@ -84,6 +97,7 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
           placeholder={placeholder}
           aria-label={inputAriaLabel}
           rows={className.includes('chat-composer') ? 1 : 2}
+          autoCapitalize="sentences"
         />
 
         <div className="ask-box__footer research-composer__footer">
@@ -93,19 +107,18 @@ export const ResearchComposer = forwardRef<HTMLTextAreaElement, ResearchComposer
             value={mode}
             onChange={onModeChange}
             options={[
-              { value: 'web', label: webSearchLabel, icon: Globe },
-              { value: 'deep', label: deepResearchLabel, icon: Telescope },
+              { value: 'web', label: webSearchLabel, mobileLabel: locale === 'ru' ? 'Поиск' : 'Search', icon: Globe },
+              { value: 'deep', label: deepResearchLabel, mobileLabel: locale === 'ru' ? 'Глубокий' : 'Deep', icon: Telescope },
             ]}
           />
           <div className="ask-box__spacer research-composer__spacer" />
-          <span className="sr-only">{sendHint}</span>
+          {!isMobile ? <span className="sr-only">{sendHint}</span> : null}
           <IconButton
             icon={ArrowUp}
             label={sendLabel}
             variant="send"
             type="submit"
-            disabled={disabled}
-            aria-disabled={!canSubmit}
+            disabled={!canSubmit}
           />
         </div>
       </form>

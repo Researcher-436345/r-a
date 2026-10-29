@@ -11,11 +11,13 @@ import (
 	"github.com/centraluniversity/researcher/internal/platform/db"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
 	"github.com/centraluniversity/researcher/internal/platform/mailer"
+	"github.com/centraluniversity/researcher/internal/platform/observability"
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
+	observability.Start("identity")
 	cfg := config.Load()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -45,5 +47,5 @@ func main() {
 	api.Mount(r)
 
 	log.Printf("identity listening on %s", cfg.HTTPAddr)
-	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, r))
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, observability.HTTP("identity", r)))
 }

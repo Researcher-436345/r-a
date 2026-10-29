@@ -2,8 +2,11 @@ import { useConversationStore } from '../../../shared/lib/use-conversation-store
 import { useAuthenticated } from '../../auth/token-storage';
 import { requireAuthentication } from '../../auth/require-auth';
 import { MessageActions } from '../../../shared/ui/message-actions';
+import { TrackedResult } from '../../../shared/ui/tracked-result';
+import { trackResultAction } from '../../../shared/lib/analytics';
 import { copyText } from '../../../shared/lib/clipboard';
 import { SleepingCat } from '../../../shared/ui/sleeping-cat';
+import { useMobileLayout } from '../../../shared/lib/use-mobile-layout';
 import {
   ArrowUp,
   Check,
@@ -144,6 +147,7 @@ export function ReaderChatPanel({
   contentKey,
 }: ReaderChatPanelProps) {
   const { locale } = useI18n();
+  const isMobile = useMobileLayout();
   const authenticated = useAuthenticated();
   const text = readerStrings[locale];
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -707,9 +711,12 @@ export function ReaderChatPanel({
           ) : (
             <div className="reader-chat-thread" ref={threadRef}>
               {messages.map((message) => (
-                <div
+                <TrackedResult
                   key={message.id}
-                  data-chat-message-id={message.id}
+                  feature="chat"
+                  resultId={message.id}
+                  paperId={paperId}
+                  resultKey={message.role === 'assistant' && /^[0-9a-f]{8}-/i.test(message.id) ? message.id : undefined}
                   className={
                     [
                       message.role === 'user'
@@ -781,14 +788,15 @@ export function ReaderChatPanel({
                       className="reader-message-actions"
                       copied={copiedMessageId === message.id}
                       copyLabel={copiedMessageId === message.id ? (locale === 'ru' ? 'Скопировано' : 'Copied') : (locale === 'ru' ? 'Копировать' : 'Copy')}
-                      onCopy={() => { void copyText(message.content).then(() => setCopiedMessageId(message.id)).catch(() => setError(locale === 'ru' ? 'Не удалось скопировать' : 'Could not copy')); }}
+                      onCopy={() => { void copyText(message.content).then(() => { setCopiedMessageId(message.id); if (/^[0-9a-f]{8}-/i.test(message.id)) trackResultAction('result_copied', 'chat', message.id, paperId, message.id); }).catch(() => setError(locale === 'ru' ? 'Не удалось скопировать' : 'Could not copy')); }}
+                      analytics={/^[0-9a-f]{8}-/i.test(message.id) ? { feature: 'chat', key: message.id, paperId, resultId: message.id, locale } : undefined}
                       saveLabel={savedNoteMessageId === message.id ? (locale === 'ru' ? 'Сохранено' : 'Saved') : (locale === 'ru' ? 'В заметки' : 'Save to notes')}
                       onSave={() => void handleSaveMessageAsNote(message)}
                       saving={savingNoteMessageId === message.id}
                       saved={savedNoteMessageId === message.id}
                     />
                   ) : null}
-                </div>
+                </TrackedResult>
               ))}
               <AssistantReplySelectionBar
                 containerRef={threadRef}
@@ -852,11 +860,11 @@ export function ReaderChatPanel({
                 </div>
               ) : null}
               <div className="reader-chat-input__spacer" />
-              <span className="sr-only">{text.sendHint}</span>
+              {!isMobile ? <span className="sr-only">{text.sendHint}</span> : null}
               <button
                 className="reader-send-button"
                 type="button"
-                aria-label="Send"
+                aria-label={locale === 'ru' ? 'Отправить' : 'Send'}
                 onClick={handleSend}
                 disabled={composerEmpty || isSending}
               >

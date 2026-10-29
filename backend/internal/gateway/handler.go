@@ -76,7 +76,7 @@ func Handler(cfg config.Config) http.Handler {
 			paperSubresource(path, "summary") ||
 			paperSubresource(path, "translate"):
 			assistantProxy.ServeHTTP(w, r)
-		case strings.HasPrefix(path, "/library"):
+		case strings.HasPrefix(path, "/library") || path == "/analytics/events":
 			libraryProxy.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/feed"):
 			feedProxy.ServeHTTP(w, r)
@@ -89,14 +89,15 @@ func Handler(cfg config.Config) http.Handler {
 		}
 	})
 
-	origins := []string{"http://localhost:5173", "http://127.0.0.1:5173"}
+	origins := []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5180", "http://127.0.0.1:5180"}
 	if cfg.FrontendURL != "" && !slices.Contains(origins, cfg.FrontendURL) {
 		origins = append(origins, cfg.FrontendURL)
 	}
 	root = cors.Handler(cors.Options{
 		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type", "Accept"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "Accept", "X-Research-Action-ID", "X-Research-Session-ID", "X-Research-Locale", "X-Research-Device"},
+		ExposedHeaders:   []string{"X-Research-Action-ID"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	})(root)

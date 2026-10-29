@@ -16,6 +16,7 @@ export interface ResearchSourceProgress {
 }
 
 export interface ChatMessage {
+  analyticsReady?: boolean;
   id: string;
   role: ChatMessageRole;
   content: string;

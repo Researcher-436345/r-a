@@ -1,0 +1,11 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: grafana-only
+  group_by: [alertname, service, instance]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  # Внешняя доставка подключается после выбора пользователем канала и адресата.
+  - name: grafana-only

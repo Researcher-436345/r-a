@@ -1,0 +1,93 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    environment: production
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [prometheus:9090]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+
+  - job_name: application
+    honor_labels: true
+    static_configs:
+      - targets: [gateway:9091]
+        labels: {service: gateway}
+      - targets: [identity:9091]
+        labels: {service: identity}
+      - targets: [catalog:9091]
+        labels: {service: catalog}
+      - targets: [library:9091]
+        labels: {service: library}
+      - targets: [annotations:9091]
+        labels: {service: annotations}
+      - targets: [assistant:9091]
+        labels: {service: assistant}
+      - targets: [feed:9091]
+        labels: {service: feed}
+      - targets: [searchapi:9091]
+        labels: {service: searchapi}
+      - targets: [worker:9091]
+        labels: {service: worker}
+      - targets: [translator:9091]
+        labels: {service: translator}
+
+  - job_name: python
+    honor_labels: true
+    static_configs:
+      - targets: [parser:8091]
+        labels: {service: parser}
+      - targets: [websearch:8092]
+        labels: {service: websearch}
+
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+  - job_name: containers
+    static_configs:
+      - targets: [cadvisor:8080]
+  - job_name: postgres
+    static_configs:
+      - targets: [postgres-exporter:9187]
+  - job_name: pgbouncer
+    static_configs:
+      - targets: [pgbouncer-exporter:9127]
+  - job_name: redis
+    static_configs:
+      - targets: [redis-exporter:9121]
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: [minio:9000]
+  - job_name: blackbox-exporter
+    static_configs:
+      - targets: [blackbox-exporter:9115]
+
+  # Проверки извне Docker-приложения. Для обнаружения падения всего VPS нужен второй хост.
+  - job_name: probes
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: [http://frontend/, http://gateway:8000/health, 'http://gateway:8000/feed/trending?lang=ru&limit=1']
+      - targets: ['https://77.91.114.154/grafana/login']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

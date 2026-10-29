@@ -1,4 +1,4 @@
-import {
+import { useEffect,
   createContext,
   useCallback,
   useContext,
@@ -172,6 +172,7 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>('ru');
+  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
   const t = useCallback(
     (key: TranslationKey) => translations[locale][key],

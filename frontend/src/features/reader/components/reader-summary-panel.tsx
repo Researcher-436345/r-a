@@ -17,6 +17,8 @@ import { ApiError } from '../../../shared/api/client';
 import { useI18n } from '../../../shared/i18n/i18n-context';
 import { copyText } from '../../../shared/lib/clipboard';
 import { MessageActions } from '../../../shared/ui/message-actions';
+import { useResultAnalytics } from '../../../shared/lib/use-result-analytics';
+import { trackResultAction, analyticsUUID } from '../../../shared/lib/analytics';
 import { RichText } from '../../../shared/ui/rich-text';
 import {
   fetchPaperSummary,
@@ -108,6 +110,8 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
   const [activeCard, setActiveCard] = useState<SummaryCardKey>('tldr');
   const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const analyticsKey = summary ? `${summary.paper_id}:${summary.lang}:${summary.updated_at}` : '';
+  const analyticsRef = useResultAnalytics('summary', state === 'ready' ? analyticsKey : undefined, paperId);
 
   useEffect(() => {
     if (!copied) {
@@ -135,9 +139,11 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
 
       // Парсер ещё не отдал текст: бэкенд отвечает 425, повторяем POST.
       let queued = false;
+      const actionId = analyticsUUID();
       for (let attempt = 0; attempt < PARSE_WAIT_ATTEMPTS; attempt += 1) {
         try {
           const generated = await generatePaperSummaryStream(id, locale, {
+            actionId,
             force,
             signal,
             onDelta: (delta) => {
@@ -298,12 +304,12 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
       return;
     }
     void copyText(source)
-      .then(() => setCopied(true))
+      .then(() => { setCopied(true); trackResultAction('result_copied', 'summary', analyticsKey, paperId); })
       .catch(() => setError(locale === 'ru' ? 'Не удалось скопировать' : 'Could not copy'));
   };
 
   return (
-    <div className="reader-summary">
+    <div ref={analyticsRef} className="reader-summary">
       {isBusy ? (
         <div className="reader-summary__status" role="status" aria-live="polite">
           <LoaderCircle className="reader-summary__loader" aria-hidden="true" size={15} />
@@ -387,6 +393,7 @@ export function ReaderSummaryPanel({ paperId, onPageCite }: ReaderSummaryPanelPr
             copied={copied}
             copyLabel={copied ? text.summaryCopied : text.summaryCopy}
             onCopy={handleCopy}
+            analytics={{ feature: 'summary', key: analyticsKey, paperId, locale }}
           />
           <button
             type="button"
