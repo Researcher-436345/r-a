@@ -20,19 +20,27 @@ def dashboard(uid: str, title: str, note: str) -> dict:
 
 
 def panel(d: dict, title: str, query: str | list[tuple[str, str]], x: int, y: int, w: int = 12, h: int = 8,
-          kind: str = "timeseries", unit: str = "short", legend: str = "{{service}}", description: str = "") -> None:
+          kind: str = "timeseries", unit: str = "short", legend: str = "{{service}}", description: str = "") -> dict:
+
     targets = [(query, legend)] if isinstance(query, str) else query
     p = {"id": len(d["panels"]) + 1, "title": title, "description": description, "type": kind,
          "datasource": DS, "gridPos": {"x": x, "y": y, "w": w, "h": h},
          "targets": [{"refId": chr(65 + i), "expr": expr, "legendFormat": label, "datasource": DS,
-                      "instant": kind in {"stat", "bargauge"}, "range": kind not in {"stat", "bargauge"}}
+                      "instant": kind in {"stat", "bargauge", "table"}, "range": kind not in {"stat", "bargauge", "table"}}
                      for i, (expr, label) in enumerate(targets)],
          "fieldConfig": {"defaults": {"unit": unit, "noValue": "Нет данных", "decimals": 2,
                                         "color": {"mode": "palette-classic"}}, "overrides": []},
          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}}
     if kind in {"stat", "bargauge"}:
-        p["options"] = {"reduceOptions": {"calcs": ["lastNotNull"], "values": False}, "textMode": "auto", "colorMode": "value"}
+        p["options"] = {"reduceOptions": {"calcs": ["lastNotNull"], "values": False}, "textMode": "auto", "colorMode": "none"}
+    elif kind == "table":
+        p["options"] = {"showHeader": True, "cellHeight": "sm"}
+        for target in p["targets"]:
+            target["format"] = "table"
+
     d["panels"].append(p)
+
+    return p
 
 
 def ratio(metric: str, numerator: str, denominator: str, group: str = "") -> str:
@@ -56,7 +64,26 @@ def build() -> list[dict]:
     panel(overview, "Активная аудитория", 'max by (window)(ra_product_active_users)', 0, 8, legend="{{window}}")
     panel(overview, "Retention по окнам", ratio("ra_product_retention_users", 'state="returned"', 'state="eligible"', "period"), 12, 8, unit="percentunit", legend="{{period}}")
     panel(overview, "Доступность проверяемых сценариев", 'probe_success{job="probes"}', 0, 16, legend="{{instance}}")
-    panel(overview, "Активные алерты", 'sum(ALERTS{alertstate="firing"}) or vector(0)', 12, 16, kind="stat", legend="")
+    alerts = panel(overview, "Активные алерты", 'sum(ALERTS{alertstate="firing"}) or vector(0)', 12, 16,
+        kind="stat", legend="", description="Текущее число сработавших алертов. Причины перечислены в таблице ниже.")
+    alerts["fieldConfig"]["defaults"].update({
+        "decimals": 0,
+        "min": 0,
+        "color": {"mode": "thresholds"},
+        "thresholds": {"mode": "absolute", "steps": [
+            {"color": "green", "value": None},
+            {"color": "red", "value": 1},
+        ]},
+    })
+    alerts["options"]["colorMode"] = "value"
+    alert_list = panel(overview, "Причины активных алертов",
+        'max by(alertname,severity,sort,service)(ALERTS{alertstate="firing"})', 0, 24, 24, 7,
+        kind="table", legend="", description="FeedRefreshStale означает, что русская лента указанной сортировки не обновлялась более двух часов. Пустая таблица означает отсутствие активных алертов.")
+    alert_list["transformations"] = [{"id": "organize", "options": {
+        "excludeByName": {"Time": True, "Value": True},
+        "indexByName": {"alertname": 0, "severity": 1, "sort": 2, "service": 3},
+        "renameByName": {"alertname": "Алерт", "severity": "Важность", "sort": "Сортировка", "service": "Сервис"},
+    }}]
 
     product = dashboard("ra-product", "Odyssey · Продукт и воронки",
         "Использование функции — просмотр готового результата; генерация и кэш считаются отдельно. Повторы HTTP дедуплицируются. "
@@ -101,9 +128,15 @@ def build() -> list[dict]:
     panel(reliable, "Очередь PDF", 'sum by(state)(ra_queue_tasks)', 0, 36, legend="{{state}}")
     panel(reliable, "Возраст старейшей ожидающей задачи", 'max(ra_queue_oldest_pending_age_seconds)', 12, 36, unit="s", legend="")
     panel(reliable, "Задачи: попытки и ошибки", 'sum by(type,outcome)(rate(ra_job_attempts_total[$__rate_interval]))', 0, 44, legend="{{type}} · {{outcome}}")
-    panel(reliable, "Давность обновления русской ленты", 'time()-ra_feed_refresh_last_success_timestamp_seconds', 12, 44, unit="s", legend="{{sort}}")
-    panel(reliable, "Попадания в кэш", 'sum by(cache)(rate(ra_cache_requests_total{outcome="hit"}[$__rate_interval])) / sum by(cache)(rate(ra_cache_requests_total[$__rate_interval]))', 0, 52, unit="percentunit", legend="{{cache}}")
+    panel(reliable, "Давность обновления русской ленты", 'time()-ra_feed_refresh_last_success_timestamp_seconds', 12, 44,
+        unit="s", legend="{{sort}}", description="Время с публикации последнего готового русского списка. Плановое обновление — каждые 15 минут; через два часа срабатывает алерт. При ошибке пользователи продолжают видеть предыдущий список.")
+    panel(reliable, "Попадания в кэш", 'sum by(cache)(rate(ra_cache_requests_total{outcome="hit"}[$__rate_interval])) / sum by(cache)(rate(ra_cache_requests_total[$__rate_interval]))', 0, 52,
+        unit="percentunit", legend="{{cache}}", description="Доля обращений, для которых готовый результат уже сохранён. При отсутствии обращений значение не определено. Ошибка генерации не сохраняется в кэш: повторная попытка снова считается промахом.")
     panel(reliable, "Запись аналитики", 'sum by(producer,outcome)(increase(ra_analytics_event_writes_total[$__range]))', 12, 52, legend="{{producer}} · {{outcome}}")
+    panel(reliable, "Обращения к кэшу за последний час", 'sum by(cache,outcome)(increase(ra_cache_requests_total[1h]))', 0, 60,
+        legend="{{cache}} · {{outcome}}", description="hit — найден готовый результат; miss — нужна генерация. Счётчики Prometheus дают оценку числа обращений за час.")
+    panel(reliable, "Ошибки подготовки ленты за последний час", 'sum(increase(ra_feed_refresh_errors_total[1h]))', 12, 60,
+        legend="", description="Неудачные фоновые циклы подготовки русской ленты. При повторяющихся ошибках проверить модель и логи сервиса feed.")
 
     llm = dashboard("ra-llm", "Odyssey · LLM и расходы",
         "Стоимость — только суммы, явно возвращённые провайдером; это мониторинг наблюдаемых расходов, а не сверка счёта. "
@@ -111,10 +144,13 @@ def build() -> list[dict]:
         "Первые короткие интервалы и перезапуски ограничивают точность increase(). Тексты запросов и ответов не экспортируются.")
     panel(llm, "Сообщённые расходы за выбранный период", 'sum(increase(ra_llm_reported_cost_dollars_total[$__range]))', 0, 4, 6, 4, "stat", "currencyUSD", "")
     panel(llm, "Покрытие отчётами стоимости", 'sum(increase(ra_llm_usage_reports_total{kind="cost"}[$__range]))/sum(increase(ra_llm_usage_reports_total{kind=~"cost|missing_cost"}[$__range]))', 6, 4, 6, 4, "stat", "percentunit", "")
-    panel(llm, "Вызовы провайдеров", 'sum(increase(ra_llm_requests_total[$__range]))', 12, 4, 6, 4, "stat", legend="")
+    calls = panel(llm, "Вызовы провайдеров (оценка)", 'sum(increase(ra_llm_requests_total[$__range]))', 12, 4, 6, 4,
+        "stat", legend="", description="Оценка за выбранный период, включая повторы и ошибки. Prometheus экстраполирует increase() до границ периода, поэтому исходное значение может быть дробным. На панели оно округлено.")
+    calls["fieldConfig"]["defaults"]["decimals"] = 0
     panel(llm, "Доля кэшированных обзоров", 'sum(increase(ra_action_results_total{feature="summary",cache="hit",outcome="success"}[$__range])) / sum(increase(ra_action_results_total{feature="summary",outcome="success"}[$__range]))', 18, 4, 6, 4, "stat", "percentunit", "")
     panel(llm, "Расходы по функциям и моделям", 'sum by(model,feature)(increase(ra_llm_reported_cost_dollars_total[$__range]))', 0, 8, unit="currencyUSD", legend="{{feature}} · {{model}}")
-    panel(llm, "Токены", 'sum by(model,feature,direction)(increase(ra_llm_tokens_total[$__range]))', 12, 8, legend="{{feature}} · {{direction}} · {{model}}")
+    panel(llm, "Токены в минуту", '60 * sum by(model,feature,direction)(rate(ra_llm_tokens_total[$__rate_interval]))', 12, 8,
+        legend="{{feature}} · {{direction}} · {{model}}", description="Скорость расхода токенов, усреднённая по интервалу графика. input — вход, output — ответ, cached_input — кэшированная часть входа; её не нужно прибавлять к input повторно.")
     panel(llm, "Итоги обращений к провайдерам", 'sum by(model,outcome)(rate(ra_llm_requests_total[$__rate_interval]))', 0, 16, legend="{{model}} · {{outcome}}")
     panel(llm, "Задержка провайдера p95", 'histogram_quantile(0.95,sum by(le,model,feature)(rate(ra_llm_request_duration_seconds_bucket[$__rate_interval])))', 12, 16, unit="s", legend="{{feature}} · {{model}}")
     panel(llm, "Наличие usage и cost", 'sum by(kind)(increase(ra_llm_usage_reports_total[$__range]))', 0, 24, legend="{{kind}}")

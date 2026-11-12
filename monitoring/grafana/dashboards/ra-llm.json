@@ -77,7 +77,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -127,13 +127,13 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
       "id": 4,
-      "title": "Вызовы провайдеров",
-      "description": "",
+      "title": "Вызовы провайдеров (оценка)",
+      "description": "Оценка за выбранный период, включая повторы и ошибки. Prometheus экстраполирует increase() до границ периода, поэтому исходное значение может быть дробным. На панели оно округлено.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -162,7 +162,7 @@
         "defaults": {
           "unit": "short",
           "noValue": "Нет данных",
-          "decimals": 2,
+          "decimals": 0,
           "color": {
             "mode": "palette-classic"
           }
@@ -177,7 +177,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -227,7 +227,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -281,8 +281,8 @@
     },
     {
       "id": 7,
-      "title": "Токены",
-      "description": "",
+      "title": "Токены в минуту",
+      "description": "Скорость расхода токенов, усреднённая по интервалу графика. input — вход, output — ответ, cached_input — кэшированная часть входа; её не нужно прибавлять к input повторно.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -297,7 +297,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(model,feature,direction)(increase(ra_llm_tokens_total[$__range]))",
+          "expr": "60 * sum by(model,feature,direction)(rate(ra_llm_tokens_total[$__rate_interval]))",
           "legendFormat": "{{feature}} · {{direction}} · {{model}}",
           "datasource": {
             "type": "prometheus",
@@ -620,7 +620,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     }
   ],
