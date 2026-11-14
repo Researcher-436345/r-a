@@ -77,7 +77,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -127,7 +127,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -177,7 +177,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -227,7 +227,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -277,7 +277,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -327,7 +327,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -878,7 +878,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -928,7 +928,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -978,7 +978,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -1028,7 +1028,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     },
     {
@@ -1078,7 +1078,7 @@
           "values": false
         },
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "none"
       }
     }
   ],

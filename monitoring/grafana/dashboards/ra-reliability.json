@@ -572,7 +572,7 @@
     {
       "id": 13,
       "title": "Давность обновления русской ленты",
-      "description": "",
+      "description": "Время с публикации последнего готового русского списка. Плановое обновление — каждые 15 минут; через два часа срабатывает алерт. При ошибке пользователи продолжают видеть предыдущий список.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -621,7 +621,7 @@
     {
       "id": 14,
       "title": "Попадания в кэш",
-      "description": "",
+      "description": "Доля обращений, для которых готовый результат уже сохранён. При отсутствии обращений значение не определено. Ошибка генерации не сохраняется в кэш: повторная попытка снова считается промахом.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -687,6 +687,104 @@
           "refId": "A",
           "expr": "sum by(producer,outcome)(increase(ra_analytics_event_writes_total[$__range]))",
           "legendFormat": "{{producer}} · {{outcome}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Обращения к кэшу за последний час",
+      "description": "hit — найден готовый результат; miss — нужна генерация. Счётчики Prometheus дают оценку числа обращений за час.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(cache,outcome)(increase(ra_cache_requests_total[1h]))",
+          "legendFormat": "{{cache}} · {{outcome}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Нет данных",
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Ошибки подготовки ленты за последний час",
+      "description": "Неудачные фоновые циклы подготовки русской ленты. При повторяющихся ошибках проверить модель и логи сервиса feed.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(ra_feed_refresh_errors_total[1h]))",
+          "legendFormat": "",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
