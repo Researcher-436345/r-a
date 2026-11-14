@@ -51,7 +51,6 @@ import { AssistantReplySelectionBar } from './assistant-reply-selection-bar';
 import { ReaderNoteCard } from './reader-note-card';
 import { ReaderSummaryPanel } from './reader-summary-panel';
 
-const MODEL_STORAGE_KEY = 'researcher.chat.model';
 const CHAT_NOTE_COLOR = '#cbb8de';
 const FREE_NOTE_COLOR = '#a9c7e0';
 
@@ -203,9 +202,8 @@ export function ReaderChatPanel({
           return;
         }
         const items = res.items?.length ? res.items : [{ id: res.default, label: res.default }];
-        const stored = localStorage.getItem(MODEL_STORAGE_KEY) || '';
+        // The server owns the default; old browser preferences must not override it.
         const pick =
-          items.find((m) => m.id === stored)?.id ||
           items.find((m) => m.id === res.default)?.id ||
           items[0]?.id ||
           '';
@@ -218,12 +216,6 @@ export function ReaderChatPanel({
       cancelled = true;
     };
   }, [authenticated]);
-
-  useEffect(() => {
-    if (selectedModel) {
-      localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
-    }
-  }, [selectedModel]);
 
   useEffect(() => {
     if (!paperId || !authenticated) {

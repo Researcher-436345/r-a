@@ -13,7 +13,6 @@ https://{$GRAFANA_PUBLIC_HOST} {
 		}
 	}
 
-	redir / /grafana/ 302
 	redir /grafana /grafana/ 308
 
 	handle /grafana/metrics* {
@@ -24,7 +23,15 @@ https://{$GRAFANA_PUBLIC_HOST} {
 		reverse_proxy grafana:3000
 	}
 
+	# API на том же HTTPS origin; префикс /api не передаём gateway.
+	handle_path /api/* {
+		reverse_proxy gateway:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Основной адрес и SPA-маршруты принадлежат Odyssey.
 	handle {
-		respond "Not found" 404
+		reverse_proxy frontend:80
 	}
 }
