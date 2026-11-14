@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from .preview import preview_pdf
+import settings
 
 OCRMode = Literal["auto", "force", "off"]
 EngineMode = Literal["auto", "docling", "pymupdf"]
@@ -20,9 +21,13 @@ from .metrics import setup_metrics
 app = FastAPI(title="researcher-parser", version="0.1.0")
 setup_metrics(app, "parser")
 
-ENGINE = os.getenv("PARSER_ENGINE", "auto").strip().lower() or "auto"
-DEFAULT_OCR = os.getenv("PARSER_OCR", "auto").strip().lower() or "auto"
-MAX_UPLOAD_BYTES = int(os.getenv("PARSER_MAX_UPLOAD_BYTES", str(51 << 20)))
+ENGINE = settings.PARSER_ENGINE.strip().lower()
+DEFAULT_OCR = settings.PARSER_OCR.strip().lower()
+MAX_UPLOAD_BYTES = int(settings.PARSER_MAX_UPLOAD_BYTES)
+
+if MAX_UPLOAD_BYTES <= 0:
+    raise ValueError("PARSER_MAX_UPLOAD_BYTES must be positive")
+
 CHARS_PER_TOKEN = 4
 CHUNK_TARGET_TOKENS = 1000
 

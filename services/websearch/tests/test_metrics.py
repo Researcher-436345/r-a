@@ -31,12 +31,12 @@ class MetricsTest(unittest.TestCase):
 
     def test_missing_cost_is_not_reported_as_free(self):
         model = "test-missing-cost"
-        record_usage(model, "search", {"prompt_tokens": 10, "completion_tokens": 4})
+        record_usage(model, "search", {"input_tokens": 10, "output_tokens": 4})
         self.assertIsNone(REGISTRY.get_sample_value("ra_llm_reported_cost_dollars_total", {"model": model, "feature": "search"}))
         self.assertEqual(REGISTRY.get_sample_value("ra_llm_usage_reports_total", {"model": model, "feature": "search", "kind": "missing_cost"}), 1)
 
     def test_malformed_usage_does_not_interrupt_response(self):
-        record_usage("test-invalid-usage", "search", {"prompt_tokens": 10, "completion_tokens": 4, "prompt_tokens_details": "invalid", "cost": float("nan")})
+        record_usage("test-invalid-usage", "search", {"input_tokens": 10, "output_tokens": 4, "input_tokens_details": "invalid", "cost": float("nan")})
         record_usage("test-invalid-usage", "search", "invalid")
 
 

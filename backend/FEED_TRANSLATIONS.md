@@ -33,13 +33,15 @@
 
 ```dotenv
 FEED_TRANSLATION_MODEL=google/gemma-4-26b-a4b-it
-FEED_TRANSLATION_BASE_URL=https://api.proxyapi.ru/openrouter/v1
+FEED_TRANSLATION_BASE_URL=https://openrouter.ai/api/v1
 FEED_REFRESH_MINUTES=15
 ```
 
 Ключ задаётся через `FEED_TRANSLATION_API_KEY`; если он отсутствует, используется
-`LLM_API_KEY`. Отдельный URL наследует `LLM_BASE_URL`. Для прямого OpenRouter указать
-`https://openrouter.ai/api/v1`. Секреты в репозиторий не добавлять.
+`TRANSLATION_API_KEY`, а затем `OPENROUTER_API_KEY`. Адрес наследует
+`TRANSLATION_BASE_URL`, а затем `OPENROUTER_BASE_URL`. Основной OpenAI-ключ
+не используется переводом. Общие настройки находятся в корневом `settings.py`;
+подробности — в [`docs/SETTINGS.md`](../docs/SETTINGS.md).
 
 До появления первого снимка русская лента отвечает `503`, `code=feed_preparing`,
 `Retry-After: 5`. Frontend показывает загрузку и повторяет запрос без подстановки

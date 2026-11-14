@@ -32,16 +32,6 @@ type Summary struct {
 // before it is considered abandoned (crashed process, dropped connection).
 const summaryStaleClaim = 5 * time.Minute
 
-// summaryReplyReserve is the output budget kept free for the overview itself.
-// The card plus a ~1200-word deep dive in Russian is 6–8k tokens, well above
-// the chat reply reserve — so the paper text budget must shrink accordingly.
-const summaryReplyReserve = 9000
-
-// summaryMaxTokens is the explicit output cap sent with the request. Providers
-// default to a few thousand tokens, which cuts a Russian deep dive mid-sentence;
-// a cut reply is rejected instead of being cached as a finished overview.
-const summaryMaxTokens = 16000
-
 const summaryColumns = `paper_id, lang, version_id, model, content, status, error_message, updated_at`
 
 func (s Store) GetSummary(ctx context.Context, paperID uuid.UUID, lang string) (Summary, error) {
@@ -202,8 +192,8 @@ func (l LLM) SummaryPaperBudget(p catalog.PaperOut) int {
 		limit = 120000
 	}
 	reserve := l.Config.LLMReplyReserve
-	if reserve < summaryReplyReserve {
-		reserve = summaryReplyReserve
+	if reserve < l.Config.SummaryReplyReserve {
+		reserve = l.Config.SummaryReplyReserve
 	}
 	budget := limit - reserve
 	if budget < 2000 {
@@ -255,7 +245,8 @@ func (l LLM) GenerateSummary(
 ) (string, error) {
 	paperBudget := l.SummaryPaperBudget(p)
 	system, turns := BuildSummaryPrompt(p, fullPaper, lang, paperBudget)
-	l.MaxTokens = summaryMaxTokens
+	l.MaxTokens = l.Config.SummaryMaxOutputTokens
+	l.ReasoningEffort = l.Config.SummaryReasoningEffort
 
 	out, err := l.requestStream(ctx, system, turns, onDelta)
 	cut := errors.Is(err, ErrLLMTruncated)

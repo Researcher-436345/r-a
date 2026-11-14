@@ -90,9 +90,6 @@ func (s Service) Translate(ctx context.Context, input Request) (result Response,
 	}
 	ctx = observability.WithFeature(ctx, "translation")
 	model := strings.TrimSpace(s.Config.TranslationLLMModel)
-	if model == "" {
-		model = s.Config.LLMModel
-	}
 	observe := observability.ObserveLLM(ctx, model)
 	defer func() { observe(callErr) }()
 	var reportedUsage json.RawMessage
@@ -138,9 +135,6 @@ func (s Service) TranslateStream(ctx context.Context, input Request, onDelta fun
 	}
 	ctx = observability.WithFeature(ctx, "translation")
 	model := strings.TrimSpace(s.Config.TranslationLLMModel)
-	if model == "" {
-		model = s.Config.LLMModel
-	}
 	observe := observability.ObserveLLM(ctx, model)
 	defer func() { observe(callErr) }()
 	var reportedUsage json.RawMessage
@@ -214,7 +208,7 @@ func (s Service) providerRequest(ctx context.Context, input Request, stream bool
 	if err != nil {
 		return Request{}, nil, err
 	}
-	if strings.TrimSpace(s.Config.LLMAPIKey) == "" {
+	if strings.TrimSpace(s.Config.TranslationAPIKey) == "" || strings.TrimSpace(s.Config.TranslationLLMModel) == "" {
 		return Request{}, nil, ErrNotConfigured
 	}
 
@@ -226,9 +220,6 @@ func (s Service) providerRequest(ctx context.Context, input Request, stream bool
 		"Return only the translation without commentary or quotation marks."
 	user := "Target language: " + languageNames[req.TargetLang] + "\n<source_text>\n" + req.Text + "\n</source_text>"
 	model := strings.TrimSpace(s.Config.TranslationLLMModel)
-	if model == "" {
-		model = s.Config.LLMModel
-	}
 	payload := map[string]any{
 		"model":       model,
 		"messages":    []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}},
@@ -245,17 +236,17 @@ func (s Service) providerRequest(ctx context.Context, input Request, stream bool
 		return Request{}, nil, fmt.Errorf("encode provider request: %w", err)
 	}
 
-	url := strings.TrimRight(s.Config.LLMBaseURL, "/") + "/chat/completions"
+	url := strings.TrimRight(s.Config.TranslationBaseURL, "/") + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return Request{}, nil, fmt.Errorf("create provider request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+s.Config.LLMAPIKey)
+	httpReq.Header.Set("Authorization", "Bearer "+s.Config.TranslationAPIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	if stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	}
-	if strings.Contains(strings.ToLower(s.Config.LLMBaseURL), "openrouter.ai") {
+	if strings.Contains(strings.ToLower(s.Config.TranslationBaseURL), "openrouter.ai") {
 		httpReq.Header.Set("HTTP-Referer", s.Config.LLMHTTPReferer)
 		httpReq.Header.Set("X-Title", s.Config.LLMAppTitle)
 	}
@@ -266,5 +257,5 @@ func (s Service) client() *http.Client {
 	if s.HTTP != nil {
 		return s.HTTP
 	}
-	return &http.Client{Timeout: s.Config.LLMTimeout}
+	return &http.Client{Timeout: s.Config.TranslationTimeout}
 }

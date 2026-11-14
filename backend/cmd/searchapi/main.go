@@ -34,8 +34,10 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(identity.MiddlewareFromGateway)
 		searchapi.API{DB: pool, Provider: searchapi.Client{
-			BaseURL: cfg.WebSearchServiceURL,
-			Token:   cfg.InternalToken,
+			BaseURL:     cfg.WebSearchServiceURL,
+			Token:       cfg.InternalToken,
+			WebTimeout:  cfg.WebSearchTimeout,
+			DeepTimeout: cfg.DeepResearchTimeout,
 		}}.Mount(r)
 	})
 	log.Printf("searchapi listening on %s", cfg.HTTPAddr)

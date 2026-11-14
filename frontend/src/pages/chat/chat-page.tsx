@@ -699,7 +699,9 @@ export function ChatPage() {
   );
   const [activeQuestion, setActiveQuestion] = useState(initialQuestion);
   const [composerMode, setComposerMode] = useState<ResearchMode>(routeMode);
-  const { messages, setMessages, isSending, setIsSending, store: conversation } = useConversationStore<ChatMessage>(`search:${chatId ?? 'new'}`);
+  const { messages, setMessages, isSending: isStreaming, setIsSending, store: conversation } = useConversationStore<ChatMessage>(`search:${chatId ?? 'new'}`);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const isSending = isStreaming || isRecovering;
   const [chatHistory, setChatHistory] = useState<ResearchChatSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
   const [foldersLoading, setFoldersLoading] = useState(true);
@@ -739,6 +741,13 @@ export function ChatPage() {
         message: content,
         mode,
         signal: controller.signal,
+        onReplace: (content) => {
+          setMessages((current) => current.map((message) => (
+            message.id === assistantId
+              ? { ...message, content, pending: false, progress: undefined, sourceProgress: undefined }
+              : message
+          )));
+        },
         onProgress: (progress) => {
           setMessages((current) =>
             current.map((message) =>
@@ -839,6 +848,7 @@ export function ChatPage() {
 
     loadedRouteConversationKeyRef.current = routeConversationKey;
     setDraft('');
+    setIsRecovering(false);
 
     if (!chatId || chatId === 'new') {
       setActiveQuestion('');
@@ -854,12 +864,14 @@ export function ChatPage() {
     const first = conversation.getSnapshot().messages.find((message) => message.role === 'user');
     if (first) setActiveQuestion(first.content);
     if (conversation.getSnapshot().isSending) return;
-    const historyRevision = conversation.revision;
+    let stopped = false;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
-    void (async () => {
+    const loadStoredChat = async () => {
+      const historyRevision = conversation.revision;
       try {
         const storedChat = await getResearchChat(chatId);
-        if (loadedRouteConversationKeyRef.current !== routeConversationKey) {
+        if (stopped || loadedRouteConversationKeyRef.current !== routeConversationKey || conversation.revision !== historyRevision) {
           return;
         }
         const firstQuestion =
@@ -867,18 +879,38 @@ export function ChatPage() {
           storedChat.title;
         setActiveQuestion(firstQuestion);
         setComposerMode(storedChat.mode);
-        conversation.hydrate(
-          storedChat.messages.map((message) => ({
-            analyticsReady: true,
-            researchMode: storedChat.mode,
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            sources: message.sources,
-          })),
-          historyRevision,
-        );
+        const storedMessages: ChatMessage[] = storedChat.messages.map((message) => ({
+          analyticsReady: true,
+          researchMode: storedChat.mode,
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          sources: message.sources,
+        }));
+        const recovering = storedChat.research?.status === 'running';
+        setIsRecovering(recovering);
+        if (recovering) {
+          storedMessages.push({
+            id: `research:${storedChat.research!.id}`,
+            role: 'assistant',
+            content: '',
+            pending: true,
+            researchMode: 'deep',
+            progress: locale === 'ru' ? 'Исследование продолжается. Проверяю готовность отчёта.' : 'Research is running. Checking the report status.',
+          });
+        } else if (storedChat.research?.status === 'failed' && storedMessages[storedMessages.length - 1]?.id === storedChat.research.id) {
+          storedMessages.push({
+            id: `research:${storedChat.research.id}`,
+            role: 'assistant',
+            content: `> **${copy.requestFailed}.** ${storedChat.research.error_message ?? ''}`,
+          });
+        }
+        conversation.hydrate(storedMessages, historyRevision);
+        if (recovering) {
+          pollTimer = setTimeout(() => { void loadStoredChat(); }, 3000);
+        }
       } catch (error) {
+        if (stopped) return;
         if (
           error instanceof ApiError &&
           error.status === 404 &&
@@ -920,6 +952,7 @@ export function ChatPage() {
         if (loadedRouteConversationKeyRef.current !== routeConversationKey || conversation.revision !== historyRevision) {
           return;
         }
+        setIsRecovering(false);
         const detail = error instanceof Error ? error.message : String(error);
         setMessages([
           {
@@ -929,7 +962,15 @@ export function ChatPage() {
           },
         ]);
       }
-    })();
+    };
+    void loadStoredChat();
+    return () => {
+      stopped = true;
+      clearTimeout(pollTimer);
+      if (loadedRouteConversationKeyRef.current === routeConversationKey) {
+        loadedRouteConversationKeyRef.current = '';
+      }
+    };
   }, [chatId, initialQuestion, routeConversationKey, routeMode, conversation]);
 
   const openNewChat = () => {

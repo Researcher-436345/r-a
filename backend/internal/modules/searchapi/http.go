@@ -1,11 +1,13 @@
 package searchapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/centraluniversity/researcher/internal/modules/identity"
 	"github.com/centraluniversity/researcher/internal/platform/httpx"
@@ -54,6 +56,19 @@ func (a API) getChat(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, "Failed to load search chat")
 		return
 	}
+	run, err := a.recoverResearch(r.Context(), identity.UserID(r), chatID)
+	if err != nil {
+		httpx.Error(w, 502, "Failed to recover research")
+		return
+	}
+	if run != nil && run.Status == "completed" {
+		chat, err = a.store().Get(r.Context(), identity.UserID(r), chatID)
+		if err != nil {
+			httpx.Error(w, 500, "Failed to load completed research")
+			return
+		}
+	}
+	chat.Research = run
 	httpx.JSON(w, 200, chat)
 }
 
@@ -62,6 +77,17 @@ func (a API) deleteChat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.Error(w, 404, "Search chat not found")
 		return
+	}
+	run, err := a.store().LatestRun(r.Context(), identity.UserID(r), chatID)
+	if err != nil {
+		httpx.Error(w, 500, "Failed to load research")
+		return
+	}
+	if run != nil && run.Status == "running" && run.ProviderResponseID != nil {
+		if err := a.Provider.Cancel(r.Context(), *run.ProviderResponseID); err != nil {
+			httpx.Error(w, 502, "Failed to cancel research")
+			return
+		}
 	}
 	deleted, err := a.store().Delete(r.Context(), identity.UserID(r), chatID)
 	if err != nil {
@@ -113,11 +139,38 @@ func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if _, err := store.AddMessage(r.Context(), chatID, "user", body.Message, nil); err != nil {
-		httpx.Error(w, 500, "Failed to save message")
+	ctx := r.Context()
+	if body.Mode == "deep" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), a.Provider.DeepTimeout)
+		defer cancel()
+	}
+	runID := uuid.Nil
+	runFinished := false
+	failure := "Исследование прервано до завершения"
+	defer func() {
+		if runID != uuid.Nil && !runFinished {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = store.FailRun(cleanup, runID, failure)
+		}
+	}()
+
+	if body.Mode == "deep" {
+		runID, err = store.StartRun(ctx, chatID, body.Message)
+	} else {
+		_, err = store.AddMessage(ctx, chatID, "user", body.Message, nil)
+	}
+	if err != nil {
+		if errors.Is(err, ErrResearchRunning) {
+			httpx.Error(w, 409, "Research is already running in this chat")
+		} else {
+			httpx.Error(w, 500, "Failed to save message")
+		}
 		return
 	}
-	history, err := store.Messages(r.Context(), chatID, 40)
+
+	history, err := store.Messages(ctx, chatID, 40)
 	if err != nil {
 		httpx.Error(w, 500, "Failed to load chat context")
 		return
@@ -126,9 +179,10 @@ func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
 	for _, message := range history {
 		providerMessages = append(providerMessages, ProviderMessage{Role: message.Role, Content: message.Content})
 	}
-	stream, err := a.Provider.Stream(r.Context(), providerMessages, body.Mode)
+	stream, err := a.Provider.Stream(ctx, providerMessages, body.Mode)
 	if err != nil {
-		httpx.Error(w, 502, err.Error())
+		failure = err.Error()
+		httpx.Error(w, 502, failure)
 		return
 	}
 	defer stream.Close()
@@ -141,82 +195,99 @@ func (a API) sendMessage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	writeSSE(w, "meta", map[string]string{"chat_id": chatID.String()})
+	_ = writeSSE(w, "meta", map[string]string{"chat_id": chatID.String()})
 	flusher.Flush()
 
-	var answer strings.Builder
-	sources := make([]Source, 0)
-	completed := false
-	providerFailed := false
-	err = stream.Events(r.Context(), func(event StreamEvent) error {
-		switch event.Name {
-		case "delta":
-			var payload struct {
-				Content string `json:"content"`
-			}
-			if err := json.Unmarshal(event.Data, &payload); err != nil {
-				return err
-			}
-			answer.WriteString(payload.Content)
-			if err := writeSSE(w, "delta", payload); err != nil {
-				return err
-			}
-			flusher.Flush()
-		case "progress":
-			if _, err := fmt.Fprintf(w, "event: progress\ndata: %s\n\n", event.Data); err != nil {
-				return err
-			}
-			flusher.Flush()
-		case "source_progress":
-			if _, err := fmt.Fprintf(w, "event: source_progress\ndata: %s\n\n", event.Data); err != nil {
-				return err
-			}
-			flusher.Flush()
-		case "sources":
-			var payload struct {
-				Sources []Source `json:"sources"`
-			}
-			if err := json.Unmarshal(event.Data, &payload); err != nil {
-				return err
-			}
-			sources = payload.Sources
-			if err := writeSSE(w, "sources", payload); err != nil {
-				return err
-			}
-			flusher.Flush()
-		case "error":
-			completed = true
-			providerFailed = true
-			if _, err := fmt.Fprintf(w, "event: error\ndata: %s\n\n", event.Data); err != nil {
-				return err
-			}
-			flusher.Flush()
-		case "done":
-			completed = true
+	connected := true
+	emit := func(event StreamEvent) error {
+		if !connected || (body.Mode == "deep" && r.Context().Err() != nil) {
+			return nil
 		}
-		return nil
-	})
+		_, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Name, event.Data)
+		if err != nil && body.Mode == "deep" {
+			connected = false
+			return nil
+		}
+		flusher.Flush()
+		return err
+	}
+	saveResponseID := func(id string) error {
+		if runID == uuid.Nil {
+			return nil
+		}
+		return store.SaveResponseID(ctx, runID, id)
+	}
+	answer, sources, err := consumeSearchStream(ctx, stream, emit, saveResponseID)
+	send := func(name string, payload any) {
+		if connected && r.Context().Err() == nil {
+			_ = writeSSE(w, name, payload)
+			flusher.Flush()
+		}
+	}
 	if err != nil {
-		_ = writeSSE(w, "error", map[string]string{"detail": err.Error()})
-		flusher.Flush()
+		failure = err.Error()
+		send("error", map[string]string{"detail": failure})
 		return
 	}
-	if providerFailed {
-		return
+	var message Message
+	if runID != uuid.Nil {
+		message, err = store.CompleteRun(ctx, runID, answer, sources)
+	} else {
+		message, err = store.AddMessage(ctx, chatID, "assistant", answer, sources)
 	}
-	if !completed || strings.TrimSpace(answer.String()) == "" {
-		_ = writeSSE(w, "error", map[string]string{"detail": "Web search stream ended before completion"})
-		flusher.Flush()
-		return
-	}
-	message, err := store.AddMessage(r.Context(), chatID, "assistant", answer.String(), sources)
 	if err != nil {
-		_ = writeSSE(w, "error", map[string]string{"detail": "Answer received but could not be saved"})
-		flusher.Flush()
+		failure = "Answer received but could not be saved"
+		send("error", map[string]string{"detail": failure})
 		return
 	}
-	_ = writeSSE(w, "done", message)
-	flusher.Flush()
+	runFinished = true
+	send("done", message)
+}
+
+func (a API) recoverResearch(ctx context.Context, userID, chatID uuid.UUID) (*ResearchRun, error) {
+	store := a.store()
+	run, err := store.LatestRun(ctx, userID, chatID)
+	if err != nil || run == nil || run.Status != "running" {
+		return run, err
+	}
+	if run.ProviderResponseID == nil {
+		if time.Since(run.CreatedAt) > a.Provider.DeepTimeout {
+			detail := "Исследование прервано до получения идентификатора OpenAI"
+			if err := store.FailRun(ctx, run.ID, detail); err != nil {
+				return nil, err
+			}
+			run.Status, run.ErrorMessage = "failed", &detail
+		}
+		return run, nil
+	}
+	result, err := a.Provider.Result(ctx, *run.ProviderResponseID)
+	if err != nil {
+		return nil, err
+	}
+	switch result.Status {
+	case "completed":
+		if _, err := store.CompleteRun(ctx, run.ID, result.Content, result.Sources); err != nil {
+			return nil, err
+		}
+		run.Status = "completed"
+	case "failed":
+		if err := store.FailRun(ctx, run.ID, result.Detail); err != nil {
+			return nil, err
+		}
+		run.Status, run.ErrorMessage = "failed", &result.Detail
+	case "queued", "in_progress":
+		if time.Since(run.CreatedAt) > a.Provider.DeepTimeout {
+			if err := a.Provider.Cancel(ctx, *run.ProviderResponseID); err != nil {
+				return nil, err
+			}
+			detail := "Истёк лимит времени глубокого исследования"
+			if err := store.FailRun(ctx, run.ID, detail); err != nil {
+				return nil, err
+			}
+			run.Status, run.ErrorMessage = "failed", &detail
+		}
+	}
+	return run, nil
 }
 
 func writeSSE(w http.ResponseWriter, event string, value any) error {

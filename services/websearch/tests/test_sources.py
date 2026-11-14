@@ -1,4 +1,5 @@
 from datetime import date
+from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
@@ -10,7 +11,6 @@ from app.main import (
     markdown_sources,
     merge_sources,
     provider_body,
-    reasoning_summary_fragments,
     system_prompt,
 )
 
@@ -39,78 +39,33 @@ def test_sources_are_normalized_and_deduplicated() -> None:
         "https://example.org/cited-paper",
     ]
     assert sources[1].published_at == "2026-01-02"
+    assert sources[0].title == "Duplicate"
 
 
-def test_provider_body_uses_openrouter_web_tools(monkeypatch) -> None:
-    monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4.1-flash")
-    body = provider_body(
-        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
-    )
+def test_provider_body_uses_openai_hosted_web_search(monkeypatch) -> None:
+    monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, web=replace(main.SETTINGS.web, model="test-web")))
+    body = provider_body(SearchRequest(messages=[{"role": "user", "content": "question"}]))
 
-    assert body["model"] == "deepseek/deepseek-v4.1-flash"
-    assert body["stream"] is True
-    assert body["tools"] == [
-        {
-            "type": "openrouter:web_search",
-            "parameters": {"engine": "auto", "max_results": 5, "max_total_results": 20},
-        },
-        {
-            "type": "openrouter:web_fetch",
-            "parameters": {"max_uses": 10, "max_content_tokens": 50_000},
-        },
-    ]
+    assert body["model"] == "test-web"
+    assert body["tools"][0]["type"] == "web_search"
+    assert body["tool_choice"] == "required"
+    assert body["background"] is False
+    assert body["store"] is False
+    assert body["input"] == [{"role": "user", "content": "question"}]
+    assert "messages" not in body
 
 
-def test_provider_body_skips_openrouter_tools_behind_a_proxy(monkeypatch) -> None:
-    # proxyapi rejects openrouter:* tools with 400, so the model must search itself.
-    monkeypatch.setattr(main, "LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "perplexity/sonar-pro")
-    body = provider_body(
-        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
-    )
+def test_deep_research_uses_background_and_separate_budget(monkeypatch) -> None:
+    monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, deep=replace(main.SETTINGS.deep, model="test-deep")))
+    body = provider_body(SearchRequest(messages=[{"role": "user", "content": "question"}], mode="deep"))
 
-    assert body["model"] == "perplexity/sonar-pro"
-    assert "tools" not in body
-    assert "plugins" not in body
-
-
-def test_supports_openrouter_tools_only_for_direct_openrouter() -> None:
-    assert main.supports_openrouter_tools("https://openrouter.ai/api/v1")
-    assert not main.supports_openrouter_tools("https://api.proxyapi.ru/openrouter/v1")
-
-
-def test_provider_body_uses_deep_research_model() -> None:
-    body = provider_body(
-        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="deep")
-    )
-
-    assert body["model"] == "perplexity/sonar-deep-research"
-    assert "tools" not in body
-    assert body["reasoning"] == {"effort": "high", "summary": "concise"}
-
-
-def test_only_displayable_reasoning_summaries_become_progress() -> None:
-    fragments = reasoning_summary_fragments(
-        {
-            "choices": [
-                {
-                    "delta": {
-                        "reasoning": "hidden chain of thought",
-                        "reasoning_details": [
-                            {
-                                "type": "reasoning.summary",
-                                "summary": "Нашёл несколько релевантных работ; проверяю детали.",
-                            },
-                            {"type": "reasoning.text", "text": "hidden reasoning"},
-                        ],
-                    }
-                }
-            ]
-        }
-    )
-
-    assert fragments == ["Нашёл несколько релевантных работ; проверяю детали."]
+    assert body["model"] == "test-deep"
+    assert body["tools"][0]["type"] == "web_search"
+    assert body["background"] is True
+    assert body["store"] is True
+    assert body["reasoning"]["effort"] == main.SETTINGS.deep.reasoning_effort
+    assert body["max_tool_calls"] > main.SETTINGS.web.max_tool_calls
+    assert body["max_output_tokens"] > main.SETTINGS.web.max_output_tokens
 
 
 def test_system_prompt_contains_current_date_for_recency_window() -> None:
@@ -183,23 +138,18 @@ def test_web_stream_does_not_emit_source_progress() -> None:
     assert "event: source_progress" not in response.text
 
 
-def test_provider_body_limits_perplexity_search_to_scholarly_domains(monkeypatch) -> None:
-    monkeypatch.setattr(main, "LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "perplexity/sonar-pro")
-    monkeypatch.setattr(main, "SEARCH_DOMAINS", ["arxiv.org", "doi.org"])
-    body = provider_body(
-        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
-    )
-    assert body["search_domain_filter"] == ["arxiv.org", "doi.org"]
+def test_provider_body_filters_scholarly_domains(monkeypatch) -> None:
+    monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, domains=("arxiv.org", "doi.org")))
+    body = provider_body(SearchRequest(messages=[{"role": "user", "content": "question"}]))
+
+    assert body["tools"][0]["filters"] == {"allowed_domains": ["arxiv.org", "doi.org"]}
 
 
-def test_provider_body_skips_domain_filter_for_non_perplexity_models(monkeypatch) -> None:
-    monkeypatch.setattr(main, "LLM_BASE_URL", "https://openrouter.ai/api/v1")
-    monkeypatch.setattr(main, "LLM_MODEL", "deepseek/deepseek-v4.1-flash")
-    body = provider_body(
-        SearchRequest(messages=[{"role": "user", "content": "question"}], mode="web")
-    )
-    assert "search_domain_filter" not in body
+def test_empty_domains_allow_unrestricted_search(monkeypatch) -> None:
+    monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, domains=()))
+    body = provider_body(SearchRequest(messages=[{"role": "user", "content": "question"}]))
+
+    assert "filters" not in body["tools"][0]
 
 
 def test_index_pages_are_not_sources() -> None:

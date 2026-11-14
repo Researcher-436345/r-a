@@ -63,7 +63,7 @@ Do not translate the whole abstract. The description must fit a compact feed car
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+g.Config.FeedTranslationAPIKey)
-	client := &http.Client{Timeout: g.Config.LLMTimeout}
+	client := &http.Client{Timeout: g.Config.TranslationTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("generate brief: %w", err)

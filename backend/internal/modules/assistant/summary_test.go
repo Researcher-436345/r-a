@@ -167,7 +167,8 @@ func TestSummaryPaperBudgetLeavesRoomForReply(t *testing.T) {
 	// The overview is much longer than a chat reply: a small configured reserve
 	// must be raised to the summary reserve, not applied as is.
 	wide := LLM{Config: testSummaryConfig(120000, 2000)}
-	if got := wide.SummaryPaperBudget(testPaper()); got > 120000-summaryReplyReserve {
+	wide.Config.SummaryReplyReserve = config.Load().SummaryReplyReserve
+	if got := wide.SummaryPaperBudget(testPaper()); got > 120000-config.Load().SummaryReplyReserve {
 		t.Errorf("budget %d ignores the summary reply reserve", got)
 	}
 }
@@ -206,16 +207,18 @@ type sseServer struct {
 func (s *sseServer) handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	var req struct {
-		Messages  []map[string]string `json:"messages"`
-		MaxTokens int                 `json:"max_tokens"`
-		Stream    bool                `json:"stream"`
+		Input        []map[string]string `json:"input"`
+		Instructions string              `json:"instructions"`
+		MaxTokens    int                 `json:"max_output_tokens"`
+		Stream       bool                `json:"stream"`
 	}
 	_ = json.Unmarshal(body, &req)
 	s.mu.Lock()
 	idx := len(s.requests)
-	s.requests = append(s.requests, req.Messages)
+	messages := append([]map[string]string{{"role": "system", "content": req.Instructions}}, req.Input...)
+	s.requests = append(s.requests, messages)
 	s.mu.Unlock()
-	if !req.Stream || req.MaxTokens != summaryMaxTokens {
+	if !req.Stream || req.MaxTokens != config.Load().SummaryMaxOutputTokens {
 		http.Error(w, "expected streaming request with the summary token cap", http.StatusBadRequest)
 		return
 	}
@@ -228,10 +231,13 @@ func (s *sseServer) handler(w http.ResponseWriter, r *http.Request) {
 		if piece == "" {
 			continue
 		}
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", piece)
+		fmt.Fprintf(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":%q}\n\n", piece)
 	}
-	fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":%q}]}\n\n", s.finishes[idx])
-	fmt.Fprint(w, "data: [DONE]\n\n")
+	if s.finishes[idx] == "length" {
+		fmt.Fprint(w, `data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}`+"\n\n")
+	} else {
+		fmt.Fprint(w, `data: {"type":"response.completed","response":{"status":"completed"}}`+"\n\n")
+	}
 }
 
 func newSummaryLLM(t *testing.T, srv *sseServer) LLM {
@@ -239,12 +245,14 @@ func newSummaryLLM(t *testing.T, srv *sseServer) LLM {
 	ts := httptest.NewServer(http.HandlerFunc(srv.handler))
 	t.Cleanup(ts.Close)
 	return LLM{Config: config.Config{
-		LLMProvider:      "openai_compatible",
-		LLMBaseURL:       ts.URL,
-		LLMAPIKey:        "test",
-		LLMModel:         "test-model",
-		LLMContextTokens: 20000,
-		LLMReplyReserve:  2000,
+		LLMProvider:            "openai",
+		LLMBaseURL:             ts.URL,
+		LLMAPIKey:              "test",
+		LLMModel:               "test-model",
+		LLMContextTokens:       20000,
+		LLMReplyReserve:        2000,
+		SummaryReplyReserve:    config.Load().SummaryReplyReserve,
+		SummaryMaxOutputTokens: config.Load().SummaryMaxOutputTokens,
 	}}
 }
 

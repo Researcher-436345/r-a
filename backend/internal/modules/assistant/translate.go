@@ -38,7 +38,7 @@ func (c TranslationClient) Translate(ctx context.Context, input translation.Requ
 	req.Header.Set("Content-Type", "application/json")
 	client := c.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: c.Config.LLMTimeout}
+		client = &http.Client{Timeout: c.Config.TranslationTimeout}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -84,7 +84,7 @@ func (c TranslationClient) TranslateStream(
 	req.Header.Set("Accept", "text/event-stream")
 	client := c.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: c.Config.LLMTimeout}
+		client = &http.Client{Timeout: c.Config.TranslationTimeout}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

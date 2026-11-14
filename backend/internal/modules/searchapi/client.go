@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -18,9 +19,11 @@ type ProviderMessage struct {
 }
 
 type Client struct {
-	BaseURL string
-	Token   string
-	HTTP    *http.Client
+	BaseURL     string
+	Token       string
+	HTTP        *http.Client
+	WebTimeout  time.Duration
+	DeepTimeout time.Duration
 }
 
 type ProviderStream struct {
@@ -43,7 +46,11 @@ func (c Client) Stream(ctx context.Context, messages []ProviderMessage, mode str
 	}
 	client := c.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Minute}
+		timeout := c.WebTimeout
+		if mode == "deep" {
+			timeout = c.DeepTimeout
+		}
+		client = &http.Client{Timeout: timeout}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -55,6 +62,50 @@ func (c Client) Stream(ctx context.Context, messages []ProviderMessage, mode str
 		return nil, fmt.Errorf("websearch returned %s: %s", resp.Status, strings.TrimSpace(string(detail)))
 	}
 	return &ProviderStream{Response: resp}, nil
+}
+
+type ResearchResult struct {
+	Status  string   `json:"status"`
+	Content string   `json:"content"`
+	Sources []Source `json:"sources"`
+	Detail  string   `json:"detail"`
+}
+
+func (c Client) Result(ctx context.Context, responseID string) (ResearchResult, error) {
+	var result ResearchResult
+	err := c.responseRequest(ctx, http.MethodGet, responseID, &result)
+	return result, err
+}
+
+func (c Client) Cancel(ctx context.Context, responseID string) error {
+	return c.responseRequest(ctx, http.MethodDelete, responseID, nil)
+}
+
+func (c Client) responseRequest(ctx context.Context, method, responseID string, result *ResearchResult) error {
+	url := strings.TrimRight(c.BaseURL, "/") + "/v1/search/responses/" + url.PathEscape(responseID)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return err
+	}
+	if c.Token != "" {
+		req.Header.Set("X-Internal-Token", c.Token)
+	}
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("websearch response lookup returned %s", resp.Status)
+	}
+	if result != nil {
+		return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(result)
+	}
+	return nil
 }
 
 type StreamEvent struct {

@@ -16,9 +16,19 @@ func UsageJSON(ctx context.Context, model string, raw json.RawMessage) {
 		Details struct {
 			Cached int64 `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
+		ResponseInput   *int64 `json:"input_tokens"`
+		ResponseOutput  *int64 `json:"output_tokens"`
+		ResponseDetails struct {
+			Cached int64 `json:"cached_tokens"`
+		} `json:"input_tokens_details"`
 	}
 	input, output := int64(-1), int64(-1)
 	if json.Unmarshal(raw, &usage) == nil {
+		if usage.ResponseInput != nil {
+			usage.Input = usage.ResponseInput
+			usage.Output = usage.ResponseOutput
+			usage.Details.Cached = usage.ResponseDetails.Cached
+		}
 		if usage.Input != nil {
 			input = *usage.Input
 		}

@@ -1,79 +1,72 @@
-# Researcher Go API
+# Go API Researcher
 
-Modular monolith with the same HTTP contract for `frontend/`.
+Модули приложения работают как отдельные сервисы за gateway или вместе через
+`cmd/api`, сохраняя один HTTP-контракт для `frontend/`.
 
-## Layout
+## Структура
 
 ```text
 cmd/
-  api/                 # composition root (HTTP)
-  worker/              # PDF ingest (asynq)
-  translator/          # isolated selected-text translation service
+  api/                 # сборка общего HTTP-приложения
+  gateway/             # внешний HTTP-вход и проверка авторизации
+  worker/              # обработка PDF через asynq
+  translator/          # отдельный сервис перевода выделенного текста
+  assistant/           # чат, объяснения и обзоры статей
+  searchapi/           # история поиска и сохранение исследований
 internal/
-  app/                 # wires modules into one router
-  platform/            # config, db, httpx, queue, storage
+  app/                 # подключение модулей к общему роутеру
+  platform/            # конфигурация, БД, HTTP, очередь, хранилище
   modules/
-    identity/          # users, JWT, /auth/*
-    catalog/           # papers, PDF, arxiv/doi/upload
-    library/           # user_library_items
-    annotations/       # highlights / notes
-    feed/              # trending + citation enrich (OpenAlex / optional S2)
-    assistant/         # chat / explain + translation service client
-    translation/       # validation + OpenAI-compatible provider adapter
+    identity/          # пользователи, JWT, /auth/*
+    catalog/           # статьи, PDF, arXiv, DOI, загрузка
+    library/           # пользовательская библиотека
+    annotations/       # выделения и заметки
+    feed/              # лента, цитирования и описания Gemma
+    assistant/         # OpenAI Responses API и клиент сервиса перевода
+    translation/       # проверка текста и прямой OpenRouter API
+    searchapi/         # поисковые чаты и состояние deep research
 ```
 
-### Boundary rules
+## Границы модулей
 
-- `platform/*` does not import domain modules.
-- Modules do not import each other except:
-  - `library` → `catalog` (paper DTOs)
-  - `annotations` / `assistant` → `catalog` (paper access + metadata)
-  - HTTP layers may use `identity.UserID` / middleware
-- Catalog talks to library only via `catalog.Membership` (wired in `app`).
-- SQL for a domain stays inside that module’s `store.go`.
+- `platform/*` не импортирует предметные модули.
+- `library` использует DTO статей из `catalog`.
+- `annotations` и `assistant` используют `catalog` для доступа к статьям и метаданным.
+- HTTP-слои используют `identity.UserID` и middleware авторизации.
+- `catalog` обращается к библиотеке через `catalog.Membership`, связанный в `app`.
+- SQL предметной области хранится рядом с модулем, обычно в `store.go`.
 
-To grow a module into its own process later: add `cmd/<name>` and move wiring out of `app/router.go`.
+Для выделения модуля в отдельный процесс используют `cmd/<name>` и переносят
+подключение зависимостей из `app/router.go`.
 
-## Citations
+## Настройки и LLM
 
-Лента обогащает статьи цитированиями:
+Общие значения по умолчанию находятся в корневом `settings.py`; env имеет
+приоритет. Go-загрузчик — `internal/platform/config`. Подробная таблица моделей,
+адресов и ключей: [`docs/SETTINGS.md`](../docs/SETTINGS.md).
 
-| Сейчас | Потом (вставить в `.env`) |
-|--------|---------------------------|
-| **OpenAlex** без ключа (`OPENALEX_MAILTO`) | `SEMANTIC_SCHOLAR_API_KEY` — [форма ключа](https://www.semanticscholar.org/product/api#api-key-form) |
-| Кеш Redis `cite:v1:*` на 24h | Опционально OpenAlex API key |
+Чат, объяснения и обзоры используют прямой OpenAI Responses API. Основная модель —
+`gpt-6.1-terra`, уровень рассуждений — `max`. Перевод фрагментов и описания ленты используют прежнюю Gemma
+через прямой OpenRouter; ключи и адреса перевода независимы от OpenAI.
 
-На brand-new arXiv часто `citation_count: null` (ещё нет в индексе) — на UI бейдж не показываем.  
-`sort=popular` после enrich переранжирует по известным цитированиям.
+`searchapi` передаёт поиск Python-сервису `websearch`, сохраняет историю и
+состояние фонового исследования. Миграция `013_search_runs.sql` нужна для
+восстановления отчёта после разрыва соединения или перезапуска процесса.
 
-См. комментарии в корневом `.env.example`.
+## Запуск в Docker
 
-## Run (Docker)
-
-From repo root:
+Из корня репозитория:
 
 ```bash
+cp .env.example .env
 docker compose up -d --build
 ```
 
-- `migrate` — SQL in `../migrations`
-- `api` — Go HTTP on `:8080`
-- `worker` — asynq PDF jobs
-- `translator` — selected-text translation through ProxyAPI/OpenRouter
-- postgres / redis / minio
+Compose запускает gateway, предметные сервисы, worker, translator, parser,
+websearch, PostgreSQL, Redis и MinIO. Сервис `migrate` применяет SQL из `migrations/`.
+Образы собираются из корня, чтобы Go и Python получили один `settings.py`.
 
-## Translation
-
-`POST /papers/{id}/translate` accepts `{ "text": "...", "target_lang": "ru" }`.
-The authenticated API verifies paper access and forwards the request to the private
-`translator` service. Text is limited to `TRANSLATION_MAX_CHARS` Unicode characters
-(5000 by default); supported target languages are `ru`, `en`, `de`, `fr`, `es`,
-`it`, `pt`, `zh`, `ja`, and `ko`.
-
-Configure an OpenAI-compatible provider with `LLM_BASE_URL`, `LLM_API_KEY`, and
-`LLM_MODEL`. See the root `.env.example` for ProxyAPI and OpenRouter examples.
-
-## Local binary
+Для локального запуска отдельных процессов из каталога `backend`:
 
 ```bash
 export DATABASE_URL=postgres://researcher:researcher@localhost:5433/researcher
@@ -82,17 +75,31 @@ go run ./cmd/api
 go run ./cmd/worker
 ```
 
-See [docs/GO_MIGRATION.md](../docs/GO_MIGRATION.md) and [docs/HANDOFF.md](../docs/HANDOFF.md).
+## Перевод
 
-## Guest access
+`POST /papers/{id}/translate` принимает `{ "text": "...", "target_lang": "ru" }`.
+API проверяет доступ к статье и передаёт текст внутреннему сервису `translator`.
+Лимит — `TRANSLATION_MAX_CHARS` символов Unicode. Поддерживаются `ru`, `en`, `de`,
+`fr`, `es`, `it`, `pt`, `zh`, `ja`, `ko`; доступна потоковая выдача SSE.
 
-The gateway, domain services and monolith allow unauthenticated `GET /feed/trending`,
-`GET /papers/{id}`, `GET /papers/{id}/pdf`, `GET /papers/{id}/pdf-url`, and
-`POST /papers/{id}/translate` (including SSE). Guest paper access is limited to a
-latest version from a public source; uploaded PDFs remain private.
+## Цитирования
 
-`POST /papers/arxiv/open` accepts `{ "arxiv_id": "..." }` and prepares a public
-paper for reading without adding it to any library. It ignores `add_to_library`,
-even when explicitly true. Existing import/save endpoints, all library and
-annotation operations, paper chat/explanations and research search still require
-authentication. The gateway discards client-supplied `X-User-Id` before forwarding.
+Лента использует OpenAlex без ключа (`OPENALEX_MAILTO`) и кеширует результаты в
+Redis на 24 часа. Для Semantic Scholar можно задать `SEMANTIC_SCHOLAR_API_KEY`.
+У новых статей arXiv число цитирований может отсутствовать; интерфейс скрывает
+пустой показатель. После обогащения `sort=popular` учитывает известные цитирования.
+
+## Гостевой доступ
+
+Без входа доступны `GET /feed/trending`, `GET /papers/{id}`,
+`GET /papers/{id}/pdf`, `GET /papers/{id}/pdf-url`,
+`POST /papers/{id}/translate`, включая SSE. Доступ ограничен последней публичной
+версией статьи; загруженные пользователем PDF остаются закрытыми.
+
+`POST /papers/arxiv/open` с `{ "arxiv_id": "..." }` открывает публичную статью,
+сохраняя библиотеку без изменений; параметр `add_to_library` игнорируется.
+Импорт и сохранение в библиотеку, заметки, чат и объяснения, а также исследовательский
+поиск требуют входа. Gateway удаляет присланный клиентом `X-User-Id`.
+
+См. также [`docs/GO_MIGRATION.md`](../docs/GO_MIGRATION.md) и
+[`docs/HANDOFF.md`](../docs/HANDOFF.md).

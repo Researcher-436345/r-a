@@ -4,9 +4,10 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/centraluniversity/researcher/internal/platform/config"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -36,12 +37,9 @@ var (
 // Start exposes metrics on a separate internal port; the gateway never proxies it.
 func Start(service string) {
 	registerBudget(service)
-	address := os.Getenv("METRICS_ADDR")
+	address := config.ReadSettings().Value("METRICS_ADDR")
 	if address == "off" {
 		return
-	}
-	if address == "" {
-		address = ":9091"
 	}
 	info := promauto.NewGaugeVec(prometheus.GaugeOpts{Name: "ra_service_info", Help: "Running application service."}, []string{"service"})
 	info.WithLabelValues(service).Set(1)

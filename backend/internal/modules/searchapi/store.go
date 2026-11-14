@@ -29,12 +29,13 @@ type Message struct {
 }
 
 type Chat struct {
-	ID        uuid.UUID `json:"id"`
-	Title     string    `json:"title"`
-	Mode      string    `json:"mode"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Messages  []Message `json:"messages,omitempty"`
+	ID        uuid.UUID    `json:"id"`
+	Title     string       `json:"title"`
+	Mode      string       `json:"mode"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+	Messages  []Message    `json:"messages,omitempty"`
+	Research  *ResearchRun `json:"research,omitempty"`
 }
 
 func (s Store) List(ctx context.Context, userID uuid.UUID) ([]Chat, error) {

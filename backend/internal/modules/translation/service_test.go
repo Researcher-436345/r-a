@@ -16,10 +16,10 @@ import (
 
 func testConfig(baseURL string) config.Config {
 	return config.Config{
-		LLMBaseURL:          baseURL,
-		LLMAPIKey:           "secret-key",
-		LLMModel:            "test-model",
-		LLMTimeout:          time.Second,
+		TranslationBaseURL:  baseURL,
+		TranslationAPIKey:   "secret-key",
+		TranslationLLMModel: "test-model",
+		TranslationTimeout:  time.Second,
 		TranslationMaxChars: 20,
 	}
 }

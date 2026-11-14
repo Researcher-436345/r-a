@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-import os
 import re
 from collections.abc import AsyncIterator
 from datetime import date
@@ -16,44 +15,14 @@ from pydantic import BaseModel, Field
 
 ResearchMode = Literal["web", "deep"]
 
-from .metrics import setup_metrics, record_usage, LLM_REQUESTS, LLM_DURATION, LLM_HTTP
+from .metrics import setup_metrics, record_usage, LLM_REQUESTS, LLM_DURATION
+from .provider import check_completion, final_result, request_body, response_request, stream_response
+from .settings import SearchSettings
 
 app = FastAPI(title="researcher-websearch", version="0.1.0")
 setup_metrics(app, "websearch")
 
-LLM_BASE_URL = os.getenv(
-    "WEBSEARCH_LLM_BASE_URL", "https://api.proxyapi.ru/openrouter/v1"
-).rstrip("/")
-LLM_API_KEY = os.getenv("WEBSEARCH_LLM_API_KEY", "") or os.getenv("LLM_API_KEY", "")
-# Default is a model with built-in web search: it works both through direct
-# OpenRouter and through proxies (proxyapi) that strip OpenRouter server tools.
-LLM_MODEL = os.getenv("WEBSEARCH_LLM_MODEL", "perplexity/sonar-pro").strip()
-DEEP_LLM_MODEL = os.getenv(
-    "WEBSEARCH_DEEP_LLM_MODEL", "perplexity/sonar-deep-research"
-).strip()
-LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_TIMEOUT_SECONDS", "180"))
-DEEP_LLM_TIMEOUT_SECONDS = float(os.getenv("WEBSEARCH_DEEP_TIMEOUT_SECONDS", "600"))
-LLM_HTTP_REFERER = os.getenv("LLM_HTTP_REFERER", "http://localhost:5173")
-LLM_APP_TITLE = os.getenv("LLM_APP_TITLE", "Researcher")
-INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
-
-# Scholarly-only search. Perplexity's search_domain_filter takes up to 10
-# domains; without it a beginner question returns tutorials and blogs instead
-# of papers, and the reader cannot open those inside the app.
-# Only venues the catalog can turn into a readable paper: arXiv/DOI directly,
-# open proceedings via their PDF, Semantic Scholar via the title fallback.
-# OpenReview challenges every client and publisher sites are paywalled.
-DEFAULT_SEARCH_DOMAINS = [
-    "arxiv.org",
-    "doi.org",
-    "semanticscholar.org",
-    "aclanthology.org",
-    "proceedings.mlr.press",
-    "openaccess.thecvf.com",
-    "proceedings.neurips.cc",
-    "papers.nips.cc",
-    "ojs.aaai.org",
-]
+SETTINGS = SearchSettings.load()
 
 # Index, listing, home, help and account pages the model likes to cite. They
 # are not papers, so they never become sources. Same URL classes as the
@@ -167,12 +136,6 @@ def is_non_paper_url(url: str) -> bool:
     return VOLUME_PATH_RE.search(path) is not None
 
 
-SEARCH_DOMAINS = [
-    d.strip()
-    for d in os.getenv("WEBSEARCH_DOMAINS", ",".join(DEFAULT_SEARCH_DOMAINS)).split(",")
-    if d.strip()
-][:10]
-
 RESEARCH_SYSTEM_PROMPT = """
 Ты — экспертный исследовательский ассистент с доступом к актуальному веб-поиску. 
 Помогай пользователю находить и изучать научные статьи, направления исследований, методы и конкурирующие подходы.
@@ -234,7 +197,7 @@ class Source(BaseModel):
 
 
 def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
-    if INTERNAL_TOKEN and x_internal_token != INTERNAL_TOKEN:
+    if SETTINGS.internal_token and x_internal_token != SETTINGS.internal_token:
         raise HTTPException(status_code=401, detail="invalid internal token")
 
 
@@ -259,25 +222,12 @@ def system_prompt(mode: ResearchMode, current_date: date | None = None) -> str:
     return f"{prompt}\n\n{suffix}"
 
 
-def supports_openrouter_tools(base_url: str | None = None) -> bool:
-    """OpenRouter server tools (openrouter:web_search / web_fetch) exist only on
-    openrouter.ai itself. Proxies such as proxyapi validate `tools` as plain
-    OpenAI function tools and answer 400 ("'function' is a required property"),
-    and they ignore `plugins` / `:online` too — so behind a proxy the model has
-    to bring its own search (perplexity/sonar*)."""
-    return "openrouter.ai" in (base_url if base_url is not None else LLM_BASE_URL)
-
-
 def model_for_mode(mode: ResearchMode) -> str:
-    return DEEP_LLM_MODEL if mode == "deep" else LLM_MODEL
-
-
-def timeout_for_mode(mode: ResearchMode) -> float:
-    return DEEP_LLM_TIMEOUT_SECONDS if mode == "deep" else LLM_TIMEOUT_SECONDS
+    return SETTINGS.deep.model if mode == "deep" else SETTINGS.web.model
 
 
 def normalize_source(raw: Any) -> Source | None:
-    if isinstance(raw, dict) and raw.get("type") == "url_citation":
+    if isinstance(raw, dict) and "url_citation" in raw:
         raw = raw.get("url_citation")
     if isinstance(raw, str):
         url = raw.strip()
@@ -328,8 +278,11 @@ def merge_sources(current: list[Source], values: list[Any]) -> None:
         if existing is None:
             current.append(source)
             by_url[source.url] = source
-        elif existing.citation is None and source.citation is not None:
-            existing.citation = source.citation
+        else:
+            if existing.citation is None and source.citation is not None:
+                existing.citation = source.citation
+            if existing.title == existing.domain and source.title != source.domain:
+                existing.title = source.title
 
 
 SOURCES_HEADINGS = ("\n## sources", "\n## источники")
@@ -382,107 +335,23 @@ def sse(event: str, payload: Any) -> str:
 
 
 def provider_body(payload: SearchRequest) -> dict[str, Any]:
-    body: dict[str, Any] = {
-        "model": model_for_mode(payload.mode),
-        "messages": [
-            {"role": "system", "content": system_prompt(payload.mode)},
-            *(message.model_dump() for message in payload.messages),
-        ],
-        "stream": True,
-    }
-    if SEARCH_DOMAINS and model_for_mode(payload.mode).startswith("perplexity/"):
-        body["search_domain_filter"] = SEARCH_DOMAINS
-    if payload.mode == "web" and supports_openrouter_tools():
-        body["tools"] = [
-            {
-                "type": "openrouter:web_search",
-                "parameters": {
-                    "engine": "auto",
-                    "max_results": 5,
-                    "max_total_results": 20,
-                },
-            },
-            {
-                "type": "openrouter:web_fetch",
-                "parameters": {
-                    "max_uses": 10,
-                    "max_content_tokens": 50_000,
-                },
-            },
-        ]
-    else:
-        body["reasoning"] = {"effort": "high", "summary": "concise"}
-    return body
 
+    profile = SETTINGS.deep if payload.mode == "deep" else SETTINGS.web
 
-def reasoning_summary_fragments(chunk: dict[str, Any]) -> list[str]:
-    fragments: list[str] = []
-    for choice in chunk.get("choices") or []:
-        delta = choice.get("delta") or {}
-        for detail in delta.get("reasoning_details") or []:
-            if not isinstance(detail, dict) or detail.get("type") != "reasoning.summary":
-                continue
-            summary = detail.get("summary")
-            if isinstance(summary, str) and summary:
-                fragments.append(summary)
-    return fragments
+    return request_body(
+        [message.model_dump() for message in payload.messages],
+        system_prompt(payload.mode),
+        profile,
+        SETTINGS.domains,
+    )
 
 
 async def _provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
-    if not LLM_API_KEY:
-        raise RuntimeError("веб-поиск не настроен: добавь WEBSEARCH_LLM_API_KEY или LLM_API_KEY")
-    model = model_for_mode(payload.mode)
-    if not model:
-        variable = "WEBSEARCH_DEEP_LLM_MODEL" if payload.mode == "deep" else "WEBSEARCH_LLM_MODEL"
-        raise RuntimeError(f"веб-поиск не настроен: добавь {variable}")
 
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
-    if "openrouter.ai" in LLM_BASE_URL:
-        headers["HTTP-Referer"] = LLM_HTTP_REFERER
-        headers["X-Title"] = LLM_APP_TITLE
-    body = provider_body(payload)
-    timeout = httpx.Timeout(timeout_for_mode(payload.mode), connect=20.0)
-    progress_parts: list[str] = []
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        async with client.stream(
-            "POST", f"{LLM_BASE_URL}/chat/completions", headers=headers, json=body
-        ) as response:
-            LLM_HTTP.labels(model, "deep_research" if payload.mode == "deep" else "search", str(response.status_code)).inc()
-            if response.status_code // 100 != 2:
-                detail = (await response.aread())[:8192].decode("utf-8", errors="replace").strip()
-                raise RuntimeError(f"web search provider returned {response.status_code}: {detail or response.reason_phrase}")
-            async for line in response.aiter_lines():
-                line = line.strip()
-                if not line or line.startswith(":"):
-                    continue
-                if line.startswith("data:"):
-                    line = line.removeprefix("data:").strip()
-                if line == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(chunk.get("usage"), dict):
-                    yield "usage", chunk["usage"]
-                if payload.mode == "deep":
-                    for summary in reasoning_summary_fragments(chunk):
-                        progress_parts.append(summary)
-                        yield "progress", "".join(progress_parts)[-4_000:]
-                choices = chunk.get("choices") or []
-                delta = ""
-                if choices:
-                    delta = str((choices[0].get("delta") or {}).get("content") or "")
-                if delta:
-                    yield "delta", delta
-                raw_sources: list[Any] = []
-                raw_sources.extend(indexed_citations(chunk.get("citations")))
-                raw_sources.extend(indexed_citations(chunk.get("search_results")))
-                for choice in choices:
-                    raw_sources.extend((choice.get("delta") or {}).get("annotations") or [])
-                    raw_sources.extend((choice.get("message") or {}).get("annotations") or [])
-                if raw_sources:
-                    yield "sources", raw_sources
+    profile = SETTINGS.deep if payload.mode == "deep" else SETTINGS.web
+
+    async for event in stream_response(SETTINGS, profile, provider_body(payload)):
+        yield event
 
 
 async def provider_stream(payload: SearchRequest) -> AsyncIterator[tuple[str, Any]]:
@@ -512,8 +381,11 @@ def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "service": "websearch",
-        "model": LLM_MODEL,
-        "models": {"web": LLM_MODEL, "deep": DEEP_LLM_MODEL},
+        "provider": "openai",
+        "base_url": SETTINGS.base_url,
+        "model": SETTINGS.web.model,
+        "models": {"web": SETTINGS.web.model, "deep": SETTINGS.deep.model},
+        "configured": bool(SETTINGS.api_key and SETTINGS.web.model and SETTINGS.deep.model),
         "version": "0.1.0",
     }
 
@@ -530,6 +402,13 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                 if event == "delta":
                     answer_parts.append(value)
                     yield sse("delta", {"content": value})
+                elif event == "replace":
+                    answer_parts = [value]
+                    yield sse("replace", {"content": value})
+                elif event == "response":
+                    yield sse("response", value)
+                elif event == "ping":
+                    yield sse("ping", {})
                 elif event == "progress":
                     yield sse("progress", {"content": value})
                 elif event == "sources":
@@ -565,3 +444,50 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/v1/search/responses/{response_id}", dependencies=[Depends(require_internal_token)])
+async def research_result(response_id: str) -> dict[str, Any]:
+
+    try:
+        result = await response_request(SETTINGS, response_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return {"status": "failed", "detail": "Сохранённый ответ OpenAI больше недоступен. Запустите исследование повторно."}
+        raise HTTPException(status_code=502, detail="Не удалось получить состояние исследования") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Не удалось получить состояние исследования") from exc
+
+    if result["status"] in {"queued", "in_progress"}:
+        return {"status": result["status"]}
+
+    try:
+        check_completion(result)
+    except RuntimeError as exc:
+        return {"status": "failed", "detail": str(exc)}
+
+    answer, raw_sources = final_result(result)
+    if not answer.strip():
+        return {"status": "failed", "detail": "OpenAI research returned an empty response"}
+
+    sources: list[Source] = []
+    merge_sources(sources, raw_sources)
+
+    if answer_cites_sources(answer) and not has_linked_sources_section(answer):
+        answer += markdown_sources(sources)
+
+    return {"status": "completed", "content": answer, "sources": [source.model_dump() for source in sources]}
+
+
+@app.delete("/v1/search/responses/{response_id}", dependencies=[Depends(require_internal_token)])
+async def cancel_research(response_id: str) -> dict[str, str]:
+
+    try:
+        await response_request(SETTINGS, response_id, cancel=True)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 404:
+            raise HTTPException(status_code=502, detail="Не удалось остановить исследование") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Не удалось остановить исследование") from exc
+
+    return {"status": "cancelled"}

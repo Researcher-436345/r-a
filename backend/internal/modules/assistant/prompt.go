@@ -42,12 +42,12 @@ func truncateToTokens(s string, maxTokens int) string {
 }
 
 type PromptBundle struct {
-	System       string
-	PaperText    string
+	System        string
+	PaperText     string
 	ThreadSummary string
-	History      []ChatTurn
-	Question     string
-	ContextText  string
+	History       []ChatTurn
+	Question      string
+	ContextText   string
 }
 
 func (l LLM) ChatWithPaper(
@@ -74,7 +74,7 @@ func (l LLM) ChatWithPaperStream(
 	if err != nil {
 		return ChatResult{Usage: built.Usage}, err
 	}
-	l.ReasoningEffort = "medium"
+	l.ReasoningEffort = l.Config.ChatReasoningEffort
 	out, err := l.requestStream(ctx, built.System, built.Turns, onDelta)
 	return ChatResult{Reply: out, Summary: built.Summary, Usage: built.Usage}, err
 }

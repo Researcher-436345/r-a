@@ -2,8 +2,9 @@ package observability
 
 import (
 	"math"
-	"os"
 	"strconv"
+
+	"github.com/centraluniversity/researcher/internal/platform/config"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -12,7 +13,7 @@ func registerBudget(service string) {
 	if service != "library" && service != "api" {
 		return
 	}
-	value, err := strconv.ParseFloat(os.Getenv("LLM_DAILY_BUDGET_USD"), 64)
+	value, err := strconv.ParseFloat(config.ReadSettings().Value("LLM_DAILY_BUDGET_USD"), 64)
 	if err != nil || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 		return
 	}

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -39,23 +37,30 @@ type Config struct {
 	S3Region         string
 	S3PresignExpire  time.Duration
 
-	LLMProvider    string
-	LLMBaseURL     string
-	LLMAPIKey      string
-	LLMModel       string
-	LLMModels      []LLMModelOption
-	LLMTimeout     time.Duration
-	LLMHTTPReferer string
-	LLMAppTitle    string
+	LLMProvider         string
+	LLMBaseURL          string
+	LLMAPIKey           string
+	LLMModel            string
+	LLMModels           []LLMModelOption
+	LLMTimeout          time.Duration
+	LLMHTTPReferer      string
+	LLMAppTitle         string
+	LLMMaxOutputTokens  int
+	LLMReasoningEffort  string
+	ChatReasoningEffort string
 
-	// SummaryLLMModel is the default model for paper overviews. They are long
-	// structured replies; the chat default (a cheap reasoning model on a
-	// 32k-context route) tends to cut them, so a separate default is worth it.
-	SummaryLLMModel string
+	// Paper overviews can override the shared model and reasoning/output budgets.
+	SummaryLLMModel        string
+	SummaryReasoningEffort string
+	SummaryMaxOutputTokens int
+	SummaryReplyReserve    int
 
 	TranslationHTTPAddr      string
 	TranslationServiceURL    string
 	TranslationLLMModel      string
+	TranslationBaseURL       string
+	TranslationAPIKey        string
+	TranslationTimeout       time.Duration
 	TranslationMaxChars      int
 	TranslationMaxConcurrent int
 	FeedTranslationModel     string
@@ -85,6 +90,8 @@ type Config struct {
 	FeedURL             string
 	SearchAPIURL        string
 	WebSearchServiceURL string
+	WebSearchTimeout    time.Duration
+	DeepResearchTimeout time.Duration
 	InternalToken       string
 }
 
@@ -94,94 +101,98 @@ type LLMModelOption struct {
 }
 
 func Load() Config {
+	settings := ReadSettings()
+	value := settings.Value
+	seconds := func(name string) time.Duration {
+		return time.Duration(settings.PositiveInt(name)) * time.Second
+	}
+	minutes := func(name string) time.Duration {
+		return time.Duration(settings.PositiveInt(name)) * time.Minute
+	}
 	return Config{
-		AppName:     getenv("APP_NAME", "researcher-api"),
-		Environment: getenv("ENVIRONMENT", "local"),
-		HTTPAddr:    getenv("HTTP_ADDR", ":8000"),
+		AppName:     value("APP_NAME"),
+		Environment: value("ENVIRONMENT"),
+		HTTPAddr:    value("HTTP_ADDR"),
+		DatabaseURL: normalizeDBURL(value("DATABASE_URL")),
+		RedisURL:    value("REDIS_URL"),
 
-		DatabaseURL: normalizeDBURL(getenv("DATABASE_URL", "postgresql://researcher:researcher@localhost:5433/researcher")),
-		RedisURL:    getenv("REDIS_URL", "redis://localhost:6379/0"),
+		JWTSecret:                value("JWT_SECRET"),
+		JWTAlgorithm:             value("JWT_ALGORITHM"),
+		AccessTokenTTL:           minutes("ACCESS_TOKEN_EXPIRE_MINUTES"),
+		RefreshTokenTTL:          time.Duration(settings.PositiveInt("REFRESH_TOKEN_EXPIRE_DAYS")) * 24 * time.Hour,
+		FrontendURL:              strings.TrimRight(value("FRONTEND_URL"), "/"),
+		CookieSecure:             settings.Bool("COOKIE_SECURE"),
+		SMTPHost:                 value("SMTP_HOST"),
+		SMTPPort:                 value("SMTP_PORT"),
+		SMTPUser:                 value("SMTP_USER"),
+		SMTPPass:                 value("SMTP_PASS"),
+		SMTPFrom:                 value("SMTP_FROM"),
+		MailEnabled:              settings.Bool("MAIL_ENABLED"),
+		EmailVerificationEnabled: settings.Bool("EMAIL_VERIFICATION_ENABLED"),
 
-		JWTSecret:       getenv("JWT_SECRET", "dev-only-change-me-in-production"),
-		JWTAlgorithm:    getenv("JWT_ALGORITHM", "HS256"),
-		AccessTokenTTL:  minutes(getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"), 30),
-		RefreshTokenTTL: days(getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"), 14),
+		S3Endpoint:       value("S3_ENDPOINT_URL"),
+		S3PublicEndpoint: value("S3_PUBLIC_ENDPOINT_URL"),
+		S3AccessKey:      value("S3_ACCESS_KEY"),
+		S3SecretKey:      value("S3_SECRET_KEY"),
+		S3Bucket:         value("S3_BUCKET"),
+		S3Region:         value("S3_REGION"),
+		S3PresignExpire:  seconds("S3_PRESIGN_EXPIRE_SECONDS"),
 
-		FrontendURL:              strings.TrimRight(getenv("FRONTEND_URL", "http://localhost:5173"), "/"),
-		CookieSecure:             getenv("COOKIE_SECURE", "false") == "true",
-		SMTPHost:                 getenv("SMTP_HOST", "localhost"),
-		SMTPPort:                 getenv("SMTP_PORT", "1025"),
-		SMTPUser:                 getenv("SMTP_USER", ""),
-		SMTPPass:                 getenv("SMTP_PASS", ""),
-		SMTPFrom:                 getenv("SMTP_FROM", getenv("MAIL_FROM", "researcher@localhost")),
-		MailEnabled:              getenv("MAIL_ENABLED", "false") == "true",
-		EmailVerificationEnabled: getenv("EMAIL_VERIFICATION_ENABLED", "true") != "false",
+		LLMProvider:         value("LLM_PROVIDER"),
+		LLMBaseURL:          value("LLM_BASE_URL"),
+		LLMAPIKey:           value("LLM_API_KEY"),
+		LLMModel:            value("LLM_MODEL"),
+		LLMModels:           parseLLMModels(value("LLM_MODELS"), value("LLM_MODEL")),
+		LLMTimeout:          seconds("LLM_TIMEOUT_SECONDS"),
+		LLMMaxOutputTokens:  settings.PositiveInt("LLM_MAX_OUTPUT_TOKENS"),
+		LLMReasoningEffort:  value("LLM_REASONING_EFFORT"),
+		ChatReasoningEffort: value("CHAT_REASONING_EFFORT"),
+		LLMHTTPReferer:      value("LLM_HTTP_REFERER"),
+		LLMAppTitle:         value("LLM_APP_TITLE"),
 
-		S3Endpoint:       getenv("S3_ENDPOINT_URL", "http://localhost:9000"),
-		S3PublicEndpoint: getenv("S3_PUBLIC_ENDPOINT_URL", "http://localhost:9000"),
-		S3AccessKey:      getenv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:      getenv("S3_SECRET_KEY", "minioadmin"),
-		S3Bucket:         getenv("S3_BUCKET", "papers"),
-		S3Region:         getenv("S3_REGION", "us-east-1"),
-		S3PresignExpire:  seconds(getenv("S3_PRESIGN_EXPIRE_SECONDS", "900"), 900),
+		SummaryLLMModel:        value("SUMMARY_LLM_MODEL"),
+		SummaryReasoningEffort: value("SUMMARY_REASONING_EFFORT"),
+		SummaryMaxOutputTokens: settings.PositiveInt("SUMMARY_MAX_OUTPUT_TOKENS"),
+		SummaryReplyReserve:    settings.PositiveInt("SUMMARY_REPLY_RESERVE"),
 
-		LLMProvider:    getenv("LLM_PROVIDER", "openai_compatible"),
-		LLMBaseURL:     getenv("LLM_BASE_URL", "https://api.aitunnel.ru/v1"),
-		LLMAPIKey:      getenv("LLM_API_KEY", ""),
-		LLMModel:       getenv("LLM_MODEL", "auto"),
-		LLMModels:      parseLLMModels(getenv("LLM_MODELS", ""), getenv("LLM_MODEL", "auto")),
-		LLMTimeout:     seconds(getenv("LLM_TIMEOUT_SECONDS", "60"), 60),
-		LLMHTTPReferer: getenv("LLM_HTTP_REFERER", "http://localhost:5173"),
-		LLMAppTitle:    getenv("LLM_APP_TITLE", "Researcher"),
+		TranslationHTTPAddr:      value("TRANSLATION_HTTP_ADDR"),
+		TranslationServiceURL:    value("TRANSLATION_SERVICE_URL"),
+		TranslationBaseURL:       value("TRANSLATION_BASE_URL"),
+		TranslationAPIKey:        value("TRANSLATION_API_KEY"),
+		TranslationLLMModel:      value("TRANSLATION_LLM_MODEL"),
+		TranslationTimeout:       seconds("TRANSLATION_TIMEOUT_SECONDS"),
+		TranslationMaxChars:      settings.PositiveInt("TRANSLATION_MAX_CHARS"),
+		TranslationMaxConcurrent: settings.PositiveInt("TRANSLATION_MAX_CONCURRENT"),
 
-		TranslationHTTPAddr:      getenv("TRANSLATION_HTTP_ADDR", ":8090"),
-		TranslationServiceURL:    getenv("TRANSLATION_SERVICE_URL", "http://localhost:8090"),
-		SummaryLLMModel:          getenv("SUMMARY_LLM_MODEL", getenv("LLM_MODEL", "auto")),
-		TranslationLLMModel:      getenv("TRANSLATION_LLM_MODEL", getenv("LLM_MODEL", "auto")),
-		TranslationMaxChars:      positiveInt(getenv("TRANSLATION_MAX_CHARS", "5000"), 5000),
-		TranslationMaxConcurrent: positiveInt(getenv("TRANSLATION_MAX_CONCURRENT", "8"), 8),
-		FeedTranslationModel:     getenv("FEED_TRANSLATION_MODEL", "google/gemma-4-26b-a4b-it"),
-		FeedTranslationBaseURL:   getenv("FEED_TRANSLATION_BASE_URL", getenv("LLM_BASE_URL", "https://api.aitunnel.ru/v1")),
-		FeedTranslationAPIKey:    getenv("FEED_TRANSLATION_API_KEY", getenv("LLM_API_KEY", "")),
-		FeedRefreshInterval:      minutes(getenv("FEED_REFRESH_MINUTES", "15"), 15),
+		FeedTranslationModel:   value("FEED_TRANSLATION_MODEL"),
+		FeedTranslationBaseURL: value("FEED_TRANSLATION_BASE_URL"),
+		FeedTranslationAPIKey:  value("FEED_TRANSLATION_API_KEY"),
+		FeedRefreshInterval:    minutes("FEED_REFRESH_MINUTES"),
 
-		ParserServiceURL: getenv("PARSER_SERVICE_URL", "http://localhost:8091"),
-		ParserOCR:        getenv("PARSER_OCR", "auto"),
-		ParserTimeout:    seconds(getenv("PARSER_TIMEOUT_SECONDS", "180"), 180),
+		ParserServiceURL: value("PARSER_SERVICE_URL"),
+		ParserOCR:        value("PARSER_OCR"),
+		ParserTimeout:    seconds("PARSER_TIMEOUT_SECONDS"),
 
-		LLMContextTokens: positiveInt(getenv("LLM_CONTEXT_TOKENS", "120000"), 120000),
-		LLMReplyReserve:  positiveInt(getenv("LLM_REPLY_RESERVE", "4000"), 4000),
-		ChatRecentKeep:   positiveInt(getenv("CHAT_RECENT_KEEP", "8"), 8),
+		LLMContextTokens: settings.PositiveInt("LLM_CONTEXT_TOKENS"),
+		LLMReplyReserve:  settings.PositiveInt("LLM_REPLY_RESERVE"),
+		ChatRecentKeep:   settings.PositiveInt("CHAT_RECENT_KEEP"),
 
-		CitationsEnabled:      getenv("CITATIONS_ENABLED", "true") != "false",
-		OpenAlexMailto:        getenv("OPENALEX_MAILTO", "researcher@localhost"),
-		SemanticScholarAPIKey: getenv("SEMANTIC_SCHOLAR_API_KEY", ""),
+		CitationsEnabled:      settings.Bool("CITATIONS_ENABLED"),
+		OpenAlexMailto:        value("OPENALEX_MAILTO"),
+		SemanticScholarAPIKey: value("SEMANTIC_SCHOLAR_API_KEY"),
 
-		IdentityURL:         strings.TrimRight(getenv("IDENTITY_URL", "http://localhost:8101"), "/"),
-		CatalogURL:          strings.TrimRight(getenv("CATALOG_URL", "http://localhost:8102"), "/"),
-		LibraryURL:          strings.TrimRight(getenv("LIBRARY_URL", "http://localhost:8103"), "/"),
-		AnnotationsURL:      strings.TrimRight(getenv("ANNOTATIONS_URL", "http://localhost:8104"), "/"),
-		AssistantURL:        strings.TrimRight(getenv("ASSISTANT_URL", "http://localhost:8105"), "/"),
-		FeedURL:             strings.TrimRight(getenv("FEED_URL", "http://localhost:8106"), "/"),
-		SearchAPIURL:        strings.TrimRight(getenv("SEARCH_API_URL", "http://localhost:8107"), "/"),
-		WebSearchServiceURL: strings.TrimRight(getenv("WEBSEARCH_SERVICE_URL", "http://localhost:8092"), "/"),
-		InternalToken:       getenv("INTERNAL_TOKEN", ""),
+		IdentityURL:         strings.TrimRight(value("IDENTITY_URL"), "/"),
+		CatalogURL:          strings.TrimRight(value("CATALOG_URL"), "/"),
+		LibraryURL:          strings.TrimRight(value("LIBRARY_URL"), "/"),
+		AnnotationsURL:      strings.TrimRight(value("ANNOTATIONS_URL"), "/"),
+		AssistantURL:        strings.TrimRight(value("ASSISTANT_URL"), "/"),
+		FeedURL:             strings.TrimRight(value("FEED_URL"), "/"),
+		SearchAPIURL:        strings.TrimRight(value("SEARCH_API_URL"), "/"),
+		WebSearchServiceURL: strings.TrimRight(value("WEBSEARCH_SERVICE_URL"), "/"),
+		WebSearchTimeout:    seconds("WEBSEARCH_TIMEOUT_SECONDS"),
+		DeepResearchTimeout: seconds("WEBSEARCH_DEEP_TIMEOUT_SECONDS"),
+		InternalToken:       value("INTERNAL_TOKEN"),
 	}
-}
-
-func positiveInt(s string, def int) int {
-	n, err := strconv.Atoi(s)
-	if err != nil || n < 1 {
-		return def
-	}
-	return n
-}
-
-func getenv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
 }
 
 func normalizeDBURL(u string) string {
@@ -191,30 +202,6 @@ func normalizeDBURL(u string) string {
 		u = "postgres://" + strings.TrimPrefix(u, "postgresql://")
 	}
 	return u
-}
-
-func minutes(s string, def int) time.Duration {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		n = def
-	}
-	return time.Duration(n) * time.Minute
-}
-
-func days(s string, def int) time.Duration {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		n = def
-	}
-	return time.Duration(n) * 24 * time.Hour
-}
-
-func seconds(s string, def int) time.Duration {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		n = def
-	}
-	return time.Duration(n) * time.Second
 }
 
 // LLM_MODELS="id|Label,id2|Label2" — if empty, only default LLM_MODEL.

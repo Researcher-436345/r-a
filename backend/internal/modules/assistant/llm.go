@@ -1,16 +1,11 @@
 package assistant
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/centraluniversity/researcher/internal/modules/catalog"
 	"github.com/centraluniversity/researcher/internal/platform/config"
@@ -25,7 +20,7 @@ type LLM struct {
 	// overview) set it explicitly because provider defaults are often too low
 	// and a reply cut by the provider is reported as ErrLLMTruncated.
 	MaxTokens int
-	// Optional OpenRouter reasoning setting; paper chat sets this on its request copy.
+	// Per-request OpenAI reasoning override; empty uses the configured default.
 	ReasoningEffort string
 }
 
@@ -54,7 +49,7 @@ var (
 	ErrLLMNotConfigured = errors.New("LLM is not configured")
 	ErrLLMEmpty         = errors.New("LLM returned an empty response")
 	// ErrLLMTruncated is returned together with the partial text when the
-	// provider stopped the reply at its token limit (finish_reason=length).
+	// provider stopped the reply at max_output_tokens.
 	ErrLLMTruncated = errors.New("LLM reply was cut by the output token limit")
 )
 
@@ -87,319 +82,13 @@ func (l LLM) Explain(ctx context.Context, p catalog.PaperOut, text, question str
 func (l LLM) request(ctx context.Context, system string, turns []ChatTurn) (reply string, callErr error) {
 	observe := observability.ObserveLLM(ctx, l.resolvedModel())
 	defer func() { observe(callErr) }()
-	if l.Config.LLMProvider == "gemini" {
-		return l.gemini(ctx, system, turns)
-	}
-	return l.openAI(ctx, system, turns)
+	return l.responses(ctx, system, turns, false, nil)
 }
 
 func (l LLM) requestStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (reply string, callErr error) {
 	observe := observability.ObserveLLM(ctx, l.resolvedModel())
 	defer func() { observe(callErr) }()
-	if l.Config.LLMProvider == "gemini" {
-		// Gemini path stays non-streaming for now; emit once when complete.
-		out, err := l.gemini(ctx, system, turns)
-		if err != nil {
-			return "", err
-		}
-		if onDelta != nil {
-			if err := onDelta(out); err != nil {
-				return out, err
-			}
-		}
-		return out, nil
-	}
-	return l.openAIStream(ctx, system, turns, onDelta)
-}
-
-func (l LLM) openAIMessages(system string, turns []ChatTurn) []map[string]string {
-	messages := make([]map[string]string, 0, len(turns)+1)
-	messages = append(messages, map[string]string{"role": "system", "content": system})
-	for _, turn := range turns {
-		role := turn.Role
-		if role != "user" && role != "assistant" {
-			role = "user"
-		}
-		messages = append(messages, map[string]string{"role": role, "content": turn.Content})
-	}
-	return messages
-}
-
-func (l LLM) openAIRequest(ctx context.Context, body []byte) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+l.Config.LLMAPIKey)
-	req.Header.Set("Content-Type", "application/json")
-	if strings.Contains(l.Config.LLMBaseURL, "openrouter.ai") {
-		req.Header.Set("HTTP-Referer", l.Config.LLMHTTPReferer)
-		req.Header.Set("X-Title", l.Config.LLMAppTitle)
-	}
-	client := l.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: l.Config.LLMTimeout}
-	}
-	return client.Do(req)
-}
-
-func (l LLM) openAI(ctx context.Context, system string, turns []ChatTurn) (string, error) {
-	var reportedUsage json.RawMessage
-	defer func() { observability.UsageJSON(ctx, l.resolvedModel(), reportedUsage) }()
-	if l.Config.LLMAPIKey == "" {
-		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
-	}
-	payload := map[string]any{
-		"model":       l.resolvedModel(),
-		"messages":    l.openAIMessages(system, turns),
-		"temperature": 0.2,
-	}
-	if l.ReasoningEffort != "" {
-		payload["reasoning"] = map[string]string{"effort": l.ReasoningEffort}
-	}
-	if l.MaxTokens > 0 {
-		payload["max_tokens"] = l.MaxTokens
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	resp, err := l.openAIRequest(ctx, body)
-	if err != nil {
-		return "", fmt.Errorf("LLM API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var usageEnvelope struct {
-		Usage json.RawMessage `json:"usage"`
-	}
-	_ = json.Unmarshal(raw, &usageEnvelope)
-	reportedUsage = usageEnvelope.Usage
-	if resp.StatusCode/100 != 2 {
-		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
-	}
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-			FinishReason string `json:"finish_reason"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
-		return "", ErrLLMEmpty
-	}
-	if s := strings.TrimSpace(out.Choices[0].Message.Content); s != "" {
-		if l.MaxTokens > 0 && out.Choices[0].FinishReason == "length" {
-			return s, ErrLLMTruncated
-		}
-		return s, nil
-	}
-	return "", ErrLLMEmpty
-}
-
-func (l LLM) openAIStream(ctx context.Context, system string, turns []ChatTurn, onDelta func(string) error) (string, error) {
-	var reportedUsage json.RawMessage
-	defer func() { observability.UsageJSON(ctx, l.resolvedModel(), reportedUsage) }()
-	if l.Config.LLMAPIKey == "" {
-		return "", fmt.Errorf("%w: add LLM_API_KEY to .env (AITunnel recommended from RU)", ErrLLMNotConfigured)
-	}
-	payload := map[string]any{
-		"model":          l.resolvedModel(),
-		"messages":       l.openAIMessages(system, turns),
-		"temperature":    0.2,
-		"stream":         true,
-		"stream_options": map[string]bool{"include_usage": true},
-	}
-	if l.ReasoningEffort != "" {
-		payload["reasoning"] = map[string]string{"effort": l.ReasoningEffort}
-	}
-	if l.MaxTokens > 0 {
-		payload["max_tokens"] = l.MaxTokens
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.Config.LLMBaseURL, "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+l.Config.LLMAPIKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	if strings.Contains(l.Config.LLMBaseURL, "openrouter.ai") {
-		req.Header.Set("HTTP-Referer", l.Config.LLMHTTPReferer)
-		req.Header.Set("X-Title", l.Config.LLMAppTitle)
-	}
-
-	// Streaming responses can exceed the non-stream request timeout.
-	client := l.HTTP
-	if client == nil {
-		timeout := l.Config.LLMTimeout
-		if timeout < 5*time.Minute {
-			timeout = 5 * time.Minute
-		}
-		client = &http.Client{Timeout: timeout}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("LLM API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
-	if resp.StatusCode/100 != 2 {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
-	}
-
-	scanner := bufio.NewScanner(resp.Body)
-	// Some providers send large SSE frames; default 64K is tight.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	var full strings.Builder
-	truncated := false
-	finished := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, ":") {
-			continue
-		}
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			if payload == "[DONE]" {
-				finished = true
-				break
-			}
-			continue
-		}
-		var chunk struct {
-			Usage   json.RawMessage `json:"usage"`
-			Choices []struct {
-				Delta struct {
-					Content string `json:"content"`
-				} `json:"delta"`
-				FinishReason string `json:"finish_reason"`
-			} `json:"choices"`
-		}
-		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
-			continue
-		}
-		if len(chunk.Usage) > 0 && string(chunk.Usage) != "null" {
-			reportedUsage = chunk.Usage
-		}
-		if len(chunk.Choices) == 0 {
-			continue
-		}
-		switch chunk.Choices[0].FinishReason {
-		case "":
-		case "length":
-			truncated = true
-			finished = true
-		default:
-			finished = true
-		}
-		delta := chunk.Choices[0].Delta.Content
-		if delta == "" {
-			continue
-		}
-		full.WriteString(delta)
-		if onDelta != nil {
-			if err := onDelta(delta); err != nil {
-				return full.String(), err
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		if full.Len() > 0 {
-			return full.String(), nil
-		}
-		return "", fmt.Errorf("LLM stream interrupted: %w", err)
-	}
-	if full.Len() == 0 {
-		return "", ErrLLMEmpty
-	}
-	// Callers that set MaxTokens need a complete reply: report both a provider
-	// cut (finish_reason=length) and a stream that ended without any finish
-	// signal (proxy/idle timeout) instead of passing off a fragment as done.
-	if l.MaxTokens > 0 && (truncated || !finished) {
-		return full.String(), ErrLLMTruncated
-	}
-	return full.String(), nil
-}
-
-func (l LLM) gemini(ctx context.Context, system string, turns []ChatTurn) (string, error) {
-	if l.Config.LLMAPIKey == "" {
-		return "", fmt.Errorf("%w: add LLM_API_KEY from Google AI Studio", ErrLLMNotConfigured)
-	}
-	contents := make([]map[string]any, 0, len(turns))
-	for _, turn := range turns {
-		role := "user"
-		if turn.Role == "assistant" {
-			role = "model"
-		}
-		contents = append(contents, map[string]any{
-			"role":  role,
-			"parts": []map[string]string{{"text": turn.Content}},
-		})
-	}
-	generationConfig := map[string]any{"temperature": 0.2}
-	if l.MaxTokens > 0 {
-		generationConfig["maxOutputTokens"] = l.MaxTokens
-	}
-	body, err := json.Marshal(map[string]any{
-		"system_instruction": map[string]any{"parts": []map[string]string{{"text": system}}},
-		"contents":           contents,
-		"generationConfig":   generationConfig,
-	})
-	if err != nil {
-		return "", err
-	}
-	u := fmt.Sprintf("%s/models/%s:generateContent?key=%s", strings.TrimRight(l.Config.LLMBaseURL, "/"), l.resolvedModel(), l.Config.LLMAPIKey)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := l.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: l.Config.LLMTimeout}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("Gemini API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	observability.ProviderResponse(ctx, l.resolvedModel(), resp.StatusCode)
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode/100 != 2 {
-		return "", formatLLMHTTPError(resp.StatusCode, raw, l.resolvedModel())
-	}
-	var out struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil || len(out.Candidates) == 0 {
-		return "", ErrLLMEmpty
-	}
-	var parts []string
-	for _, p := range out.Candidates[0].Content.Parts {
-		parts = append(parts, p.Text)
-	}
-	if s := strings.TrimSpace(strings.Join(parts, "")); s != "" {
-		return s, nil
-	}
-	return "", ErrLLMEmpty
+	return l.responses(ctx, system, turns, true, onDelta)
 }
 
 func formatLLMHTTPError(status int, raw []byte, model string) error {
@@ -414,7 +103,7 @@ func formatLLMHTTPError(status int, raw []byte, model string) error {
 	case status == http.StatusTooManyRequests || strings.Contains(lower, "rate limit"):
 		return fmt.Errorf("LLM временно перегружен (rate limit) для модели %s — подождите немного или смените модель", model)
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return fmt.Errorf("LLM API ключ отклонен — проверьте LLM_API_KEY")
+		return fmt.Errorf("LLM API ключ отклонен — проверьте OPENAI_API_KEY")
 	case status == http.StatusNotFound || strings.Contains(lower, "model") && strings.Contains(lower, "not found"):
 		return fmt.Errorf("модель %s недоступна у провайдера — выберите другую", model)
 	}

@@ -28,6 +28,11 @@ export interface ResearchChatSummary {
 
 export interface ResearchChat extends ResearchChatSummary {
   messages: StoredChatMessage[];
+  research?: {
+    id: string;
+    status: 'running' | 'completed' | 'failed';
+    error_message?: string;
+  };
 }
 
 export function listResearchChats() {
@@ -48,6 +53,7 @@ interface StreamResearchMessageOptions {
   mode: ResearchMode;
   signal?: AbortSignal;
   onDelta: (content: string) => void;
+  onReplace?: (content: string) => void;
   onProgress?: (content: string) => void;
   onSourceProgress?: (progress: ResearchSourceProgress) => void;
 }
@@ -58,6 +64,7 @@ export async function streamResearchMessage({
   mode,
   signal,
   onDelta,
+  onReplace,
   onProgress,
   onSourceProgress,
 }: StreamResearchMessageOptions): Promise<StoredChatMessage> {
@@ -92,6 +99,8 @@ export async function streamResearchMessage({
     const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
     if (event === 'delta' && typeof data.content === 'string') {
       onDelta(data.content);
+    } else if (event === 'replace' && typeof data.content === 'string') {
+      onReplace?.(data.content);
     } else if (
       event === 'progress' &&
       typeof data.content === 'string'

@@ -20,10 +20,10 @@ func TestPaperChatReasoningIsMediumAndScoped(t *testing.T) {
 		}
 		requests = append(requests, payload)
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Answer\"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n")
+		fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"Answer"}`+"\n\n"+`data: {"type":"response.completed","response":{"status":"completed"}}`+"\n\n")
 	}))
 	defer server.Close()
-	llm := LLM{Config: config.Config{LLMProvider: "openai_compatible", LLMAPIKey: "test", LLMBaseURL: server.URL, LLMModel: "test"}, HTTP: server.Client()}
+	llm := LLM{Config: config.Config{LLMProvider: "openai", LLMAPIKey: "test", LLMBaseURL: server.URL, LLMModel: "test", ChatReasoningEffort: "medium"}, HTTP: server.Client()}
 	result, err := llm.ChatWithPaper(context.Background(), testPaper(), "Paper text", "", nil, "Explain a concept beyond this paper", "")
 	if err != nil {
 		t.Fatal(err)

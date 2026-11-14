@@ -17,15 +17,16 @@ LLM_HTTP = Counter("ra_llm_http_responses_total", "Provider HTTP status", ["mode
 LLM_TOKENS = Counter("ra_llm_tokens_total", "Reported provider token usage", ["model", "feature", "direction"])
 LLM_COST = Counter("ra_llm_reported_cost_dollars_total", "Explicitly reported provider cost", ["model", "feature"])
 LLM_USAGE = Counter("ra_llm_usage_reports_total", "Availability of provider usage and cost", ["model", "feature", "kind"])
+LLM_TOOL_CALLS = Counter("ra_llm_tool_calls_total", "Completed hosted web search actions", ["model", "feature", "action"])
 
 
 def record_usage(model: str, feature: str, usage: dict[str, Any] | None) -> None:
     usage = usage if isinstance(usage, dict) else {}
-    inputs, outputs = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    inputs, outputs = usage.get("input_tokens"), usage.get("output_tokens")
     if isinstance(inputs, int) and isinstance(outputs, int) and inputs >= 0 and outputs >= 0:
         LLM_TOKENS.labels(model, feature, "input").inc(inputs)
         LLM_TOKENS.labels(model, feature, "output").inc(outputs)
-        details = usage.get("prompt_tokens_details")
+        details = usage.get("input_tokens_details")
         cached = details.get("cached_tokens", 0) if isinstance(details, dict) else 0
         if isinstance(cached, int) and cached > 0:
             LLM_TOKENS.labels(model, feature, "cached_input").inc(cached)

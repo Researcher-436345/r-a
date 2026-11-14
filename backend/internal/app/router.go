@@ -101,8 +101,10 @@ func Router(d Deps) http.Handler {
 		assistant.API{Config: d.Config, DB: d.DB, Papers: catalogAPI}.Mount(r)
 		feed.API{Service: feed.NewService(d.Config, d.DB, d.Redis)}.Mount(r)
 		searchapi.API{DB: d.DB, Provider: searchapi.Client{
-			BaseURL: d.Config.WebSearchServiceURL,
-			Token:   d.Config.InternalToken,
+			BaseURL:     d.Config.WebSearchServiceURL,
+			Token:       d.Config.InternalToken,
+			WebTimeout:  d.Config.WebSearchTimeout,
+			DeepTimeout: d.Config.DeepResearchTimeout,
 		}}.Mount(r)
 	})
 

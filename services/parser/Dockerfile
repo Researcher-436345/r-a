@@ -7,14 +7,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
+COPY services/parser/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+COPY services/parser/app ./app
+COPY settings.py ./
 
 ENV PARSER_HTTP_ADDR=0.0.0.0:8091
-ENV PARSER_ENGINE=pymupdf
-ENV PARSER_OCR=auto
 
 EXPOSE 8091
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8091"]

@@ -4,9 +4,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt .
+COPY services/websearch/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app ./app
+COPY services/websearch/app ./app
+COPY settings.py ./
 
 ENV WEBSEARCH_HTTP_ADDR=0.0.0.0:8092
 EXPOSE 8092

@@ -89,7 +89,7 @@ func TestDescriptionPersistenceAndAtomicPublication(t *testing.T) {
 		fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"content":"Краткий обзор результатов исследования."}}]}`)
 	}))
 	defer provider.Close()
-	cfg := config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", LLMTimeout: time.Second}
+	cfg := config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", TranslationTimeout: time.Second}
 	store := PGDescriptionStore{DB: pool}
 	cache := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: cache.Addr()})
@@ -213,7 +213,7 @@ func TestTruncatedTranslationIsNotAccepted(t *testing.T) {
 		fmt.Fprint(w, `{"choices":[{"finish_reason":"length","message":{"content":"Незаконченный перевод"}}]}`)
 	}))
 	defer provider.Close()
-	d := NewDescriptions(config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", LLMTimeout: time.Second}, nil)
+	d := NewDescriptions(config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", TranslationTimeout: time.Second}, nil)
 	_, err := d.Generator.Generate(context.Background(), "A title", "An abstract")
 	if !errors.Is(err, translation.ErrIncompleteResponse) {
 		t.Fatalf("accepted truncated translation: %v", err)
@@ -222,13 +222,11 @@ func TestTruncatedTranslationIsNotAccepted(t *testing.T) {
 
 func TestFeedModelDoesNotFollowChatModel(t *testing.T) {
 	t.Setenv("LLM_MODEL", "a-chat-model")
-	t.Setenv("TRANSLATION_LLM_MODEL", "a-reader-translation-model")
-	t.Setenv("FEED_TRANSLATION_MODEL", "")
-	t.Setenv("LLM_API_KEY", "shared-test-key")
-	t.Setenv("FEED_TRANSLATION_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "openai-test-key")
+	t.Setenv("OPENROUTER_API_KEY", "openrouter-test-key")
 	cfg := config.Load()
-	if cfg.FeedTranslationModel != "google/gemma-4-26b-a4b-it" || cfg.FeedTranslationAPIKey != "shared-test-key" {
-		t.Fatal("feed must use Gemma and inherit the configured key")
+	if cfg.FeedTranslationModel != "google/gemma-4-26b-a4b-it" || cfg.FeedTranslationAPIKey != "openrouter-test-key" {
+		t.Fatal("feed must use Gemma and the OpenRouter key independently of chat")
 	}
 }
 
@@ -254,7 +252,7 @@ func TestOverlongBriefRetriesWithShorterInstruction(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]string{"content": content}}}})
 	}))
 	defer provider.Close()
-	g := gemmaBriefGenerator{Config: config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", LLMTimeout: time.Second}}
+	g := gemmaBriefGenerator{Config: config.Config{FeedTranslationModel: "google/gemma-4-26b-a4b-it", FeedTranslationBaseURL: provider.URL, FeedTranslationAPIKey: "test", TranslationTimeout: time.Second}}
 	text, err := g.Generate(context.Background(), "Title", "Abstract")
 	if err != nil || calls.Load() != 2 || len(text) == 0 {
 		t.Fatalf("shorter retry: %q, %d, %v", text, calls.Load(), err)

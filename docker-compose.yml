@@ -98,7 +98,8 @@ services:
 
   translator:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -112,13 +113,12 @@ services:
 
   parser:
     build:
-      context: ./services/parser
+      context: .
+      dockerfile: services/parser/Dockerfile
     env_file:
       - .env
     environment:
       PARSER_HTTP_ADDR: "0.0.0.0:8091"
-      PARSER_ENGINE: ${PARSER_ENGINE:-pymupdf}
-      PARSER_OCR: ${PARSER_OCR:-auto}
     ports:
       - "8091:8091"
     healthcheck:
@@ -130,17 +130,10 @@ services:
 
   websearch:
     build:
-      context: ./services/websearch
+      context: .
+      dockerfile: services/websearch/Dockerfile
     env_file:
       - .env
-    environment:
-      WEBSEARCH_LLM_BASE_URL: ${WEBSEARCH_LLM_BASE_URL:-https://api.proxyapi.ru/openrouter/v1}
-      WEBSEARCH_LLM_API_KEY: ${WEBSEARCH_LLM_API_KEY:-}
-      WEBSEARCH_LLM_MODEL: ${WEBSEARCH_LLM_MODEL:-perplexity/sonar-pro}
-      WEBSEARCH_DEEP_LLM_MODEL: ${WEBSEARCH_DEEP_LLM_MODEL:-perplexity/sonar-deep-research}
-      WEBSEARCH_TIMEOUT_SECONDS: ${WEBSEARCH_TIMEOUT_SECONDS:-180}
-      WEBSEARCH_DEEP_TIMEOUT_SECONDS: ${WEBSEARCH_DEEP_TIMEOUT_SECONDS:-600}
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     ports:
       - "8092:8092"
     healthcheck:
@@ -151,7 +144,8 @@ services:
 
   identity:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -177,7 +171,8 @@ services:
 
   catalog:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -207,7 +202,8 @@ services:
 
   library:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -228,7 +224,8 @@ services:
 
   annotations:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -249,7 +246,8 @@ services:
 
   assistant:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -273,7 +271,8 @@ services:
 
   feed:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -297,7 +296,8 @@ services:
 
   searchapi:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -321,7 +321,8 @@ services:
 
   gateway:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8081:8000"
     env_file:
@@ -354,7 +355,8 @@ services:
 
   worker:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
     environment:
@@ -366,8 +368,6 @@ services:
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: papers
       PARSER_SERVICE_URL: http://parser:8091
-      PARSER_OCR: ${PARSER_OCR:-auto}
-      PARSER_TIMEOUT_SECONDS: ${PARSER_TIMEOUT_SECONDS:-180}
     depends_on:
       pgbouncer:
         condition: service_healthy
