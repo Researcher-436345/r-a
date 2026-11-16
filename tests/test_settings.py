@@ -29,9 +29,25 @@ def exported_settings(*arguments):
     return json.loads(result.stdout)
 
 
-def test_openai_defaults_use_terra_max_and_gemma_is_preserved(monkeypatch, load_settings):
+def test_openai_defaults_use_medium_except_deep_and_preserve_gemma(monkeypatch, load_settings):
 
-    for name in ("LLM_MODEL", "SUMMARY_LLM_MODEL", "WEBSEARCH_LLM_MODEL", "WEBSEARCH_DEEP_LLM_MODEL", "TRANSLATION_LLM_MODEL"):
+    for name in (
+        "LLM_MODEL",
+        "SUMMARY_LLM_MODEL",
+        "WEBSEARCH_LLM_MODEL",
+        "WEBSEARCH_DEEP_LLM_MODEL",
+        "TRANSLATION_LLM_MODEL",
+        "FEED_TRANSLATION_MODEL",
+        "LLM_REASONING_EFFORT",
+        "CHAT_REASONING_EFFORT",
+        "SUMMARY_REASONING_EFFORT",
+        "WEBSEARCH_REASONING_EFFORT",
+        "WEBSEARCH_DEEP_REASONING_EFFORT",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "SUMMARY_MAX_OUTPUT_TOKENS",
+        "WEBSEARCH_MAX_OUTPUT_TOKENS",
+        "WEBSEARCH_DEEP_MAX_OUTPUT_TOKENS",
+    ):
         monkeypatch.delenv(name, raising=False)
 
     config = load_settings()
@@ -40,12 +56,40 @@ def test_openai_defaults_use_terra_max_and_gemma_is_preserved(monkeypatch, load_
     assert config.SUMMARY_LLM_MODEL == "gpt-6.1-terra"
     assert config.WEBSEARCH_LLM_MODEL == "gpt-6.1-terra"
     assert config.WEBSEARCH_DEEP_LLM_MODEL == "gpt-6.1-terra"
-    assert config.LLM_REASONING_EFFORT == "max"
-    assert config.CHAT_REASONING_EFFORT == "max"
-    assert config.SUMMARY_REASONING_EFFORT == "max"
-    assert config.WEBSEARCH_REASONING_EFFORT == "max"
+    assert config.LLM_REASONING_EFFORT == "medium"
+    assert config.CHAT_REASONING_EFFORT == "medium"
+    assert config.SUMMARY_REASONING_EFFORT == "medium"
+    assert config.WEBSEARCH_REASONING_EFFORT == "medium"
     assert config.WEBSEARCH_DEEP_REASONING_EFFORT == "max"
+    assert config.LLM_MAX_OUTPUT_TOKENS == "16000"
+    assert config.SUMMARY_MAX_OUTPUT_TOKENS == "32000"
+    assert config.WEBSEARCH_MAX_OUTPUT_TOKENS == "16000"
+    assert config.WEBSEARCH_DEEP_MAX_OUTPUT_TOKENS == "64000"
     assert config.TRANSLATION_LLM_MODEL == "google/gemma-4-26b-a4b-it"
+    assert config.FEED_TRANSLATION_MODEL == "google/gemma-4-26b-a4b-it"
+
+
+def test_deep_reasoning_is_independent_and_can_be_overridden(monkeypatch, load_settings):
+
+    for name in (
+        "CHAT_REASONING_EFFORT",
+        "SUMMARY_REASONING_EFFORT",
+        "WEBSEARCH_REASONING_EFFORT",
+        "WEBSEARCH_DEEP_REASONING_EFFORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    config = load_settings()
+
+    assert config.CHAT_REASONING_EFFORT == "low"
+    assert config.SUMMARY_REASONING_EFFORT == "low"
+    assert config.WEBSEARCH_REASONING_EFFORT == "low"
+    assert config.WEBSEARCH_DEEP_REASONING_EFFORT == "max"
+
+    monkeypatch.setenv("WEBSEARCH_DEEP_REASONING_EFFORT", "high")
+
+    assert load_settings().WEBSEARCH_DEEP_REASONING_EFFORT == "high"
 
 
 def test_provider_keys_and_urls_do_not_cross(monkeypatch, load_settings):
@@ -91,7 +135,7 @@ def test_display_hides_secrets_but_shows_models_and_budgets(monkeypatch):
     assert "private-value" not in str(values)
     assert values["LLM_API_KEY"] == "<задан>"
     assert values["LLM_MODEL"] == "visible-model"
-    assert values["LLM_MAX_OUTPUT_TOKENS"] == "8000"
+    assert values["LLM_MAX_OUTPUT_TOKENS"] == "16000"
     assert values["OPENAI_BASE_URL"] == "https://api.openai.com/v1"
 
 
