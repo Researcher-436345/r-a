@@ -53,8 +53,8 @@ Ubuntu/Debian с пакетным Nginx и `ca-certificates`.
    `0600`. Его открытый ключ установить на FI по инструкции выше.
 3. Добавить ключ финского SSH-хоста в
    `/etc/researcher-api-proxy/known_hosts` после проверки отпечатка. При проверке
-   `151.241.234.43` 2026-11-16 наблюдался ED25519
-   `SHA256:UUo4a3HzYI8gXOb2uCLMEfwb6dpYtO6hiwcdoS759BQ`.
+   `151.243.247.208` 2026-11-16 наблюдался ED25519
+   `SHA256:kTGY9SdZp6Xof8/SzUFiIiT7EDGZqVvXnfdxzehwZJs`.
 4. Скопировать `tunnel.env.example` в
    `/etc/researcher-api-proxy/tunnel.env`. Указать актуальный адрес шлюза,
    который выводит команда ниже, и адрес пользователя SSH на FI.
