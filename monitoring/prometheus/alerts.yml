@@ -21,6 +21,13 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Prometheus не получает метрики {{ $labels.job }} / {{ $labels.instance }}"
+      - alert: APIProxyUnavailable
+        expr: probe_success{job="api-proxy"} == 0
+        for: 2m
+        labels: {severity: critical, service: api-proxy}
+        annotations:
+          summary: "Недоступен маршрут зарубежных API: {{ $labels.component }}"
+          description: "Проверить api-proxy-tunnel на RU, Nginx на FI и ответ провайдера через прокси. Для проверок openai/openrouter штатный ответ без ключа — HTTP 401."
       - alert: DataDependencyUnavailable
         expr: pg_up == 0 or redis_up == 0 or pgbouncer_up == 0
         for: 2m

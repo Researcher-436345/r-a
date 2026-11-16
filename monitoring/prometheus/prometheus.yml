@@ -91,3 +91,24 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+
+  - job_name: api-proxy
+    scrape_interval: 60s
+    scrape_timeout: 15s
+    metrics_path: /probe
+    static_configs:
+      - targets: [http://api-proxy.internal:18080/health]
+        labels: {component: tunnel, probe_module: http_2xx}
+      - targets: [http://api-proxy.internal:18080/openai/v1/models]
+        labels: {component: openai, probe_module: http_api_401}
+      - targets: [http://api-proxy.internal:18080/openrouter/api/v1/key]
+        labels: {component: openrouter, probe_module: http_api_401}
+    relabel_configs:
+      - source_labels: [probe_module]
+        target_label: __param_module
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

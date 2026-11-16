@@ -112,6 +112,8 @@ services:
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.29.1
     command: [--config.file=/etc/blackbox/blackbox.yml]
+    extra_hosts:
+      - "api-proxy.internal:host-gateway"
     volumes:
       - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
     restart: unless-stopped

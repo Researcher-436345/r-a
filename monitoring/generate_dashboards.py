@@ -138,6 +138,43 @@ def build() -> list[dict]:
     panel(reliable, "Ошибки подготовки ленты за последний час", 'sum(increase(ra_feed_refresh_errors_total[1h]))', 12, 60,
         legend="", description="Неудачные фоновые циклы подготовки русской ленты. При повторяющихся ошибках проверить модель и логи сервиса feed.")
 
+    proxy_checks = [
+        ("Туннель RU → FI", "tunnel"),
+        ("OpenAI через FI", "openai"),
+        ("OpenRouter через FI", "openrouter"),
+    ]
+
+    for index, (title, component) in enumerate(proxy_checks):
+        query = (
+            f'probe_success{{job="api-proxy",component="{component}"}} '
+            'and on(job,instance) (up{job="api-proxy"} == 1)'
+        )
+        status = panel(
+            reliable, title, query, index * 8, 68, 8, 4,
+            kind="stat", legend="",
+            description="Проверка раз в минуту. У API проверяется штатный HTTP 401 без ключа; генерация и расход токенов не запускаются. Доступность генераций и ошибки ключей отражаются в показателях LLM. При потере сбора метрик показано «Нет данных».",
+        )
+        status["fieldConfig"]["defaults"].update({
+            "min": 0,
+            "max": 1,
+            "decimals": 0,
+            "color": {"mode": "thresholds"},
+            "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red", "value": None},
+                {"color": "green", "value": 1},
+            ]},
+            "mappings": [{"type": "value", "options": {
+                "0": {"text": "Недоступен", "color": "red"},
+                "1": {"text": "Доступен", "color": "green"},
+            }}],
+        })
+        status["options"]["colorMode"] = "value"
+
+    panel(reliable, "Доступность маршрута зарубежных API", 'probe_success{job="api-proxy"}', 0, 72,
+        legend="{{component}}", description="История туннеля и достижимости провайдеров через FI. Для API успешной считается проверка с ожидаемым HTTP 401 без ключа.")
+    panel(reliable, "Время проверки маршрута зарубежных API", 'probe_duration_seconds{job="api-proxy"}', 12, 72,
+        unit="s", legend="{{component}}", description="Время сетевой проверки через SSH-туннель. Длительность генерации учитывается отдельно в показателях LLM.")
+
     llm = dashboard("ra-llm", "Odyssey · LLM и расходы",
         "Стоимость — только суммы, явно возвращённые провайдером; это мониторинг наблюдаемых расходов, а не сверка счёта. "
         "Пропущенные usage/cost не превращаются в бесплатные запросы: покрытие показывается отдельно. "
