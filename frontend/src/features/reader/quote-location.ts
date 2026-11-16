@@ -1,3 +1,5 @@
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+
 interface TextPosition {
   index: number;
   offset: number;
@@ -9,7 +11,7 @@ interface QuoteMatch {
 }
 
 function searchableCharacters(text: string): string {
-  return text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  return text.normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 /** PDF line breaks, hyphenation and ligatures must not change the cited phrase. */
@@ -47,6 +49,36 @@ export function locateQuote(texts: readonly string[], quote: string): QuoteMatch
   }
 
   return { start: starts[start], end: ends[start + needle.length - 1] };
+}
+
+/** Verify the cited page first; PDF labels and extracted page markers can differ. */
+export async function findQuotePage(
+  pdf: Pick<PDFDocumentProxy, 'numPages' | 'getPage'>,
+  preferredPage: number,
+  quote: string,
+  signal: AbortSignal,
+): Promise<number | null> {
+  const pages = Array.from({ length: pdf.numPages }, (_, index) => index + 1);
+  const candidates = [preferredPage, ...pages.filter((page) => page !== preferredPage)];
+
+  for (const pageNumber of candidates) {
+    if (signal.aborted) {
+      return null;
+    }
+    if (pageNumber < 1 || pageNumber > pdf.numPages) {
+      continue;
+    }
+
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const texts = content.items.flatMap((item) => 'str' in item ? [item.str] : []);
+
+    if (locateQuote(texts, quote)) {
+      return signal.aborted ? null : pageNumber;
+    }
+  }
+
+  return null;
 }
 
 /** Separate text-node ranges avoid highlighting whole marked-content containers. */

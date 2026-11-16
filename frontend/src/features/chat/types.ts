@@ -22,6 +22,7 @@ export interface ChatMessage {
   content: string;
   sources?: ResearchSource[];
   pending?: boolean;
+  startedAt?: number;
   progress?: string;
   sourceProgress?: ResearchSourceProgress;
   researchMode?: ResearchMode;

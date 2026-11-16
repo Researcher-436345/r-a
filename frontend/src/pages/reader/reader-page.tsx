@@ -195,6 +195,9 @@ export function ReaderPage() {
   };
 
   const handlePageCite = (page: number, quote?: string) => {
+    if (!quote) {
+      return;
+    }
     focusPassage(page, null, { quote });
   };
 
@@ -571,6 +574,10 @@ export function ReaderPage() {
         onTextSelect={handleTextSelect}
         focusAnnotation={flashFocus}
         onFocusComplete={() => setFlashFocus(null)}
+        onFocusError={() => {
+          setFlashFocus(null);
+          showToast(locale === 'ru' ? 'Не удалось найти цитату в тексте PDF' : 'Could not find the quote in the PDF text');
+        }}
         activeHighlight={
           selection
             ? { page: selection.page, rect: selection.rect, color: highlightColor }

@@ -16,7 +16,7 @@ async function loadHelper(path) {
 }
 
 const { normalizeMathMarkdown, stripSourcesFooter } = await loadHelper('../src/shared/lib/markdown.ts');
-const { locateQuote } = await loadHelper('../src/features/reader/quote-location.ts');
+const { locateQuote, findQuotePage } = await loadHelper('../src/features/reader/quote-location.ts');
 const vite = await createServer({
   configFile: false,
   esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
@@ -26,6 +26,14 @@ const vite = await createServer({
 after(() => vite.close());
 const { MarkdownMessage } = await vite.ssrLoadModule('/src/features/chat/components/markdown-message.tsx');
 const { RichText, linkifyPageCites } = await vite.ssrLoadModule('/src/shared/ui/rich-text.tsx');
+// The page imports the browser API URL at module load; these SSR tests make no requests.
+globalThis.window = { location: new URL('http://localhost:5180') };
+let PendingResearchMessage;
+try {
+  ({ PendingResearchMessage } = await vite.ssrLoadModule('/src/pages/chat/chat-page.tsx'));
+} finally {
+  delete globalThis.window;
+}
 
 test('chat renders both TeX delimiter styles and dollar math as KaTeX', () => {
   const content = String.raw`Noise \(z\), sample $x_1$.
@@ -61,6 +69,35 @@ test('page citation chips preserve the entire quote in the navigation target', (
   const html = renderToStaticMarkup(createElement(RichText, { onPageCite: () => {} }, `Evidence [p.1 «${quote}»].`));
   assert.match(html, /class="rich-text__page-cite"/);
   assert.match(html, new RegExp(`title="${quote}"`));
+});
+
+test('page numbers without a passage never become clickable citation chips', () => {
+  const html = renderToStaticMarkup(createElement(RichText, { onPageCite: () => {} },
+    'See [p.1], [[p:2]], and [page](#cite-page-3).'));
+  assert.doesNotMatch(html, /rich-text__page-cite|<button|href="#cite-page/);
+  assert.match(html, /стр\. 1/);
+  assert.match(html, /стр\. 2/);
+});
+
+test('deep research elapsed time survives remounting and resets only for a new request', (t) => {
+  const startedAt = Date.parse('2026-11-16T17:00:00Z');
+  let now = startedAt + 83_000;
+  t.mock.method(Date, 'now', () => now);
+  const renderPending = (start) => renderToStaticMarkup(createElement(PendingResearchMessage, {
+    locale: 'ru', mode: 'deep', startedAt: start,
+  }));
+  assert.match(renderPending(startedAt), /1:23/);
+  now += 120_000;
+  assert.match(renderPending(startedAt), /3:23/);
+  assert.match(renderPending(now), /0:00/);
+});
+
+test('a recovered research uses the server start time on the first render', (t) => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-11-16T17:04:10Z'));
+  const html = renderToStaticMarkup(createElement(PendingResearchMessage, {
+    locale: 'ru', mode: 'deep', startedAt: Date.parse('2026-11-16T17:00:00Z'),
+  }));
+  assert.match(html, /4:10/);
 });
 
 test('math support preserves tables, custom article links and code', () => {
@@ -108,4 +145,34 @@ test('citation offsets survive ligatures, curly punctuation and Unicode', () => 
   });
   assert.equal(locateQuote(['Different text'], 'missing phrase'), null);
   assert.equal(locateQuote(['Different text'], '…'), null);
+  assert.deepEqual(locateQuote(['An e\u0301tude'], 'étude'), {
+    start: { index: 0, offset: 3 }, end: { index: 0, offset: 9 },
+  });
+});
+
+test('PDF citation resolves the actual passage when its page label is wrong', async () => {
+  const visited = [];
+  const document = {
+    numPages: 3,
+    async getPage(page) {
+      visited.push(page);
+      return { async getTextContent() {
+        return { items: [{ str: page === 3 ? 'delay, avoid, or aban-' : 'Different content' }, { str: 'don health behaviors' }] };
+      } };
+    },
+  };
+  const page = await findQuotePage(document, 2, 'delay, avoid, or abandon health behaviors', new AbortController().signal);
+  assert.equal(page, 3);
+  assert.deepEqual(visited, [2, 1, 3]);
+});
+
+test('PDF citation never falls back to an unverified page', async () => {
+  const document = {
+    numPages: 1,
+    async getPage() { return { async getTextContent() { return { items: [{ str: 'Different content' }] }; } }; },
+  };
+  assert.equal(await findQuotePage(document, 1, 'missing phrase', new AbortController().signal), null);
+  const cancelled = new AbortController();
+  cancelled.abort();
+  assert.equal(await findQuotePage({ numPages: 1, getPage() { throw Error('Must not load a cancelled citation'); } }, 1, 'phrase', cancelled.signal), null);
 });

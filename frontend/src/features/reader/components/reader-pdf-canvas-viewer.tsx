@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 import { hexToRgba, toNormalizedRect } from '../highlight-colors';
-import { findQuoteRanges } from '../quote-location';
+import { findQuotePage, findQuoteRanges } from '../quote-location';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -44,6 +44,7 @@ interface ReaderPdfCanvasViewerProps {
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
+  onFocusError?: () => void;
   /** Постоянная подсветка активного выделения (пока открыт попап) */
   activeHighlight?: {
     page: number;
@@ -67,6 +68,7 @@ interface ReaderPdfPageProps {
   highlightColor?: string | null;
   quoteFocus?: ReaderAnnotationFocus | null;
   onQuoteFocusComplete?: () => void;
+  onQuoteFocusError?: () => void;
 }
 
 interface ReaderPdfPageSize {
@@ -109,17 +111,51 @@ export function ReaderPdfCanvasViewer({
   onTextSelect,
   focusAnnotation,
   onFocusComplete,
+  onFocusError,
   activeHighlight = null,
 }: ReaderPdfCanvasViewerProps) {
   const documentRef = useRef<HTMLDivElement | null>(null);
   const onFocusCompleteRef = useRef(onFocusComplete);
   onFocusCompleteRef.current = onFocusComplete;
+  const onFocusErrorRef = useRef(onFocusError);
+  onFocusErrorRef.current = onFocusError;
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageNumbers, setPageNumbers] = useState<number[]>([]);
   const [defaultPageSize, setDefaultPageSize] = useState<ReaderPdfPageSize | null>(null);
   const [hasError, setHasError] = useState(false);
   /** Подсветка стартует только когда целевая страница реально видна */
   const [visibleHighlight, setVisibleHighlight] = useState<ReaderAnnotationFocus | null>(null);
+  const [citationFocus, setCitationFocus] = useState<ReaderAnnotationFocus | null>(null);
+
+  useEffect(() => {
+    setCitationFocus(null);
+
+    if (!focusAnnotation?.quote || !pdf) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void findQuotePage(pdf, focusAnnotation.page, focusAnnotation.quote, controller.signal)
+      .then((page) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (page === null) {
+          onFocusErrorRef.current?.();
+          return;
+        }
+
+        setCitationFocus({ ...focusAnnotation, page });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          onFocusErrorRef.current?.();
+        }
+      });
+
+    return () => controller.abort();
+  }, [focusAnnotation, pdf]);
 
   useEffect(() => {
     let isMounted = true;
@@ -445,11 +481,13 @@ export function ReaderPdfCanvasViewer({
           scale={scale}
           defaultSize={defaultPageSize}
           renderImmediately={
-            pageNumber === 1 || focusAnnotation?.page === pageNumber
+            pageNumber === 1 || citationFocus?.page === pageNumber ||
+            (!focusAnnotation?.quote && focusAnnotation?.page === pageNumber)
           }
           onNavigateToDestination={navigateToDestination}
-          quoteFocus={focusAnnotation?.page === pageNumber ? focusAnnotation : null}
+          quoteFocus={citationFocus?.page === pageNumber ? citationFocus : null}
           onQuoteFocusComplete={onFocusComplete}
+          onQuoteFocusError={onFocusError}
           highlightRect={
             activeHighlight?.page === pageNumber
               ? activeHighlight.rect
@@ -495,6 +533,7 @@ function ReaderPdfPage({
   highlightColor = null,
   quoteFocus = null,
   onQuoteFocusComplete,
+  onQuoteFocusError,
 }: ReaderPdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -508,6 +547,8 @@ function ReaderPdfPage({
   const [quoteRects, setQuoteRects] = useState<ReaderTextSelection['rect'][]>([]);
   const onQuoteFocusCompleteRef = useRef(onQuoteFocusComplete);
   onQuoteFocusCompleteRef.current = onQuoteFocusComplete;
+  const onQuoteFocusErrorRef = useRef(onQuoteFocusError);
+  onQuoteFocusErrorRef.current = onQuoteFocusError;
 
   useEffect(() => {
     setQuoteRects([]);
@@ -527,6 +568,12 @@ function ReaderPdfPage({
     const ranges = findQuoteRanges(textLayer, quoteFocus.quote);
     const rects = ranges.flatMap((range) => Array.from(range.getClientRects()))
       .filter((rect) => rect.width > 0 && rect.height > 0);
+
+    if (!rects.length) {
+      onQuoteFocusErrorRef.current?.();
+      return;
+    }
+
     setQuoteRects(rects.map((rect) => toNormalizedRect(rect, pageBounds)));
 
     const viewport = page.closest<HTMLElement>('.reader-pdf-frame-wrap');
@@ -539,8 +586,6 @@ function ReaderPdfPage({
         left: viewport.scrollLeft + firstRect.left - viewportBounds.left - viewport.clientWidth / 2,
         behavior: 'smooth',
       });
-    } else {
-      page.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     const timer = window.setTimeout(() => {

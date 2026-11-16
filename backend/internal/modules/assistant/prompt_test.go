@@ -1,6 +1,18 @@
 package assistant
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestCitationPromptsRequireVerbatimPassages(t *testing.T) {
+	for name, prompt := range map[string]string{"chat": chatSystemPrompt, "summary": summarySystemPrompt} {
+		if !strings.Contains(prompt, "Every citation must include") ||
+			!strings.Contains(prompt, "Never use plain [p.N]") {
+			t.Fatalf("%s citations must identify an exact passage", name)
+		}
+	}
+}
 
 func TestEstimateTokens(t *testing.T) {
 	if EstimateTokens("") != 0 {

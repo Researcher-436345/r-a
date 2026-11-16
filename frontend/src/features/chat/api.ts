@@ -31,6 +31,7 @@ export interface ResearchChat extends ResearchChatSummary {
   research?: {
     id: string;
     status: 'running' | 'completed' | 'failed';
+    created_at: string;
     error_message?: string;
   };
 }

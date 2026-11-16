@@ -40,6 +40,7 @@ interface ReaderPdfViewerProps {
   onTextSelect?: (selection: ReaderTextSelection) => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
+  onFocusError?: () => void;
   activeHighlight?: {
     page: number;
     rect: { x: number; y: number; w: number; h: number };
@@ -78,6 +79,7 @@ export function ReaderPdfViewer({
   onTextSelect,
   focusAnnotation,
   onFocusComplete,
+  onFocusError,
   activeHighlight = null,
 }: ReaderPdfViewerProps) {
   const { locale } = useI18n();
@@ -358,6 +360,7 @@ export function ReaderPdfViewer({
             onTextSelect={onTextSelect}
             focusAnnotation={focusAnnotation}
             onFocusComplete={onFocusComplete}
+            onFocusError={onFocusError}
             activeHighlight={activeHighlight}
           />
         </div>

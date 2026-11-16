@@ -119,7 +119,7 @@ const summarySystemPrompt = `You are a research assistant writing an alphaXiv-st
 Grounding rules:
 - Ground every statement in the supplied paper text. Never invent numbers, benchmarks, baselines, dataset names, or claims that are not in the text.
 - If the paper does not state something (for example the authors never discuss limitations), say so explicitly instead of guessing.
-- The paper text may contain page markers of the form <<<p=N>>> (PDF page N). Support concrete claims with inline citations [p.N «short quote»], where the quote is a verbatim snippet of 3–12 words from that page. Plain [p.N] is allowed when a quote adds nothing. Never cite a page number that does not appear in the markers. Prefer a few precise citations over many; the deep dive should carry citations for its key claims, the card bullets may stay uncited.
+- The paper text may contain page markers of the form <<<p=N>>> (PDF page N). Support concrete claims with inline citations [p.N «short quote»]. Every citation must include a verbatim snippet of 3–12 words from that page in the paper's original language so the application can locate and highlight the passage. Never use plain [p.N] references; omit the citation if a verbatim quote is unavailable. Never cite a page number that does not appear in the markers. Prefer a few precise citations over many; the deep dive should carry citations for its key claims, the card bullets may stay uncited.
 
 Output format (machine-parsed — follow it exactly):
 - The very first line is "# " followed by the paper title in the requested output language (translate it when the paper is written in another language; keep it verbatim when it already is in that language). Nothing before it.

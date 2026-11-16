@@ -56,3 +56,17 @@ test('an old account finishing in the background cannot populate the next accoun
   assert.notEqual(previous, current);
   assert.deepEqual(current.getSnapshot().messages, []);
 });
+
+test('pending request retains its start time when leaving and returning to the chat', () => {
+  const store = getConversationStore('deep:timer');
+  const startedAt = Date.parse('2026-11-16T17:00:00Z');
+  store.setMessages([{ id: 'pending', pending: true, startedAt }]);
+  store.setIsSending(true);
+  const unsubscribe = store.subscribe(() => {});
+  unsubscribe();
+  getConversationStore('deep:another-chat').setMessages([]);
+  const remounted = getConversationStore('deep:timer');
+  assert.equal(remounted.getSnapshot().messages[0].startedAt, startedAt);
+  remounted.hydrate([{ id: 'stale', startedAt: Date.now() }], remounted.revision);
+  assert.equal(remounted.getSnapshot().messages[0].startedAt, startedAt);
+});

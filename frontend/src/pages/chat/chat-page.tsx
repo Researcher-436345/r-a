@@ -243,19 +243,22 @@ function foundSourcesLabel(locale: Locale, count: number) {
   return `Найдено ${count} ${noun}`;
 }
 
-function PendingResearchMessage({
+export function PendingResearchMessage({
   locale,
   progress,
   sourceProgress,
   mode,
+  startedAt,
 }: {
   locale: Locale;
   progress?: string;
   sourceProgress?: ResearchSourceProgress;
   mode?: ResearchMode;
+  startedAt?: number;
 }) {
   const [statusIndex, setStatusIndex] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [now, setNow] = useState(Date.now);
+  const elapsedSeconds = startedAt === undefined ? 0 : Math.max(0, Math.floor((now - startedAt) / 1_000));
   const isDeep = mode === 'deep';
   const statuses = chatCopy[locale].pendingStatuses;
 
@@ -275,13 +278,13 @@ function PendingResearchMessage({
     if (!isDeep) {
       return;
     }
-    const startedAt = Date.now();
+    setNow(Date.now());
     const interval = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+      setNow(Date.now());
     }, 1_000);
 
     return () => window.clearInterval(interval);
-  }, [isDeep]);
+  }, [isDeep, startedAt]);
 
   if (isDeep) {
     const duration = formatResearchDuration(elapsedSeconds);
@@ -654,6 +657,7 @@ function ChatMessageView({
         progress={message.progress}
         sourceProgress={message.sourceProgress}
         mode={message.researchMode}
+        startedAt={message.startedAt}
       />
     );
   }
@@ -898,6 +902,7 @@ export function ChatPage() {
             content: '',
             pending: true,
             researchMode: 'deep',
+            startedAt: Date.parse(storedChat.research!.created_at),
             progress: locale === 'ru' ? 'Исследование продолжается. Проверяю готовность отчёта.' : 'Research is running. Checking the report status.',
           });
         } else if (storedChat.research?.status === 'failed' && storedMessages[storedMessages.length - 1]?.id === storedChat.research.id) {
@@ -930,6 +935,7 @@ export function ChatPage() {
               content: '',
               pending: true,
               researchMode: routeMode,
+              startedAt: Date.now(),
             },
           ]);
           const now = new Date().toISOString();
@@ -1023,6 +1029,7 @@ export function ChatPage() {
         content: '',
         pending: true,
         researchMode: responseMode,
+        startedAt: Date.now(),
       },
     ]);
     setDraft('');

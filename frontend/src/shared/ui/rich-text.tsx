@@ -95,6 +95,9 @@ export function RichText({
       if (match && onPageCite) {
         const page = Number(match[1]);
         const quote = decodeCiteQuote(match[2]);
+        if (!quote) {
+          return <span>{linkChildren}</span>;
+        }
         return (
           <button
             type="button"
