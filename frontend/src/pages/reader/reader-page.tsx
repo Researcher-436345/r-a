@@ -173,7 +173,7 @@ export function ReaderPage() {
   const focusPassage = (
     page: number,
     rect: { x: number; y: number; w: number; h: number } | null | undefined,
-    options?: { rectUnit?: 'px' | 'ratio'; color?: string | null },
+    options?: { rectUnit?: 'px' | 'ratio'; color?: string | null; quote?: string },
   ) => {
     // Without a rendered PDF there is no page to jump to; a stale focus would fire on a later load.
     if (!page || page < 1 || pdfState.kind !== 'ready') {
@@ -186,6 +186,7 @@ export function ReaderPage() {
       rect: rect ?? null,
       rectUnit: options?.rectUnit ?? 'px',
       color: options?.color,
+      quote: options?.quote,
     });
   };
 
@@ -193,8 +194,8 @@ export function ReaderPage() {
     focusPassage(attachment.page, attachment.rect ?? null, { rectUnit: 'ratio' });
   };
 
-  const handlePageCite = (page: number, _quote?: string) => {
-    focusPassage(page, null);
+  const handlePageCite = (page: number, quote?: string) => {
+    focusPassage(page, null, { quote });
   };
 
   useEffect(() => {

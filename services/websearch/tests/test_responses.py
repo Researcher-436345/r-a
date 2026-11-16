@@ -206,3 +206,25 @@ def test_expired_response_releases_research_instead_of_waiting_forever(monkeypat
 
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
+
+
+def test_recovered_research_keeps_inline_citations_without_a_sources_appendix(monkeypatch):
+
+    answer = "См. [Paper](https://arxiv.org/abs/2601.00001)"
+    annotation = {
+        "type": "url_citation", "url": "https://arxiv.org/abs/2601.00001",
+        "title": "Paper", "start_index": 4, "end_index": len(answer),
+    }
+
+    async def saved_response(_settings, _response_id):
+
+        return completed(answer, [annotation])["response"]
+
+    monkeypatch.setattr(main, "response_request", saved_response)
+    response = TestClient(main.app).get("/v1/search/responses/resp_saved")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "completed"
+    assert result["content"] == answer
+    assert result["sources"][0]["url"] == annotation["url"]

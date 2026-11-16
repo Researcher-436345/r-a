@@ -6,10 +6,7 @@ from fastapi.testclient import TestClient
 import app.main as main
 from app.main import (
     Source,
-    answer_cites_sources,
-    has_linked_sources_section,
     is_non_paper_url,
-    markdown_sources,
     merge_sources,
     system_prompt,
 )
@@ -139,43 +136,6 @@ def test_merge_sources_drops_every_index_page() -> None:
     assert [source.url for source in sources] == PAPER_PAGES
 
 
-def test_markdown_sources_skips_index_pages() -> None:
-    rendered = markdown_sources(
-        [
-            Source(title="arXiv cs.CV", url="https://arxiv.org/list/cs.CV/recent", domain="arxiv.org"),
-            Source(
-                title="An Introduction to Convolutional Neural Networks",
-                url="https://arxiv.org/abs/1511.08458",
-                domain="arxiv.org",
-            ),
-        ]
-    )
-    assert rendered == (
-        "\n\n## Sources\n\n"
-        "1. [An Introduction to Convolutional Neural Networks](https://arxiv.org/abs/1511.08458)"
-    )
-    assert markdown_sources(
-        [Source(title="OpenReview", url="https://openreview.net/", domain="openreview.net")]
-    ) == ""
-
-
-def test_sources_section_of_index_pages_only_is_not_enough() -> None:
-    only_index = (
-        "Answer\n\n## Источники\n\n"
-        "[Advances in Neural Information Processing Systems 37]"
-        "(https://proceedings.neurips.cc/paper_files/paper/2024)"
-    )
-    assert not has_linked_sources_section(only_index)
-    with_paper = only_index + "\n[[1706.03762] Attention Is All You Need](https://arxiv.org/abs/1706.03762)"
-    assert has_linked_sources_section(with_paper)
-
-
-def test_small_talk_does_not_cite_sources() -> None:
-    assert not answer_cites_sources("Привет! Какой исследовательский вопрос разберём?")
-    assert answer_cites_sources("Метод описан в обзоре [1].")
-    assert answer_cites_sources("[An Introduction to CNNs](https://arxiv.org/abs/1511.08458)")
-
-
 def stream_text(monkeypatch, events: list[tuple[str, object]], mode: str = "web") -> str:
     async def fake_provider_stream(_payload):
         for event in events:
@@ -210,7 +170,8 @@ def test_stream_payloads_never_carry_index_pages(monkeypatch) -> None:
     assert "openreview.net/venues" not in text
     assert 'event: source_progress\ndata: {"count": 1,' in text
     assert 'event: sources\ndata: {"sources": [{"title": "An Introduction to CNNs"' in text
-    assert "1. [An Introduction to CNNs](https://arxiv.org/abs/1511.08458)" in text
+    assert "## Sources" not in text
+    assert 'event: delta\ndata: {"content": "Обзор свёрточных сетей [1]."}' in text
     assert 'event: done\ndata: {"status": "ok"}' in text
 
 
@@ -224,6 +185,26 @@ def test_small_talk_answer_gets_no_sources_section(monkeypatch) -> None:
     )
     assert "## Sources" not in text
     assert 'event: done\ndata: {"status": "ok"}' in text
+
+
+@pytest.mark.parametrize("mode", ["web", "deep"])
+def test_cited_answers_keep_inline_links_without_appending_a_sources_list(monkeypatch, mode) -> None:
+
+    answer = "См. [Attention Is All You Need](https://arxiv.org/abs/1706.03762)."
+    text = stream_text(
+        monkeypatch,
+        [
+            ("delta", "Черновик"),
+            ("replace", answer),
+            ("sources", [{"title": "Attention Is All You Need", "url": "https://arxiv.org/abs/1706.03762"}]),
+        ],
+        mode=mode,
+    )
+
+    assert "## Sources" not in text
+    assert f'event: replace\ndata: {{"content": "{answer}"}}' in text
+    assert text.count("event: delta") == 1
+    assert 'event: sources' in text
 
 
 def test_prompt_restricts_links_to_specific_papers() -> None:
@@ -261,13 +242,6 @@ def test_sources_keep_citation_numbers_after_dropping_index_pages() -> None:
     assert [source.citation for source in sources] == [1, 3]
     # The number is internal: the sources payload is unchanged.
     assert "citation" not in sources[0].model_dump()
-    rendered = markdown_sources(sources)
-    # [3] in the answer text must still name the third provider citation.
-    assert rendered == (
-        "\n\n## Sources\n\n"
-        "1\\. [arxiv.org](https://arxiv.org/abs/1706.03762)\n\n"
-        "3\\. [An Introduction to CNNs](https://arxiv.org/abs/1511.08458)"
-    )
 
 
 def test_repeated_citation_lists_do_not_duplicate_sources() -> None:
@@ -279,4 +253,3 @@ def test_repeated_citation_lists_do_not_duplicate_sources() -> None:
         ("https://arxiv.org/abs/1706.03762", 1),
         ("https://arxiv.org/abs/1511.08458", 2),
     ]
-    assert markdown_sources(sources).endswith("2. [arxiv.org](https://arxiv.org/abs/1511.08458)")

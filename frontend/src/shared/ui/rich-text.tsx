@@ -10,6 +10,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 import { useLocale } from '../i18n/i18n-context';
+import { normalizeMathMarkdown } from '../lib/markdown';
 
 interface RichTextProps {
   children: string;
@@ -21,15 +22,6 @@ interface RichTextProps {
   onPageCite?: (page: number, quote?: string) => void;
   /** Abstracts come from scraped pages and indexes: their images are not loaded. */
   allowImages?: boolean;
-}
-
-/** Soft-normalize common TeX delimiters so KaTeX can render arXiv-style abstracts. */
-export function normalizeMathMarkdown(input: string): string {
-  let text = input.replace(/\r\n/g, '\n');
-  // \( ... \) → $...$ and \[ ... \] → $$...$$
-  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_m, inner: string) => `$${inner}$`);
-  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_m, inner: string) => `$$${inner}$$`);
-  return text;
 }
 
 function encodeCiteQuote(quote: string): string {
@@ -50,7 +42,7 @@ function decodeCiteQuote(raw: string | undefined): string | undefined {
 
 /**
  * Turn [p.12] / [стр. 12] / [p.12 «quote»] / [p.9-10] / [[p:12]] into markdown links.
- * Quote is optional and only used for the chip label / future highlight.
+ * Quote is optional and used for the chip label and passage highlighting.
  * Диапазон страниц ведёт на первую: модели охотно пишут [p.9-10].
  * Лимит цитаты щедрый — модель нередко превышает запрошенные 3–12 слов,
  * а нераспознанная цитата разваливается в сырой текст прямо в ответе.

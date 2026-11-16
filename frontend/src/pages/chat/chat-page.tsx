@@ -8,6 +8,7 @@ import { attributeToResult, trackResultAction } from '../../shared/lib/analytics
 import { MOBILE_LAYOUT_QUERY } from '../../shared/lib/use-mobile-layout';
 import { ResponsivePanel } from '../../shared/ui/responsive-panel';
 import { copyText } from '../../shared/lib/clipboard';
+import { stripSourcesFooter } from '../../shared/lib/markdown';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
   ArrowUpRight,
@@ -547,6 +548,7 @@ function AssistantMessage({
   const analyticsRef = useResultAnalytics<HTMLElement>(feature, analyticsReady ? messageId : undefined, undefined, messageId);
   const [sourceStates, setSourceStates] = useState<Record<string, SourceState>>({});
   const copy = chatCopy[locale];
+  const visibleContent = stripSourcesFooter(content);
 
   useEffect(() => {
     if (!copied) {
@@ -558,7 +560,7 @@ function AssistantMessage({
 
   const handleCopy = async () => {
     try {
-      await copyText(content);
+      await copyText(visibleContent);
       if (analyticsReady) trackResultAction('result_copied', feature, messageId, undefined, messageId);
       setCopied(true);
     } catch {
@@ -590,7 +592,7 @@ function AssistantMessage({
   return (
     <article ref={analyticsRef} data-research-result-id={messageId} className="chat-message chat-message--assistant" aria-live="polite">
       <MarkdownMessage
-        content={content}
+        content={visibleContent}
         renderLink={({ href, children, anchorProps }) => {
           if (!/^https?:\/\//i.test(href)) {
             return <a {...anchorProps} href={href}>{children}</a>;

@@ -211,6 +211,7 @@ def system_prompt(mode: ResearchMode, current_date: date | None = None) -> str:
 - Последовательно раскрой контекст и терминологию, основные подходы и методологии, доказательства и результаты, сравнение работ, противоречия, ограничения и открытые вопросы.
 - Подкрепляй источниками каждое существенное фактическое утверждение и явно отделяй подтверждённые выводы от интерпретаций.
 - Заверши содержательными выводами и конкретными рекомендациями для дальнейшего чтения.
+- Если пользователь явно указал формат ответа (например, таблицу), соблюдай его в приоритетном порядке относительно требований к структуре выше; иначе используй обычный формат отчёта.
 """.strip()
     else:
         suffix = """
@@ -283,51 +284,6 @@ def merge_sources(current: list[Source], values: list[Any]) -> None:
                 existing.citation = source.citation
             if existing.title == existing.domain and source.title != source.domain:
                 existing.title = source.title
-
-
-SOURCES_HEADINGS = ("\n## sources", "\n## источники")
-MARKDOWN_LINK_URL_RE = re.compile(r"\]\((https?://[^\s)]+)\)")
-CITES_RE = re.compile(r"https?://|\[\d{1,3}\]")
-
-
-def answer_cites_sources(answer: str) -> bool:
-    """Small talk comes back with search results attached but with no links or
-    [n] markers; listing those results under a greeting is noise."""
-    return CITES_RE.search(answer) is not None
-
-
-def has_linked_sources_section(answer: str) -> bool:
-    lowered = answer.lower()
-    start = max(lowered.rfind(heading) for heading in SOURCES_HEADINGS)
-    if start < 0:
-        return False
-    # A section of index pages only still needs the real source list.
-    return any(
-        not is_non_paper_url(url) for url in MARKDOWN_LINK_URL_RE.findall(lowered[start:])
-    )
-
-
-def markdown_sources(sources: list[Source]) -> str:
-    papers = [source for source in sources if not is_non_paper_url(source.url)]
-    if not papers:
-        return ""
-    if all(source.citation is not None for source in papers):
-        numbered = sorted(((source.citation or 0, source) for source in papers), key=lambda item: item[0])
-    else:
-        numbered = list(enumerate(papers, start=1))
-    lines = ["", "", "## Sources", ""]
-    if [number for number, _ in numbered] == list(range(1, len(numbered) + 1)):
-        for number, source in numbered:
-            title = source.title.replace("[", "").replace("]", "")
-            lines.append(f"{number}. [{title}]({source.url})")
-        return "\n".join(lines)
-    # Dropped citations leave gaps; a markdown list would renumber the items
-    # 1..k, so each keeps its provider number as an escaped plain paragraph.
-    items = []
-    for number, source in numbered:
-        title = source.title.replace("[", "").replace("]", "")
-        items.append(f"{number}\\. [{title}]({source.url})")
-    return "\n".join(lines) + "\n" + "\n\n".join(items)
 
 
 def sse(event: str, payload: Any) -> str:
@@ -422,16 +378,6 @@ async def search_stream(body: SearchRequest, request: Request) -> StreamingRespo
                                 "sources": [source.model_dump() for source in sources[-3:]],
                             },
                         )
-            # Deltas are already sent and searchapi persists their concatenation,
-            # so links inside the text are not rewritten here (the frontend shows
-            # non-paper links as explicit external links). Only the appended
-            # section and the sources payload are guaranteed paper-only.
-            answer = "".join(answer_parts)
-            if answer_cites_sources(answer) and not has_linked_sources_section(answer):
-                suffix = markdown_sources(sources)
-                if suffix:
-                    answer_parts.append(suffix)
-                    yield sse("delta", {"content": suffix})
             if not "".join(answer_parts).strip():
                 raise RuntimeError("web search provider returned an empty response")
             yield sse("sources", {"sources": [source.model_dump() for source in sources]})
@@ -472,9 +418,6 @@ async def research_result(response_id: str) -> dict[str, Any]:
 
     sources: list[Source] = []
     merge_sources(sources, raw_sources)
-
-    if answer_cites_sources(answer) and not has_linked_sources_section(answer):
-        answer += markdown_sources(sources)
 
     return {"status": "completed", "content": answer, "sources": [source.model_dump() for source in sources]}
 

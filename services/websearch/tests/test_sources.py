@@ -7,8 +7,6 @@ import app.main as main
 from app.main import (
     SearchRequest,
     Source,
-    has_linked_sources_section,
-    markdown_sources,
     merge_sources,
     provider_body,
     system_prompt,
@@ -86,12 +84,12 @@ def test_deep_prompt_requests_full_report_without_compactness() -> None:
     assert "Не сокращай материал ради краткости" in deep_prompt
 
 
-def test_markdown_fallback_is_only_needed_without_linked_section() -> None:
-    source = Source(title="A [paper]", url="https://example.com/paper", domain="example.com")
-    rendered = markdown_sources([source])
-    assert rendered == "\n\n## Sources\n\n1. [A paper](https://example.com/paper)"
-    assert has_linked_sources_section(f"Answer{rendered}")
-    assert not has_linked_sources_section("Answer\n\n## Sources\n\nNo links")
+def test_only_deep_prompt_prioritizes_the_requested_output_format() -> None:
+
+    instruction = "Если пользователь явно указал формат ответа (например, таблицу), соблюдай его"
+
+    assert instruction in system_prompt("deep")
+    assert instruction not in system_prompt("web")
 
 
 def test_stream_exposes_text_and_structured_sources() -> None:

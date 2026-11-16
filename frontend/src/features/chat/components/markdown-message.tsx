@@ -1,6 +1,11 @@
+import 'katex/dist/katex.min.css';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+
+import { normalizeMathMarkdown } from '../../../shared/lib/markdown';
 
 export interface MarkdownLinkRenderProps {
   href: string;
@@ -24,7 +29,8 @@ export function MarkdownMessage({
   return (
     <div className={rootClassName}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         skipHtml
         components={{
           a({ node: _node, children, href, ...props }) {
@@ -46,7 +52,7 @@ export function MarkdownMessage({
           },
         }}
       >
-        {content}
+        {normalizeMathMarkdown(content)}
       </ReactMarkdown>
     </div>
   );

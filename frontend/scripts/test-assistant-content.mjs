@@ -1,0 +1,111 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { after, test } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import ts from 'typescript';
+import { createServer } from 'vite';
+
+async function loadHelper(path) {
+  const source = await readFile(new URL(path, import.meta.url), 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+  });
+
+  return import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString('base64')}`);
+}
+
+const { normalizeMathMarkdown, stripSourcesFooter } = await loadHelper('../src/shared/lib/markdown.ts');
+const { locateQuote } = await loadHelper('../src/features/reader/quote-location.ts');
+const vite = await createServer({
+  configFile: false,
+  esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
+  server: { middlewareMode: true },
+  appType: 'custom',
+});
+after(() => vite.close());
+const { MarkdownMessage } = await vite.ssrLoadModule('/src/features/chat/components/markdown-message.tsx');
+const { RichText, linkifyPageCites } = await vite.ssrLoadModule('/src/shared/ui/rich-text.tsx');
+
+test('chat renders both TeX delimiter styles and dollar math as KaTeX', () => {
+  const content = String.raw`Noise \(z\), sample $x_1$.
+
+\[x_t=\alpha_t z+\beta_t x_1\]`;
+  const html = renderToStaticMarkup(createElement(MarkdownMessage, { content }));
+  assert.equal((html.match(/<math /g) ?? []).length, 3);
+  assert.match(html, /class="katex-display"/);
+  assert.doesNotMatch(html, /katex-error/);
+});
+
+test('normalizing math preserves inline, fenced and unfinished code', () => {
+  const code = '`\\(x\\)`\n\n```python\nvalue = "\\[x\\]"\n```\n';
+  assert.equal(normalizeMathMarkdown(code), code);
+  assert.equal(normalizeMathMarkdown('~~~text\n\\(x\\)\n~~~~\n\\(y\\)'), '~~~text\n\\(x\\)\n~~~~\n$y$');
+  assert.equal(normalizeMathMarkdown('```text\n\\(x\\)'), '```text\n\\(x\\)');
+});
+
+test('article chat and overview render display equations without consuming TeX escapes', () => {
+  const content = String.raw`\[x_t=\alpha_t z+\beta_t x_1\]
+
+where \(z\) is noise and \(\alpha_t,\beta_t\) are the schedule.`;
+  const html = renderToStaticMarkup(createElement(RichText, null, content));
+  assert.equal((html.match(/<math /g) ?? []).length, 3);
+  assert.match(html, /class="katex-display"/);
+  assert.doesNotMatch(html, /katex-error/);
+});
+
+test('page citation chips preserve the entire quote in the navigation target', () => {
+  const quote = 'delay, avoid, or abandon health behaviors';
+  const source = linkifyPageCites(`Evidence [p.1 «${quote}»], then [стр. 2].`);
+  assert.match(source, /#cite-page-1\?q=delay%2C\+avoid%2C\+or\+abandon\+health\+behaviors/);
+  const html = renderToStaticMarkup(createElement(RichText, { onPageCite: () => {} }, `Evidence [p.1 «${quote}»].`));
+  assert.match(html, /class="rich-text__page-cite"/);
+  assert.match(html, new RegExp(`title="${quote}"`));
+});
+
+test('math support preserves tables, custom article links and code', () => {
+  const content = '| Formula | Paper |\n| --- | --- |\n| $x^2$ | [Paper](https://arxiv.org/abs/1706.03762) |\n\n`\\(code\\)`';
+  const html = renderToStaticMarkup(createElement(MarkdownMessage, {
+    content,
+    renderLink: ({ href, children }) => createElement('a', { href, 'data-paper': true }, children),
+  }));
+  assert.match(html, /chat-markdown__table-wrap/);
+  assert.match(html, /data-paper="true"/);
+  assert.match(html, /<code>\\\(code\\\)<\/code>/);
+  assert.equal((html.match(/<math /g) ?? []).length, 1);
+});
+
+test('old generated source appendices disappear while inline links remain', () => {
+  const answer = 'See [Paper](https://arxiv.org/abs/1706.03762).';
+  assert.equal(stripSourcesFooter(`${answer}\n\n## Sources\n\n1. [Paper](https://arxiv.org/abs/1706.03762)`), answer);
+  assert.equal(stripSourcesFooter(`${answer}\n\n## Sources\n\n1\\. [One](https://example.org/one)\n\n3\\. [Three](https://example.org/three)`), answer);
+  assert.equal(stripSourcesFooter(`${answer}\n\n## Источники\n\n1. [Paper](https://example.org/paper)`), answer);
+});
+
+test('requested tables and sections with substantive prose remain intact', () => {
+  for (const answer of [
+    '## Sources\n\n| Paper | Result |\n| --- | --- |\n| [Paper](https://example.org/paper) | 42 |',
+    '## Sources\n\n1. [Paper](https://example.org/paper) — explains the method.',
+    '## Sources\n\n1. [Paper](https://example.org/paper)',
+    '## Sources\n\n1. [Paper](https://example.org/paper)\n\n## Conclusion\nUseful result.',
+  ]) {
+    assert.equal(stripSourcesFooter(answer), answer);
+  }
+});
+
+test('citation lookup spans PDF text nodes and ignores line breaks and hyphenation', () => {
+  const texts = ['Intro. delay, avoid, or aban-', 'don health behav', 'iors. More text.'];
+  const match = locateQuote(texts, 'delay, avoid, or abandon health behaviors');
+  assert.deepEqual(match, { start: { index: 0, offset: 7 }, end: { index: 2, offset: 4 } });
+});
+
+test('citation offsets survive ligatures, curly punctuation and Unicode', () => {
+  assert.deepEqual(locateQuote(['An eﬀective “model”'], 'effective model'), {
+    start: { index: 0, offset: 3 }, end: { index: 0, offset: 18 },
+  });
+  assert.deepEqual(locateQuote(['😀 Важный ', 'ре-зультат.'], 'важный результат'), {
+    start: { index: 0, offset: 3 }, end: { index: 1, offset: 10 },
+  });
+  assert.equal(locateQuote(['Different text'], 'missing phrase'), null);
+  assert.equal(locateQuote(['Different text'], '…'), null);
+});

@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 import { hexToRgba, toNormalizedRect } from '../highlight-colors';
+import { findQuoteRanges } from '../quote-location';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -30,6 +31,7 @@ export interface ReaderAnnotationFocus {
   /** px — старые заметки; ratio — текущее выделение */
   rectUnit?: 'px' | 'ratio';
   color?: string | null;
+  quote?: string;
 }
 
 interface ReaderPdfCanvasViewerProps {
@@ -63,6 +65,8 @@ interface ReaderPdfPageProps {
   /** ratio — доли страницы; px — абсолютные координаты */
   highlightUnit?: 'px' | 'ratio';
   highlightColor?: string | null;
+  quoteFocus?: ReaderAnnotationFocus | null;
+  onQuoteFocusComplete?: () => void;
 }
 
 interface ReaderPdfPageSize {
@@ -334,7 +338,7 @@ export function ReaderPdfCanvasViewer({
   };
 
   useEffect(() => {
-    if (!focusAnnotation) {
+    if (!focusAnnotation || focusAnnotation.quote) {
       setVisibleHighlight(null);
       return;
     }
@@ -444,6 +448,8 @@ export function ReaderPdfCanvasViewer({
             pageNumber === 1 || focusAnnotation?.page === pageNumber
           }
           onNavigateToDestination={navigateToDestination}
+          quoteFocus={focusAnnotation?.page === pageNumber ? focusAnnotation : null}
+          onQuoteFocusComplete={onFocusComplete}
           highlightRect={
             activeHighlight?.page === pageNumber
               ? activeHighlight.rect
@@ -487,6 +493,8 @@ function ReaderPdfPage({
   highlightPersistent = false,
   highlightUnit = 'px',
   highlightColor = null,
+  quoteFocus = null,
+  onQuoteFocusComplete,
 }: ReaderPdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -496,6 +504,52 @@ function ReaderPdfPage({
   const [links, setLinks] = useState<ReaderPdfLink[]>([]);
   const [hasRenderedPage, setHasRenderedPage] = useState(false);
   const [hasRenderError, setHasRenderError] = useState(false);
+  const [renderedTextScale, setRenderedTextScale] = useState<number | null>(null);
+  const [quoteRects, setQuoteRects] = useState<ReaderTextSelection['rect'][]>([]);
+  const onQuoteFocusCompleteRef = useRef(onQuoteFocusComplete);
+  onQuoteFocusCompleteRef.current = onQuoteFocusComplete;
+
+  useEffect(() => {
+    setQuoteRects([]);
+
+    if (!quoteFocus?.quote || renderedTextScale !== scale) {
+      return;
+    }
+
+    const page = pageRef.current;
+    const textLayer = textLayerRef.current;
+
+    if (!page || !textLayer) {
+      return;
+    }
+
+    const pageBounds = page.getBoundingClientRect();
+    const ranges = findQuoteRanges(textLayer, quoteFocus.quote);
+    const rects = ranges.flatMap((range) => Array.from(range.getClientRects()))
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    setQuoteRects(rects.map((rect) => toNormalizedRect(rect, pageBounds)));
+
+    const viewport = page.closest<HTMLElement>('.reader-pdf-frame-wrap');
+    const firstRect = rects[0];
+
+    if (viewport && firstRect) {
+      const viewportBounds = viewport.getBoundingClientRect();
+      viewport.scrollTo({
+        top: viewport.scrollTop + firstRect.top - viewportBounds.top - viewport.clientHeight / 2,
+        left: viewport.scrollLeft + firstRect.left - viewportBounds.left - viewport.clientWidth / 2,
+        behavior: 'smooth',
+      });
+    } else {
+      page.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const timer = window.setTimeout(() => {
+      setQuoteRects([]);
+      onQuoteFocusCompleteRef.current?.();
+    }, 4200);
+
+    return () => window.clearTimeout(timer);
+  }, [quoteFocus, renderedTextScale, scale]);
 
   useEffect(() => {
     if (defaultSize && !hasRenderedPage) {
@@ -545,6 +599,7 @@ function ReaderPdfPage({
     let renderTask: RenderTask | null = null;
     let textLayerTask: TextLayerRenderTask | null = null;
     setHasRenderError(false);
+    setRenderedTextScale(null);
 
     void pdf.getPage(pageNumber).then(async (page) => {
       if (isCancelled) {
@@ -645,6 +700,8 @@ function ReaderPdfPage({
           if (isCancelled) {
             return;
           }
+
+          setRenderedTextScale(scale);
 
           // Mozilla: .endOfContent ограничивает selection в Chrome/Safari при drag по пустоте
           const endOfContent = document.createElement('div');
@@ -789,6 +846,19 @@ function ReaderPdfPage({
       {shouldRender ? (
         <div ref={textLayerRef} className="textLayer reader-pdf-page__text-layer" />
       ) : null}
+      {quoteRects.map((rect, index) => (
+        <div
+          key={`${quoteFocus?.id}-${index}`}
+          className="reader-pdf-page__highlight reader-pdf-page__highlight--citation"
+          aria-hidden="true"
+          style={{
+            left: `${rect.x * 100}%`,
+            top: `${rect.y * 100}%`,
+            width: `${rect.w * 100}%`,
+            height: `${rect.h * 100}%`,
+          }}
+        />
+      ))}
       {highlightRect && highlightRect.w > 0 && highlightRect.h > 0 ? (
         <div
           key={highlightKey ?? 'highlight'}
