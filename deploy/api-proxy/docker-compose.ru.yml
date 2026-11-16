@@ -1,0 +1,33 @@
+# Подключается последним, вместе с основным, prod и monitoring Compose-файлами.
+x-api-proxy-host: &api-proxy-host
+  extra_hosts:
+    - "api-proxy.internal:host-gateway"
+
+x-api-proxy-env: &api-proxy-env
+  OPENAI_BASE_URL: http://api-proxy.internal:18080/openai/v1
+  LLM_BASE_URL: http://api-proxy.internal:18080/openai/v1
+  WEBSEARCH_LLM_BASE_URL: http://api-proxy.internal:18080/openai/v1
+  OPENROUTER_BASE_URL: http://api-proxy.internal:18080/openrouter/api/v1
+  TRANSLATION_BASE_URL: http://api-proxy.internal:18080/openrouter/api/v1
+  FEED_TRANSLATION_BASE_URL: http://api-proxy.internal:18080/openrouter/api/v1
+
+services:
+  assistant:
+    <<: *api-proxy-host
+    environment:
+      <<: *api-proxy-env
+
+  translator:
+    <<: *api-proxy-host
+    environment:
+      <<: *api-proxy-env
+
+  feed:
+    <<: *api-proxy-host
+    environment:
+      <<: *api-proxy-env
+
+  websearch:
+    <<: *api-proxy-host
+    environment:
+      <<: *api-proxy-env

@@ -1,0 +1,33 @@
+[Unit]
+Description=Researcher API proxy SSH tunnel
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=api-proxy-tunnel
+Group=api-proxy-tunnel
+EnvironmentFile=/etc/researcher-api-proxy/tunnel.env
+ExecStart=/usr/bin/ssh -F /dev/null -NT \
+    -o BatchMode=yes \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile=/etc/researcher-api-proxy/known_hosts \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=15 \
+    -o ServerAliveCountMax=3 \
+    -o ConnectTimeout=10 \
+    -i /etc/researcher-api-proxy/id_ed25519 \
+    -L ${API_PROXY_BIND_ADDRESS}:18080:127.0.0.1:18080 \
+    ${API_PROXY_SSH_TARGET}
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
