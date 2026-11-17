@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   LoaderCircle,
+  Link2,
   Minus,
   Plus,
 } from 'lucide-react';
@@ -38,6 +39,7 @@ interface ReaderPdfViewerProps {
   onBeforeOpenFolders?: () => boolean;
   onFolderSelect?: (folderId: string) => Promise<void>;
   onTextSelect?: (selection: ReaderTextSelection) => void;
+  onCopyLink?: () => void;
   focusAnnotation?: ReaderAnnotationFocus | null;
   onFocusComplete?: () => void;
   onFocusError?: () => void;
@@ -77,6 +79,7 @@ export function ReaderPdfViewer({
   onFolderSelect,
   onBeforeOpenFolders,
   onTextSelect,
+  onCopyLink,
   focusAnnotation,
   onFocusComplete,
   onFocusError,
@@ -308,18 +311,31 @@ export function ReaderPdfViewer({
           <span>{pageCount > 0 ? `${currentPage} / ${pageCount}` : '—'}</span>
         </div>
 
-        {pdfUrl && <div className="reader-toolbar__divider reader-toolbar__divider--group" />}
-        {pdfUrl ? (
-          <a
-            className="reader-download-button"
-            href={pdfUrl}
-            download
-            title={text.download}
-            aria-label={text.download}
-          >
-            <Download aria-hidden="true" size={17} strokeWidth={2} />
-          </a>
-        ) : null}
+        {(pdfUrl || onCopyLink) && <div className="reader-toolbar__divider reader-toolbar__divider--group" />}
+        <div className="reader-toolbar__actions">
+          {onCopyLink ? (
+            <button
+              className="reader-download-button"
+              type="button"
+              onClick={onCopyLink}
+              title={locale === 'ru' ? 'Скопировать ссылку на статью' : 'Copy paper link'}
+              aria-label={locale === 'ru' ? 'Скопировать ссылку на статью' : 'Copy paper link'}
+            >
+              <Link2 aria-hidden="true" size={17} strokeWidth={2} />
+            </button>
+          ) : null}
+          {pdfUrl ? (
+            <a
+              className="reader-download-button"
+              href={pdfUrl}
+              download
+              title={text.download}
+              aria-label={text.download}
+            >
+              <Download aria-hidden="true" size={17} strokeWidth={2} />
+            </a>
+          ) : null}
+        </div>
       </div>
 
       {pdfLoading ? (

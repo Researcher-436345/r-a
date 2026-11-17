@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 
 import { login } from '../../features/auth/auth-api';
-import { guestReturnHref } from '../../features/auth/require-auth';
+import { guestReturnHref, localReturnHref } from '../../features/auth/require-auth';
 import { ApiError } from '../../shared/api/client';
 import { LogoMark } from '../../shared/ui/logo-mark';
 
@@ -29,10 +29,7 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      const destination = nextPath.startsWith('/') && !nextPath.startsWith('//') && !nextPath.includes('\\')
-        ? nextPath
-        : '/';
-      await navigate({ to: destination });
+      await navigate({ to: localReturnHref(nextPath) });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'email_not_verified') {

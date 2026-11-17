@@ -30,7 +30,12 @@ https://{$GRAFANA_PUBLIC_HOST} {
 		}
 	}
 
-	# Основной адрес и SPA-маршруты принадлежат Odyssey.
+	# Метаданные статьи доступны мессенджерам до запуска JavaScript.
+	handle /reader/* {
+		reverse_proxy gateway:8000
+	}
+
+	# Остальные страницы приложения обслуживает фронтенд.
 	handle {
 		reverse_proxy frontend:80
 	}

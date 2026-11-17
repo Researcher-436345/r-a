@@ -622,6 +622,13 @@ textarea:focus-visible {
   color: var(--faint);
 }
 
+.reader-toolbar__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
 .reader-download-button {
   width: 34px;
   height: 34px;
@@ -977,6 +984,20 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px;
   vertical-align: top;
+}
+
+.reader-selection-popup__translation-rich {
+  white-space: normal;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.reader-selection-popup__translation-rich > :first-child {
+  margin-top: 0;
+}
+
+.reader-selection-popup__translation-rich > :last-child {
+  margin-bottom: 0;
 }
 
 .reader-selection-popup__translation-loader {

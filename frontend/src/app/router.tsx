@@ -9,7 +9,7 @@ import {
 import type { QueryClient } from '@tanstack/react-query';
 
 import { features } from '../shared/config/features';
-import { loginHref } from '../features/auth/require-auth';
+import { isReaderPaperPath, localReturnHref, loginHref } from '../features/auth/require-auth';
 import { isAuthenticated } from '../features/auth/token-storage';
 import { tryRefreshSession } from '../features/auth/refresh-session';
 import { LandingPage } from '../pages/landing/landing-page';
@@ -64,9 +64,10 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
-  beforeLoad: () => {
+  beforeLoad: ({ location }) => {
     if (isAuthenticated()) {
-      throw redirect({ to: '/' });
+      const { next } = location.search as { next?: unknown };
+      throw redirect({ href: localReturnHref(typeof next === 'string' ? next : undefined) });
     }
   },
 });
@@ -106,7 +107,7 @@ const appRoute = createRoute({
   component: AppLayout,
   beforeLoad: async (context) => {
     if (!isAuthenticated()) await tryRefreshSession();
-    if (features.requireLoginOnEntry) requireUser(context);
+    if (features.requireLoginOnEntry && !isReaderPaperPath(context.location.pathname)) requireUser(context);
   },
 });
 

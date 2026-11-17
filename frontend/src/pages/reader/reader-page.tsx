@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '../../shared/i18n/i18n-context';
 import { useMobileLayout } from '../../shared/lib/use-mobile-layout';
 import { trackNavigation } from '../../shared/lib/analytics';
+import { copyText } from '../../shared/lib/clipboard';
 
 import {
   fetchAnnotations,
@@ -64,6 +65,10 @@ export function ReaderPage() {
   const authenticated = useAuthenticated();
   const { paperId } = useParams({ strict: false }) as { paperId?: string };
   const [paper, setPaper] = useState<LibraryPaper | null>(null);
+  useEffect(() => {
+    document.title = paper ? `${paper.title} · Odyssey` : 'Odyssey';
+    return () => { document.title = 'Odyssey'; };
+  }, [paper]);
   const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
   const [libraryItem, setLibraryItem] = useState<LibraryItem | null>(null);
   const [foldersLoading, setFoldersLoading] = useState(Boolean(paperId));
@@ -199,6 +204,18 @@ export function ReaderPage() {
       return;
     }
     focusPassage(page, null, { quote });
+  };
+
+  const copyPaperLink = async () => {
+    if (!paperId) {
+      return;
+    }
+    try {
+      await copyText(new URL(`/reader/${paperId}`, window.location.origin).href);
+      showToast(locale === 'ru' ? 'Ссылка на статью скопирована' : 'Paper link copied');
+    } catch {
+      showToast(locale === 'ru' ? 'Не удалось скопировать ссылку' : 'Could not copy the link');
+    }
   };
 
   useEffect(() => {
@@ -572,6 +589,7 @@ export function ReaderPage() {
         onFolderSelect={handleFolderSelect}
         onBeforeOpenFolders={requireAuthentication}
         onTextSelect={handleTextSelect}
+        onCopyLink={paperId ? () => { void copyPaperLink(); } : undefined}
         focusAnnotation={flashFocus}
         onFocusComplete={() => setFlashFocus(null)}
         onFocusError={() => {

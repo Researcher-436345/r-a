@@ -24,6 +24,12 @@ func Handler(cfg config.Config) http.Handler {
 	assistantProxy := mustProxy(cfg.AssistantURL)
 	feedProxy := mustProxy(cfg.FeedURL)
 	searchProxy := mustProxy(cfg.SearchAPIURL)
+	paperPages := paperPageHandler{
+		frontendURL: cfg.FrontendServiceURL,
+		catalogURL:  cfg.CatalogURL,
+		publicURL:   cfg.FrontendURL,
+		client:      &http.Client{Timeout: 3 * time.Second},
+	}
 
 	assistantProxy.FlushInterval = -1
 	assistantProxy.Transport = &http.Transport{
@@ -40,6 +46,9 @@ func Handler(cfg config.Config) http.Handler {
 	var root http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case strings.HasPrefix(path, "/reader/"):
+			paperPages.ServeHTTP(w, r)
+			return
 		case path == "/health":
 			httpx.JSON(w, 200, map[string]string{"status": "ok", "service": "gateway"})
 			return

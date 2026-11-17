@@ -10,6 +10,7 @@ HTTP_ADDR = os.getenv("HTTP_ADDR", ":8000")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://researcher:researcher@localhost:5433/researcher")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5180")
+FRONTEND_SERVICE_URL = os.getenv("FRONTEND_SERVICE_URL", "http://localhost:5180")
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
 
 # Авторизация и почта

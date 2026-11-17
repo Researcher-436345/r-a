@@ -82,6 +82,7 @@ type Config struct {
 	SemanticScholarAPIKey string
 
 	// Service discovery (gateway + inter-service).
+	FrontendServiceURL  string
 	IdentityURL         string
 	CatalogURL          string
 	LibraryURL          string
@@ -181,6 +182,7 @@ func Load() Config {
 		OpenAlexMailto:        value("OPENALEX_MAILTO"),
 		SemanticScholarAPIKey: value("SEMANTIC_SCHOLAR_API_KEY"),
 
+		FrontendServiceURL:  strings.TrimRight(value("FRONTEND_SERVICE_URL"), "/"),
 		IdentityURL:         strings.TrimRight(value("IDENTITY_URL"), "/"),
 		CatalogURL:          strings.TrimRight(value("CATALOG_URL"), "/"),
 		LibraryURL:          strings.TrimRight(value("LIBRARY_URL"), "/"),

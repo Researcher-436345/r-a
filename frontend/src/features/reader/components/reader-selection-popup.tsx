@@ -10,6 +10,7 @@ import {
 } from '../highlight-colors';
 import { normalizeSelectedQuote } from '../normalize-quote';
 import { TRANSLATION_MAX_CHARS } from '../api';
+import { RichText } from '../../../shared/ui/rich-text';
 
 export interface ReaderSelection {
   page: number;
@@ -311,22 +312,25 @@ export function ReaderSelectionPopup({
             </button>
           </div>
           {translationEnabled && <div ref={translationAnalytics} className="reader-selection-popup__translation" aria-live="polite">
-            {selectionTooLong
-              ? `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
-              : translation ||
-                (isTranslating ? (
-                  <span className="reader-selection-popup__translation-loading">
-                    <LoaderCircle
-                      className="reader-selection-popup__translation-loader"
-                      aria-hidden="true"
-                      size={12}
-                      strokeWidth={2.25}
-                    />
-                    Переводим…
-                  </span>
-                ) : (
-                  'Не удалось перевести'
-                ))}
+            {selectionTooLong ? (
+              `Выделено ${selectedCharCount} символов. Для перевода выберите не более ${TRANSLATION_MAX_CHARS}.`
+            ) : translation ? (
+              <RichText className="reader-selection-popup__translation-rich" allowImages={false}>
+                {translation}
+              </RichText>
+            ) : isTranslating ? (
+              <span className="reader-selection-popup__translation-loading">
+                <LoaderCircle
+                  className="reader-selection-popup__translation-loader"
+                  aria-hidden="true"
+                  size={12}
+                  strokeWidth={2.25}
+                />
+                Переводим…
+              </span>
+            ) : (
+              'Не удалось перевести'
+            )}
           </div>}
         </div>
       ) : (

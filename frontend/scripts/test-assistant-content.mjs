@@ -26,11 +26,14 @@ const vite = await createServer({
 after(() => vite.close());
 const { MarkdownMessage } = await vite.ssrLoadModule('/src/features/chat/components/markdown-message.tsx');
 const { RichText, linkifyPageCites } = await vite.ssrLoadModule('/src/shared/ui/rich-text.tsx');
+const { localReturnHref, guestReturnHref, isReaderPaperPath } = await vite.ssrLoadModule('/src/features/auth/require-auth.ts');
 // The page imports the browser API URL at module load; these SSR tests make no requests.
 globalThis.window = { location: new URL('http://localhost:5180') };
 let PendingResearchMessage;
+let ReaderSelectionPopup;
 try {
   ({ PendingResearchMessage } = await vite.ssrLoadModule('/src/pages/chat/chat-page.tsx'));
+  ({ ReaderSelectionPopup } = await vite.ssrLoadModule('/src/features/reader/components/reader-selection-popup.tsx'));
 } finally {
   delete globalThis.window;
 }
@@ -43,6 +46,44 @@ test('chat renders both TeX delimiter styles and dollar math as KaTeX', () => {
   assert.equal((html.match(/<math /g) ?? []).length, 3);
   assert.match(html, /class="katex-display"/);
   assert.doesNotMatch(html, /katex-error/);
+});
+
+test('translation popup renders the selected-paper formula as math', () => {
+  const translation = String.raw`Предзаполнено в блоке $i$. Мы минимизируем
+
+$$
+\mathcal L_{D2}=-\mathbb E_D\left[\sum_{i=1}^{N_k}\sum_{j=1}^{k}w_{i,j}\cdot\log p_\theta(y_{i,j}\mid O_i,H_i,Y_{i,<j})\right].
+$$
+
+Здесь $w_{i,j}$ задаёт вес выходов.`;
+  const html = renderToStaticMarkup(createElement(ReaderSelectionPopup, {
+    selection: { page: 1, text: 'We minimize the loss.', rect: { x: 0, y: 0, w: 0.5, h: 0.1 }, anchor: { x: 10, y: 10 } },
+    translation, isSaving: false, highlightColor: '#f2d35c',
+    onHighlightColorChange() {}, onClose() {}, onSave() {}, onAskAssistant() {},
+  }));
+  assert.match(html, /reader-selection-popup__translation-rich/);
+  assert.equal((html.match(/<math /g) ?? []).length, 3);
+  assert.match(html, /class="katex-display"/);
+  assert.doesNotMatch(html, /katex-error/);
+});
+
+test('shared article destination survives sign-in, including absolute application links', () => {
+  const path = '/reader/65ef26d8-cb3f-4474-a37e-7a7db301ab54?lang=ru#page=3';
+  const origin = 'https://77.91.114.154';
+  assert.equal(localReturnHref(path, origin), path);
+  assert.equal(localReturnHref(origin + path, origin), path);
+  assert.equal(guestReturnHref(origin + path, origin), path);
+  assert.equal(guestReturnHref('/library', origin), '/');
+  for (const unsafe of ['//evil.example/reader/one', 'https://evil.example/reader/one', '/\\evil.example/path', 'javascript:alert(1)']) {
+    assert.equal(localReturnHref(unsafe, origin), '/');
+  }
+});
+
+test('direct paper pages can open for guests independently of the application entry gate', () => {
+  assert.equal(isReaderPaperPath('/reader/65ef26d8-cb3f-4474-a37e-7a7db301ab54'), true);
+  for (const path of ['/', '/reader', '/reader/', '/reader/one/extra', '/library', '/chat/new']) {
+    assert.equal(isReaderPaperPath(path), false);
+  }
 });
 
 test('normalizing math preserves inline, fenced and unfinished code', () => {
